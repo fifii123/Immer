@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model attached_file {
+  file_id      Int        @id @default(autoincrement())
+  project_id   Int?
+  file_name    String
+  uploaded_at  DateTime?  @default(now()) @db.Timestamp(6)
+  file_path    String?    @db.VarChar(255)
+  directory_id Int?
+  directory    directory? @relation(fields: [directory_id], references: [directory_id], onUpdate: NoAction)
+  project      project?   @relation(fields: [project_id], references: [project_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model chunk {
+  chunk_id       Int     @id @default(autoincrement())
+  definitions    String?
+  text_fragments String?
+  lookup         String?
+  directory_id   Int?
+  project_id     Int
+  project        project @relation(fields: [project_id], references: [project_id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model directory {
+  directory_id        Int             @id @default(autoincrement())
+  directory_name      String          @db.VarChar(255)
+  parent_directory_id Int?
+  project_id          Int?
+  attached_file       attached_file[]
+  directory           directory?      @relation("directoryTodirectory", fields: [parent_directory_id], references: [directory_id], onDelete: Cascade, onUpdate: NoAction)
+  other_directory     directory[]     @relation("directoryTodirectory")
+  project             project?        @relation(fields: [project_id], references: [project_id], onDelete: Cascade, onUpdate: NoAction)
+  notes               notes[]
+}
+
+model notes {
+  note_id      Int        @id @default(autoincrement())
+  project_id   Int?
+  note_name    String     @db.VarChar(50)
+  content      String?
+  directory_id Int?
+  directory    directory? @relation(fields: [directory_id], references: [directory_id], onUpdate: NoAction)
+  project      project?   @relation(fields: [project_id], references: [project_id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model project {
+  project_id       Int             @id @default(autoincrement())
+  user_id          Int?
+  subject_name     String          @db.VarChar(50)
+  note_preferences String?         @db.VarChar(50)
+  attached_file    attached_file[]
+  chunk            chunk[]
+  directory        directory[]
+  notes            notes[]
+  user             user?           @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tests            tests[]
+}
+
+model sessions {
+  id            Int       @id @default(autoincrement())
+  user_id       Int?
+  session_token String    @unique @db.VarChar(255)
+  created_at    DateTime? @default(now()) @db.Timestamp(6)
+  user          user?     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model test_answers {
+  answer_id    Int          @id @default(autoincrement())
+  result_id    Int
+  question_id  Int
+  user_answer  String?
+  is_correct   Boolean?
+  points       Int?
+  test_results test_results @relation(fields: [result_id], references: [result_id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model test_results {
+  result_id    Int            @id @default(autoincrement())
+  test_id      Int
+  user_id      Int
+  score        Decimal        @db.Decimal(5, 2)
+  taken_at     DateTime?      @default(now()) @db.Timestamptz(6)
+  test_answers test_answers[]
+  tests        tests          @relation(fields: [test_id], references: [test_id], onDelete: Cascade, onUpdate: NoAction)
+  user         user           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model tests {
+  test_id       Int            @id @default(autoincrement())
+  project_id    Int
+  test_name     String
+  content       String
+  created_at    DateTime?      @default(now()) @db.Timestamptz(6)
+  question_type String         @default("multiple_choice") @db.VarChar(50)
+  score_mode    String         @default("final") @db.VarChar(50)
+  save_score    Boolean?       @default(false)
+  test_results  test_results[]
+  project       project        @relation(fields: [project_id], references: [project_id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model user {
+  id           Int            @id @default(autoincrement())
+  name         String         @db.VarChar(30)
+  email        String         @unique @db.VarChar(40)
+  password     String         @db.VarChar(255)
+  project      project[]
+  sessions     sessions[]
+  test_results test_results[]
+}

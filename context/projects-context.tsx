@@ -26,7 +26,7 @@ export const ProjectsProvider = ({ children }: { children: React.ReactNode }) =>
   const fetchProjects = async () => {
     try {
       const token = localStorage.getItem("token"); // Pobierz token z localStorage
-      const response = await fetch("/api/projects", {
+      const response = await fetch("/api/projects/fetch", {
         headers: {
           Authorization: `Bearer ${token}`,
         },

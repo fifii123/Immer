@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import pool from '../../../lib/db'
+import pool from '../../../../lib/db'
 import jwt from "jsonwebtoken";
 
 const SECRET_KEY = process.env.JWT_SECRET_KEY || "secret_key";
