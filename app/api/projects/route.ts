@@ -1,17 +1,9 @@
 import { NextResponse } from "next/server";
-import { Pool } from "pg";
+import pool from '../../../lib/db'
 import jwt from "jsonwebtoken";
 
 const SECRET_KEY = process.env.JWT_SECRET_KEY || "secret_key";
 
-// Konfiguracja połączenia z bazą danych
-const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: 5432,
-});
 
 // Endpoint GET do pobierania projektów
 export async function GET(request: Request) {
