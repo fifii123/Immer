@@ -2,6 +2,7 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import axios from 'axios';
 
+
 // Definicja typów
 interface User {
   id: number;
@@ -95,6 +96,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const logout = () => {
     localStorage.removeItem('token');
     setUser(null);
+    console.log("logged out!");
+    
   };
 
   const register = async (name: string, email: string, password: string) => {
@@ -120,7 +123,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const value = {
     user,
-    loading,
+    loading,  
     login,
     logout,
     register

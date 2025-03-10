@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { usePreferences } from "@/context/preferences-context"; // Użyj PreferencesContext
 import { useProjects } from "@/context/projects-context"; // Użyj ProjectsContext
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +22,7 @@ import {
 export default function ProjectList() {
   const router = useRouter();
   const { menuDisplay, darkMode, t} = usePreferences(); // Pobierz darkMode i tłumaczenia
-  const { projects, removeProject } = useProjects(); // Pobierz projekty z ProjectsContext
+  const { projects, removeProject, fetchProjects } = useProjects(); // Pobierz projekty z ProjectsContext
   const [deleteProjectId, setDeleteProjectId] = useState<number | null>(null);
 
   // Znajdź projekt do usunięcia
@@ -35,6 +35,10 @@ export default function ProjectList() {
       setDeleteProjectId(null);
     }
   };
+
+    useEffect(() => {
+      fetchProjects();
+    }, []);
 
   // Kliknięcie projektu
   const handleProjectClick = (projectId: number) => {

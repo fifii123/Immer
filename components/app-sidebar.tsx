@@ -25,7 +25,7 @@ export function AppSidebar() {
   const { darkMode, t } = usePreferences();
 
   // Pobierz dane użytkownika z kontekstu
-  const { user } = useAuth();  // Zakładam, że user zawiera dane użytkownika, w tym 'name'
+  const { user, logout } = useAuth();  // Zakładam, że user zawiera dane użytkownika, w tym 'name'
 
   return (
     <>
@@ -82,8 +82,8 @@ export function AppSidebar() {
         <SidebarFooter className="p-4">
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton className="w-full justify-start gap-2">
-                <LogOut className="h-4 w-4" />
+              <SidebarMenuButton className="w-full justify-start gap-2" onClick={logout}>
+                <LogOut className="h-4 w-4"/>
                 {t('logout')}
               </SidebarMenuButton>
             </SidebarMenuItem>

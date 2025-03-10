@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useAuth } from '../context/auth/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -8,7 +9,9 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import WelcomeHeader from '@/components/welcome-header';
 import DashboardSidebar from '@/components/dashboard-sidebar';
 
+
 const DashboardPage = () => {
+
   return (
     <ProtectedRoute> {/* Chronimy dostęp do tej strony */}
       <SidebarProvider>
