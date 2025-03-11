@@ -11,12 +11,14 @@ import { useToast } from "@/components/ui/use-toast";
 import { usePreferences } from "@/context/preferences-context";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { useAuth } from '../../context/auth/AuthContext';
+import { useProjects } from "@/context/projects-context";
 
 export default function CreateProjectPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { t, addProject } = usePreferences();
   const {user} = useAuth();
+  const {projects} = useProjects();
 
   const [formData, setFormData] = useState({
     subject: "",
@@ -59,32 +61,49 @@ export default function CreateProjectPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (!formData.projectName.trim()) {
       toast({ title: t("validationError"), description: t("projectNameRequired"), variant: "destructive" });
       return;
     }
   
-    const uploadData = new FormData();
-    uploadData.append("subject_name", formData.subject);
-    uploadData.append("user_id", user?.id?.toString() || "");
-
-    formData.files.forEach((file) => uploadData.append("attached_files", file));
-  
     try {
-      const response = await fetch("/api/projects/create", {
+      // Krok 1: Tworzenie projektu i pobranie projectId
+      const projectResponse = await fetch("/api/projects/create", {
+        method: "POST",
+        body: JSON.stringify({
+          subject_name: formData.projectName,
+          note_preferences: formData.subject,
+          user_id: user?.id.toString(),
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+  
+      if (!projectResponse.ok) throw new Error("Project creation failed");
+  
+      const projectData = await projectResponse.json();
+      const projectId = projectData.projectId;  // Pobieramy projectId z odpowiedzi
+  
+      // Krok 2: Wysyłanie plików z poprawnym projectId
+      const uploadData = new FormData();
+      uploadData.append("user_id", user?.id?.toString() || "");
+      uploadData.append("project_id", projectId.toString()); // Teraz mamy poprawne projectId
+  
+      formData.files.forEach((file) => uploadData.append("attached_files", file));
+  
+      const fileResponse = await fetch("/api/projects/upload", {
         method: "POST",
         body: uploadData,
       });
   
-      if (!response.ok) throw new Error("Upload failed");
+      if (!fileResponse.ok) throw new Error("File upload failed");
   
-      const result = await response.json();
-      toast({ title: t("projectCreated"), description: `Project ID: ${result.projectId}` });
-  
-      // Możesz dodać przekierowanie lub aktualizację listy projektów
+      toast({ title: t("projectCreated"), description: `Project ID: ${projectId}` });
       router.push("/");
     } catch (error) {
-      toast({ title: "Error", description: "File upload failed", variant: "destructive" });
+      toast({ title: "Error", description: "Project creation or file upload failed", variant: "destructive" });
     }
   };
   
@@ -101,6 +120,16 @@ export default function CreateProjectPage() {
           <h1 className="mb-6 text-2xl font-bold dark:text-white">{t("createNewProject")}</h1>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-4">
+            <div className="space-y-2">
+                <Label htmlFor="projectName" className="dark:text-white">{t("projectName")}</Label>
+                <Input 
+                  id="projectName" 
+                  value={formData.projectName} 
+                  onChange={(e) => setFormData((prev) => ({ ...prev, projectName: e.target.value }))} 
+                  placeholder={t("enterProjectName")} 
+                  className="dark:bg-slate-800 dark:text-white dark:border-slate-700" 
+                />
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="subject" className="dark:text-white">{t("subject")}</Label>
                 <Input id="subject" value={formData.subject} onChange={(e) => setFormData((prev) => ({ ...prev, subject: e.target.value }))} placeholder={t("enterSubject")} className="dark:bg-slate-800 dark:text-white dark:border-slate-700" />
