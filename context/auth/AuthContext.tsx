@@ -93,11 +93,27 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   
   
   // Funkcja wylogowania
-  const logout = () => {
-    localStorage.removeItem('token');
-    setUser(null);
-    console.log("logged out!");
-    
+  const logout = async () => {
+    try {
+      // Wywołaj endpoint wylogowywania na serwerze
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+      });
+  
+      if (response.ok) {
+        console.log("Wylogowano pomyślnie!");
+  
+        // Wyczyść stan użytkownika (jeśli używasz np. React Context, Redux, Zustand)
+        setUser(null); // Zakładamy, że masz funkcję setUser do zarządzania stanem użytkownika
+  
+        // Przekieruj użytkownika na stronę logowania
+        window.location.href = '/login';
+      } else {
+        console.error("Błąd podczas wylogowywania");
+      }
+    } catch (error) {
+      console.error("Błąd podczas wylogowywania:", error);
+    }
   };
 
   const register = async (name: string, email: string, password: string) => {

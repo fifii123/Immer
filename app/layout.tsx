@@ -29,7 +29,7 @@ export default function RootLayout({
           <PreferencesProvider>
             <ProjectsProvider>
               {/* Otocz aplikację komponentem ProtectedRoute */}
-              <ProtectedRoute>{children}</ProtectedRoute>
+              {children}
               <Toaster />
             </ProjectsProvider>
           </PreferencesProvider>
