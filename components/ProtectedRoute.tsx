@@ -1,23 +1,30 @@
-'use client';
-import React from 'react';
-import { useAuth } from '../context/auth/AuthContext';
-import { useRouter } from 'next/navigation';
+// components/ProtectedRoute.tsx
+"use client"; // Komponent musi być po stronie klienta
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading } = useAuth();
+import { useAuth } from "@/context/auth/AuthContext"; // Importujemy useAuth
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+
+export default function ProtectedRoute({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { user, loading } = useAuth(); // Pobieramy użytkownika i stan ładowania z AuthContext
   const router = useRouter();
 
+  useEffect(() => {
+    if (!loading && !user) {
+      // Jeśli użytkownik nie jest zalogowany i ładowanie zostało zakończone, przekieruj na stronę logowania
+      router.push("/login");
+    }
+  }, [user, loading, router]);
+
   if (loading) {
-    return <div>Loading...</div>;  // Możesz dodać spinner lub inne animacje ładowania
+    // Możesz zwrócić loader podczas weryfikacji autoryzacji
+    return <p>Loading...</p>;
   }
 
-  if (!user) {
-    // Jeśli nie ma użytkownika, przekierowujemy na stronę logowania
-    router.push('/login');
-    return null;
-  }
-
-  return <>{children}</>;  // Jeśli użytkownik jest zalogowany, renderujemy dzieci
-};
-
-export default ProtectedRoute;
+  // Jeśli użytkownik jest zalogowany, zwróć dzieci
+  return <>{children}</>;
+}
