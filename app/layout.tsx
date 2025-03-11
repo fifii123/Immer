@@ -3,9 +3,10 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { PreferencesProvider } from "@/context/preferences-context";
-import { AuthProvider } from "@/context/auth/AuthContext"; // Zaimportuj AuthProvider
-import { ProjectsProvider } from "@/context/projects-context"; // Zaimportuj ProjectsProvider
+import { AuthProvider } from "@/context/auth/AuthContext";
+import { ProjectsProvider } from "@/context/projects-context";
 import { Toaster } from "@/components/ui/toaster";
+import ProtectedRoute from "@/components/ProtectedRoute"; // Importuj zabezpieczenie
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -23,11 +24,12 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        {/* Dodaj AuthProvider, PreferencesProvider i ProjectsProvider */}
         <AuthProvider>
           <PreferencesProvider>
             <ProjectsProvider>
-              {children}
+              <ProtectedRoute>
+                {children}
+              </ProtectedRoute>
               <Toaster />
             </ProjectsProvider>
           </PreferencesProvider>
