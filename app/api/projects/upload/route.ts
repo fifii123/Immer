@@ -50,15 +50,21 @@ export async function POST(req: NextRequest) {
       const fileUrl = `${B2_ENDPOINT}/${fileName}`;
       uploadedFiles.push({ name: file.name, url: fileUrl });
 
-      // Zapis do bazy danych
+      // Zapis do bazy danych w blokach try-catch
       console.log(`Saving file metadata in database: ${file.name}`);
-      await prisma.attached_file.create({
-        data: {
-          project_id: Number(projectId),
-          file_name: file.name,
-          file_path: fileUrl,
-        },
-      });
+      
+      try {
+        await prisma.attached_file.create({
+          data: {
+            project_id: Number(projectId),
+            file_name: file.name,
+            file_path: fileUrl,
+          },
+        });
+      } catch (error) {
+        console.error(`Error saving metadata for file ${file.name}:`, error);
+        // Możesz kontynuować mimo błędu lub dodać jakąś logikę obsługi błędów
+      }
     }
 
     return NextResponse.json({

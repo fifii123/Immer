@@ -2,11 +2,19 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 
+interface AttachedFile {
+  file_id: number;
+  file_name: string;
+  uploaded_at: string;
+}
+
 interface Project {
   project_id: number;
   subject_name: string;
   note_preferences: string;
+  attached_file?: AttachedFile[]; // Dodanie plików do projektu
 }
+
 
 interface ProjectsContextType {
   projects: Project[];
@@ -25,19 +33,21 @@ export const ProjectsProvider = ({ children }: { children: React.ReactNode }) =>
   // Funkcja do pobierania projektów z bazy danych
   const fetchProjects = async () => {
     try {
-      const token = localStorage.getItem("token"); // Pobierz token z localStorage
+      const token = localStorage.getItem("token");
       const response = await fetch("/api/projects/fetch", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
       if (!response.ok) throw new Error("Failed to fetch projects");
-      const data = await response.json();
+  
+      const data: Project[] = await response.json();
       setProjects(data);
     } catch (error) {
       console.error("Error fetching projects:", error);
     }
   };
+  
 
   // Funkcja do usuwania projektu
   const removeProject = async (id: number) => {

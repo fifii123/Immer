@@ -6,14 +6,17 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { usePreferences } from "@/context/preferences-context"
 import { useRouter } from "next/navigation"
+import { useProjects } from "@/context/projects-context"
 
 export default function ProjectPage() {
   const params = useParams()
   const router = useRouter()
-  const { projects, darkMode, t } = usePreferences()
+  const {  darkMode, t } = usePreferences()
+  const { projects } = useProjects();
 
   // Find the current project
-  const project = projects.find((p) => p.id.toString() === params.id)
+  const project = projects.find((p) => p.project_id.toString() === params.id);
+  console.log(project);
 
   if (!project) {
     return (
@@ -38,8 +41,8 @@ export default function ProjectPage() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-xl font-semibold">{project.name}</h1>
-              {project.subject && <p className="text-sm text-muted-foreground">{project.subject}</p>}
+              <h1 className="text-xl font-semibold">{project.subject_name}</h1>
+              {project.note_preferences && <p className="text-sm text-muted-foreground">{project.note_preferences}</p>}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -53,17 +56,17 @@ export default function ProjectPage() {
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
         {/* Materials Section */}
         <section className="mb-8">
-          <h2 className="mb-4 text-lg font-semibold">{t("materials")}</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {project.files?.map((file, index) => (
-              <Card key={index} className={`group relative ${darkMode ? "bg-slate-800 border-slate-700" : "bg-white"}`}>
-                <CardContent className="flex items-center gap-3 p-4">
-                  <FileText className="h-8 w-8 text-blue-500 shrink-0" />
-                  <div className="flex-1 truncate">
-                    <p className="font-medium truncate">{file}</p>
-                  </div>
-                </CardContent>
-              </Card>
+  <h2 className="mb-4 text-lg font-semibold">{t("materials")}</h2>
+  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    {project.attached_file?.map((file) => (
+      <Card key={file.file_id} className={`group relative ${darkMode ? "bg-slate-800 border-slate-700" : "bg-white"}`}>
+        <CardContent className="flex items-center gap-3 p-4">
+          <FileText className="h-8 w-8 text-blue-500 shrink-0" />
+          <div className="flex-1 truncate">
+            <p className="font-medium truncate">{file.file_name}</p>
+          </div>
+        </CardContent>
+      </Card>
             ))}
             <Card
               className={`group cursor-pointer transition-colors ${

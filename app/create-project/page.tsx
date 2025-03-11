@@ -68,7 +68,7 @@ export default function CreateProjectPage() {
     }
   
     try {
-      // Krok 1: Tworzenie projektu i pobranie projectId
+
       const projectResponse = await fetch("/api/projects/create", {
         method: "POST",
         body: JSON.stringify({
@@ -84,12 +84,12 @@ export default function CreateProjectPage() {
       if (!projectResponse.ok) throw new Error("Project creation failed");
   
       const projectData = await projectResponse.json();
-      const projectId = projectData.projectId;  // Pobieramy projectId z odpowiedzi
+      const projectId = projectData.projectId; 
   
-      // Krok 2: Wysyłanie plików z poprawnym projectId
+ 
       const uploadData = new FormData();
       uploadData.append("user_id", user?.id?.toString() || "");
-      uploadData.append("project_id", projectId.toString()); // Teraz mamy poprawne projectId
+      uploadData.append("project_id", projectId.toString());  
   
       formData.files.forEach((file) => uploadData.append("attached_files", file));
   

@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import pool from '../../../../lib/db'
+import { PrismaClient } from "@prisma/client";
 import jwt from "jsonwebtoken";
 
+const prisma = new PrismaClient();
 const SECRET_KEY = process.env.JWT_SECRET_KEY || "secret_key";
 
-
-// Endpoint GET do pobierania projektów
 export async function GET(request: Request) {
   try {
     // Pobierz token z nagłówka Authorization
@@ -15,14 +14,16 @@ export async function GET(request: Request) {
     }
 
     const token = authHeader.split(" ")[1];
-
-    // Weryfikacja tokenu JWT
     const decoded = jwt.verify(token, SECRET_KEY) as { userId: number };
     const userId = decoded.userId;
 
-    // Pobierz projekty z bazy danych dla danego użytkownika
-    const result = await pool.query('SELECT * FROM project WHERE user_id = $1', [userId]);
-    const projects = result.rows;
+    // Pobierz projekty wraz z powiązanymi plikami
+    const projects = await prisma.project.findMany({
+      where: { user_id: userId },
+      include: {
+        attached_file: true, // Pobranie powiązanych plików
+      },
+    });
 
     return NextResponse.json(projects, { status: 200 });
   } catch (error) {
