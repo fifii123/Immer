@@ -49,22 +49,32 @@ export const ProjectsProvider = ({ children }: { children: React.ReactNode }) =>
   };
   
 
-  // Funkcja do usuwania projektu
   const removeProject = async (id: number) => {
     try {
-      const token = localStorage.getItem("token"); // Pobierz token z localStorage
-      const response = await fetch(`/api/projects/${id}`, {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        console.error("Brak tokena. Użytkownik nie jest zalogowany.");
+        return;
+      }
+  
+      const response = await fetch(`/api/projects/delete/${id}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-      if (!response.ok) throw new Error("Failed to delete project");
-      await fetchProjects(); // Ponowne pobranie projektów po usunięciu
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Nie udało się usunąć projektu.");
+      }
+  
+      setProjects((prev) => prev.filter((p) => p.project_id !== id));
+      await fetchProjects();
     } catch (error) {
-      console.error("Error deleting project:", error);
+      console.error("Błąd podczas usuwania projektu:", error);
     }
   };
+  
+  
 
   // Pobierz projekty przy pierwszym renderowaniu
   useEffect(() => {

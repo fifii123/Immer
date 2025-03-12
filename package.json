@@ -46,6 +46,7 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "autoprefixer": "^10.4.20",
+    "aws-sdk": "^2.1692.0",
     "axios": "^1.8.2",
     "backblaze-b2": "^0.9.12",
     "bcryptjs": "^3.0.2",

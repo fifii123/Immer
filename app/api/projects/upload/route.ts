@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import B2 from "backblaze-b2";
 import { config } from "dotenv";
+import AWS from "aws-sdk";
 
 config();
 const prisma = new PrismaClient();
 
-const b2 = new B2({
-  applicationKeyId: process.env.B2_KEY_ID!,
-  applicationKey: process.env.B2_APPLICATION_KEY!,
+// Configure AWS S3 to use Backblaze's S3-Compatible endpoint
+const s3 = new AWS.S3({
+  accessKeyId: process.env.B2_KEY_ID!, // Your Backblaze B2 key ID
+  secretAccessKey: process.env.B2_APPLICATION_KEY!, // Your Backblaze B2 application key
+  endpoint: new AWS.Endpoint('https://s3.us-east-005.backblazeb2.com'), // Backblaze S3 endpoint
+  s3ForcePathStyle: true, // Required for Backblaze S3 compatibility
+  signatureVersion: 'v4', // Signature version for S3 API
 });
 
 const BUCKET_NAME = process.env.B2_BUCKET_NAME!;
-const B2_ENDPOINT = `https://s3.us-east-005.backblazeb2.com/${BUCKET_NAME}`;
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,46 +28,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing user_id or project_id" }, { status: 400 });
     }
 
-    console.log("Authorizing with Backblaze...");
-    await b2.authorize();
-    const uploadUrlData = await b2.getUploadUrl({ bucketId: process.env.B2_BUCKET_ID! });
-
     const uploadedFiles = [];
 
+    // Iterate through the files and upload each to Backblaze
     for (const file of files) {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
-      // Ścieżka pliku w Backblaze: userId/projectId/plik
       const fileName = `${userId}/${projectId}/${file.name}`;
+      const fileMimeType = file.type;
 
-      console.log(`Uploading file: ${fileName}`);
-      const uploadResponse = await b2.uploadFile({
-        uploadUrl: uploadUrlData.data.uploadUrl,
-        uploadAuthToken: uploadUrlData.data.authorizationToken,
-        fileName: fileName,
-        data: buffer,
-        mime: file.type,
-      });
+      // Upload the file to Backblaze S3-compatible storage
+      const uploadParams = {
+        Bucket: BUCKET_NAME,
+        Key: fileName,
+        Body: buffer,
+        ContentType: fileMimeType,
+      };
 
-      const fileUrl = `${B2_ENDPOINT}/${fileName}`;
+      const uploadResponse = await s3.upload(uploadParams).promise();
+
+      // The URL of the uploaded file in Backblaze S3
+      const fileUrl = `https://${BUCKET_NAME}.s3.us-east-005.backblazeb2.com/${fileName}`;
       uploadedFiles.push({ name: file.name, url: fileUrl });
 
-      // Zapis do bazy danych w blokach try-catch
-      console.log(`Saving file metadata in database: ${file.name}`);
-      
-      try {
-        await prisma.attached_file.create({
-          data: {
-            project_id: Number(projectId),
-            file_name: file.name,
-            file_path: fileUrl,
-          },
-        });
-      } catch (error) {
-        console.error(`Error saving metadata for file ${file.name}:`, error);
-        // Możesz kontynuować mimo błędu lub dodać jakąś logikę obsługi błędów
-      }
+      // Save file metadata to the database
+      await prisma.attached_file.create({
+        data: {
+          project_id: Number(projectId),
+          file_name: file.name,
+          file_path: fileUrl,
+        },
+      });
     }
 
     return NextResponse.json({
@@ -73,6 +68,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Error in file upload:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: error || "Internal server error" }, { status: 500 });
   }
 }
