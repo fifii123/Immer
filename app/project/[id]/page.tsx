@@ -1,22 +1,28 @@
-"use client"
+"use client";
 
-import { useParams } from "next/navigation"
-import { ArrowLeft, Settings, Plus, FileText, GraduationCap, Book } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { usePreferences } from "@/context/preferences-context"
-import { useRouter } from "next/navigation"
-import { useProjects } from "@/context/projects-context"
+import { useState } from "react";
+import { useParams } from "next/navigation";
+import { ArrowLeft, Settings, Plus, FileText, GraduationCap, Book } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { usePreferences } from "@/context/preferences-context";
+import { useRouter } from "next/navigation";
+import { useProjects } from "@/context/projects-context";
+import PDFReader from "@/components/pdf-reader/pdf-reader"; // Zaimportuj komponent czytnika PDF
 
 export default function ProjectPage() {
-  const params = useParams()
-  const router = useRouter()
-  const {  darkMode, t } = usePreferences()
+  const params = useParams();
+  const router = useRouter();
+  const { darkMode, t } = usePreferences();
   const { projects } = useProjects();
+  const [activePdfFile, setActivePdfFile] = useState<{
+    fileId: number;
+    fileUrl: string;
+    fileName: string;
+  } | null>(null);
 
   // Find the current project
   const project = projects.find((p) => p.project_id.toString() === params.id);
-  console.log(project);
 
   if (!project) {
     return (
@@ -28,13 +34,30 @@ export default function ProjectPage() {
           </Button>
         </div>
       </div>
-    )
+    );
   }
+
+  // Funkcja otwierająca PDF w interaktywnym czytniku - uproszczona
+  const openPdfReader = (fileId: number, filePath: string, fileName: string) => {
+    console.log(`File ID: ${fileId}, URL: ${filePath}`);
+    
+    // Bezpośrednio ustaw plik do otwarcia bez pobierania signed URL
+    // URL będzie pobierany przez komponent PDFReader
+    setActivePdfFile({
+      fileId,
+      fileUrl: filePath,
+      fileName,
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className={`sticky top-0 z-10 border-b ${darkMode ? "bg-slate-900 border-slate-700" : "bg-white"}`}>
+      <header
+        className={`sticky top-0 z-10 border-b ${
+          darkMode ? "bg-slate-900 border-slate-700" : "bg-white"
+        }`}
+      >
         <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8 max-w-7xl">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => router.push("/")}>
@@ -42,7 +65,11 @@ export default function ProjectPage() {
             </Button>
             <div>
               <h1 className="text-xl font-semibold">{project.subject_name}</h1>
-              {project.note_preferences && <p className="text-sm text-muted-foreground">{project.note_preferences}</p>}
+              {project.note_preferences && (
+                <p className="text-sm text-muted-foreground">
+                  {project.note_preferences}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -56,21 +83,34 @@ export default function ProjectPage() {
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
         {/* Materials Section */}
         <section className="mb-8">
-  <h2 className="mb-4 text-lg font-semibold">{t("materials")}</h2>
-  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-    {project.attached_file?.map((file) => (
-      <Card key={file.file_id} className={`group relative ${darkMode ? "bg-slate-800 border-slate-700" : "bg-white"}`}>
-        <CardContent className="flex items-center gap-3 p-4">
-          <FileText className="h-8 w-8 text-blue-500 shrink-0" />
-          <div className="flex-1 truncate">
-            <p className="font-medium truncate">{file.file_name}</p>
-          </div>
-        </CardContent>
-      </Card>
+          <h2 className="mb-4 text-lg font-semibold">{t("materials")}</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {project.attached_file?.map((file) => (
+              <Card
+                key={file.file_id}
+                className={`group relative cursor-pointer transition-colors ${
+                  darkMode
+                    ? "bg-slate-800 border-slate-700 hover:bg-slate-700"
+                    : "bg-white hover:bg-gray-50"
+                }`}
+                onClick={() => openPdfReader(file.file_id, file.file_path, file.file_name)}
+              >
+                <CardContent className="flex items-center gap-3 p-4">
+                  <FileText className="h-8 w-8 text-blue-500 shrink-0" />
+                  <div className="flex-1 truncate">
+                    <p className="font-medium truncate">{file.file_name}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      ID: {file.file_id}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
             <Card
               className={`group cursor-pointer transition-colors ${
-                darkMode ? "bg-slate-800 border-slate-700 hover:bg-slate-700" : "bg-white hover:bg-gray-50"
+                darkMode
+                  ? "bg-slate-800 border-slate-700 hover:bg-slate-700"
+                  : "bg-white hover:bg-gray-50"
               }`}
             >
               <CardContent className="flex h-full items-center justify-center gap-2 p-4">
@@ -87,7 +127,9 @@ export default function ProjectPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <Card
               className={`group cursor-pointer transition-colors ${
-                darkMode ? "bg-slate-800 border-slate-700 hover:bg-slate-700" : "bg-white hover:bg-gray-50"
+                darkMode
+                  ? "bg-slate-800 border-slate-700 hover:bg-slate-700"
+                  : "bg-white hover:bg-gray-50"
               }`}
             >
               <CardContent className="flex items-center gap-3 p-4">
@@ -101,7 +143,9 @@ export default function ProjectPage() {
 
             <Card
               className={`group cursor-pointer transition-colors ${
-                darkMode ? "bg-slate-800 border-slate-700 hover:bg-slate-700" : "bg-white hover:bg-gray-50"
+                darkMode
+                  ? "bg-slate-800 border-slate-700 hover:bg-slate-700"
+                  : "bg-white hover:bg-gray-50"
               }`}
             >
               <CardContent className="flex items-center gap-3 p-4">
@@ -115,7 +159,9 @@ export default function ProjectPage() {
 
             <Card
               className={`group cursor-pointer transition-colors ${
-                darkMode ? "bg-slate-800 border-slate-700 hover:bg-slate-700" : "bg-white hover:bg-gray-50"
+                darkMode
+                  ? "bg-slate-800 border-slate-700 hover:bg-slate-700"
+                  : "bg-white hover:bg-gray-50"
               }`}
             >
               <CardContent className="flex items-center gap-3 p-4">
@@ -129,7 +175,16 @@ export default function ProjectPage() {
           </div>
         </section>
       </main>
-    </div>
-  )
-}
 
+      {/* PDF Reader Modal */}
+      {activePdfFile && (
+        <PDFReader
+          fileUrl={activePdfFile.fileUrl}
+          fileName={activePdfFile.fileName}
+          fileId={activePdfFile.fileId}
+          onClose={() => setActivePdfFile(null)}
+        />
+      )}
+    </div>
+  );
+}

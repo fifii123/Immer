@@ -6,6 +6,7 @@ interface AttachedFile {
   file_id: number;
   file_name: string;
   uploaded_at: string;
+  file_path: string;
 }
 
 interface Project {

@@ -7,6 +7,8 @@ import { AuthProvider } from "@/context/auth/AuthContext"; // Zaimportuj AuthPro
 import { ProjectsProvider } from "@/context/projects-context"; // Zaimportuj ProjectsProvider
 import { Toaster } from "@/components/ui/toaster";
 import ProtectedRoute from "@/components/ProtectedRoute"; // Zaimportuj ProtectedRoute
+// In app/layout.tsx or similar
+import '../lib/pdf-worker';
 
 const inter = Inter({ subsets: ["latin"] });
 
