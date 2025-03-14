@@ -22,7 +22,6 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const fileId = url.searchParams.get("fileId");
     const token = url.searchParams.get("token");
-    const download = url.searchParams.get("download") === "true";
     
     if (!fileId || !token) {
       return new Response("Brak wymaganych parametrów", { status: 400 });
@@ -63,36 +62,35 @@ export async function GET(request: NextRequest) {
       // Usuwamy pierwszy znak '/' ze ścieżki
       const key = filePathUrl.pathname.substring(1);
 
-      // ROZWIĄZANIE 1: Zamiast pobierać plik, wygeneruj tymczasowy podpisany URL i przekieruj
-      if (!download) {
-        // Wygeneruj tymczasowy URL (ważny przez 15 minut)
-        const signedUrl = s3.getSignedUrl('getObject', {
-          Bucket: BUCKET_NAME,
-          Key: key,
-          Expires: 900, // 15 minut w sekundach
-          ResponseContentType: 'application/pdf',
-          ResponseContentDisposition: `inline; filename="${file.file_name}"`,
-        });
-        
-        // Przekieruj do podpisanego URL
-        return NextResponse.redirect(signedUrl);
-      } 
-      // ROZWIĄZANIE 2: Jeśli żądany jest download, pobierz plik i zwróć jako attachment
-      else {
-        const s3Object = await s3.getObject({
-          Bucket: BUCKET_NAME,
-          Key: key
-        }).promise();
+      // Pobierz plik z S3/B2
+      const s3Object = await s3.getObject({
+        Bucket: BUCKET_NAME,
+        Key: key
+      }).promise();
 
-        const headers = new Headers();
-        headers.set("Content-Type", s3Object.ContentType || "application/pdf");
-        headers.set("Content-Disposition", `attachment; filename="${file.file_name}"`);
-        headers.set("Cache-Control", "no-store, max-age=0");
-        
-        return new Response(s3Object.Body as Buffer, {
-          headers: headers
-        });
-      }
+      // Utwórz nagłówki odpowiedzi
+      const headers = new Headers();
+      headers.set("Content-Type", s3Object.ContentType || "application/pdf");
+      headers.set("Content-Disposition", `inline; filename="${file.file_name}"`);
+      
+      // Bardziej permisywne nagłówki bezpieczeństwa
+      headers.set("X-Content-Type-Options", "nosniff");
+      // Zmodyfikowana polityka CSP - bardziej permisywna dla PDF
+      headers.set("Content-Security-Policy", "default-src 'self' 'unsafe-inline' data:; object-src 'self' blob: data:; frame-ancestors 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval';");
+      headers.set("X-Frame-Options", "SAMEORIGIN");
+      
+      // Dodajemy nagłówki CORS
+      headers.set("Access-Control-Allow-Origin", "*");
+      headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+      headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      
+      // Zapobiegaj buforowaniu
+      headers.set("Cache-Control", "no-store, max-age=0");
+      
+      // Zwróć plik jako odpowiedź
+      return new Response(s3Object.Body as Buffer, {
+        headers: headers
+      });
     } catch (error: any) {
       console.error("Błąd pobierania pliku:", error);
       return new Response(`Błąd pobierania pliku: ${error.message}`, { status: 500 });

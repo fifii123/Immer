@@ -129,7 +129,15 @@ export default function PDFReader({ fileUrl, fileName, fileId, onClose }: PDFRea
         line-height: 1.0 !important;
       }
       
-
+      /* Warstwa adnotacji */
+      .react-pdf__Page__annotations {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        z-index: 3 !important;
+      }
       
       /* Aktywne zaznaczenie tekstu */
       ::selection {
