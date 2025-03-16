@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { usePreferences } from "@/context/preferences-context";
-
+import { useParams } from "next/navigation";
 import { 
   X, 
   ChevronLeft, 
@@ -36,12 +36,13 @@ import { Input } from "@/components/ui/input";
 import { Document, Page } from 'react-pdf';
 import { pdfjs } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
-
+import { useToast } from "@/components/ui/use-toast"
 // Set up worker for PDF.js
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 // Import the hook you provided
 import { usePdfFile } from "@/hooks/use-pdf-file";
+import { useProjects } from "@/context/projects-context";
 
 // Define available rendering methods
 type RenderMethod = 'pdf.js' | 'iframe' | 'embed' | 'object';
@@ -69,14 +70,14 @@ export default function PDFReader({ fileUrl, fileName, fileId, onClose }: PDFRea
   // New state for the rendering method
   const [renderMethod, setRenderMethod] = useState<RenderMethod>('pdf.js');
   const MAX_RETRIES = 3;
-  
+  const {projects} = useProjects();
   const documentRef = useRef<HTMLDivElement>(null);
   // Ref do śledzenia aktualnie renderowanych stron
   const pagesRef = useRef<{ [pageNumber: number]: HTMLDivElement }>({});
-
+  const params = useParams();
   // Determine if we're using native browser rendering (vs PDF.js)
   const usingNativeRenderer = renderMethod !== 'pdf.js';
-
+const { toast } = useToast()
   // Use the custom hook to get the signed URL
   const { signedUrl, loading, error, retry } = usePdfFile({ 
     fileId: typeof fileId === 'number' ? fileId : -1, 
@@ -86,6 +87,156 @@ export default function PDFReader({ fileUrl, fileName, fileId, onClose }: PDFRea
   
   // Detekcja urządzeń o wysokiej gęstości pikseli
   const devicePixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  const project = projects.find((p) => p.project_id.toString() === params.id);
+
+
+// NOTE CREATION WILL BE IMPLEMENTED HERE ///////////////////////////////////////////////////////////////////////////
+
+// State for note generation
+const [isGeneratingNote, setIsGeneratingNote] = useState(false);
+const [generationProgress, setGenerationProgress] = useState(0);
+const [noteGenerated, setNoteGenerated] = useState(false);
+
+// State for the generated note with sections
+
+const [note, setNote] = useState<{
+  id: string | null;
+  sections: Array<{
+    id: number;
+    title: string;
+    description: string;
+    content: string;
+    expanded: boolean;
+  }>;
+}>({
+  id: null,
+  sections: []
+});
+
+// Check for existing notes in localStorage when component mounts
+// Check for existing notes in localStorage when component mounts
+useEffect(() => {
+  if (fileId) {
+    const existingNote = localStorage.getItem(`pdf_note_${fileId}`);
+    if (existingNote) {
+      const parsedNote = JSON.parse(existingNote);
+      // Make sure all sections have an expanded property
+      const sections = parsedNote.sections.map(section => ({
+        ...section,
+        expanded: section.expanded || false
+      }));
+      setNote({
+        id: parsedNote.id,
+        sections: sections
+      });
+      setNoteGenerated(true);
+    }
+  }
+}, [fileId]);
+
+
+// Function to toggle section expansion
+const toggleSection = (sectionId: number) => {
+  setNote(prevNote => ({
+    ...prevNote,
+    sections: prevNote.sections.map(section => 
+      section.id === sectionId 
+        ? { ...section, expanded: !section.expanded } 
+        : section
+    )
+  }));
+};
+
+
+// Function to generate initial note from PDF
+const generateInitialNote = async () => {
+  // Check if note was already generated
+  if (noteGenerated || isGeneratingNote) return;
+  
+  setIsGeneratingNote(true);
+  setGenerationProgress(20); // Start with some progress
+  
+  try {
+    // Notify the user
+    toast({
+      title: "Note generation started",
+      description: "Analyzing PDF content to generate note...",
+    });
+    
+    // Simulate progress increases
+    const progressInterval = setInterval(() => {
+      setGenerationProgress(prev => {
+        const newProgress = prev + Math.floor(Math.random() * 15);
+        return newProgress < 90 ? newProgress : 90; // Cap at 90% until complete
+      });
+    }, 800);
+    
+    // Call the API to get generated note
+    const response = await fetch('/api/generate-note', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileId: fileId,
+        fileName: fileName,
+        projectId: project?.project_id,
+        totalPages: numPages || 0
+      }),
+    });
+    
+    // Clear the progress interval
+    clearInterval(progressInterval);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to generate note: ${response.statusText}`);
+    }
+    
+    // Get the generated note directly
+    const generatedNote = await response.json();
+    
+    // Save to localStorage
+    localStorage.setItem(`pdf_note_${fileId}`, JSON.stringify(generatedNote));
+    
+    // Update state
+    setNote({
+      id: generatedNote.id,
+      sections: generatedNote.sections
+    });
+    
+    // Set progress to 100%
+    setGenerationProgress(100);
+    
+    // Mark as complete after a short delay
+    setTimeout(() => {
+      setIsGeneratingNote(false);
+      setNoteGenerated(true);
+      
+      // Show the notes tab
+      const notesTab = document.querySelector('[data-state="inactive"][value="notes"]');
+      if (notesTab) {
+        (notesTab as HTMLElement).click();
+      }
+      
+      toast({
+        title: "Note generated",
+        description: "Your note has been successfully generated with thematic sections.",
+      });
+    }, 500);
+    
+  } catch (error) {
+    console.error("Error generating note:", error);
+    setIsGeneratingNote(false);
+    
+    toast({
+      title: "Error generating note",
+      description: "There was a problem analyzing this PDF. Please try again.",
+      variant: "destructive",
+    });
+  }
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   // Apply TextLayer styles globally with enhanced alignment
   useEffect(() => {
@@ -641,18 +792,84 @@ export default function PDFReader({ fileUrl, fileName, fileId, onClose }: PDFRea
             </TabsList>
             
             <TabsContent value="notes" className="p-4">
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center gap-2">
-                  <Input placeholder={t('searchNotes') || 'Search notes...'} />
-                  <Button size="icon" variant="ghost">
-                    <Search className="h-4 w-4" />
-                  </Button>
-                </div>
-                <p className="text-muted-foreground text-center py-8">
-                  {t('noNotesYet') || 'No notes yet. Select text to add a note.'}
-                </p>
+  <div className="flex flex-col gap-4">
+    {/* Note generation progress indicator */}
+    {isGeneratingNote && (
+      <div className={`border rounded-md p-3 ${darkMode ? 'border-slate-700' : 'border-gray-200'}`}>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-medium">Generating note</h3>
+          <span className="text-xs text-muted-foreground">{generationProgress}%</span>
+        </div>
+        <Progress value={generationProgress} className="w-full h-2" />
+        <p className="text-xs text-muted-foreground mt-2">
+          Analyzing PDF content and creating thematic sections...
+        </p>
+      </div>
+    )}
+    
+{/* Generated note with sections */}
+{!isGeneratingNote && note.id && (
+  <>
+    <div className="flex items-center justify-between mb-4">
+      <h3 className="text-sm font-medium">Note for: {fileName}</h3>
+    </div>
+    
+    <div className="space-y-4">
+      {note.sections.map((section) => (
+        <div 
+          key={section.id}
+          className={`border rounded-md overflow-hidden ${
+            darkMode ? 'border-slate-700' : 'border-gray-200'
+          }`}
+        >
+          {/* Section header with title */}
+          <div 
+            className={`p-3 ${section.expanded ? 'border-b' : ''} ${
+              darkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'
+            } cursor-pointer`}
+            onClick={() => toggleSection(section.id)}
+          >
+            <div className="flex justify-between items-center">
+              <h3 className="font-medium text-base">{section.title}</h3>
+              <ChevronRight className={`h-4 w-4 transition-transform duration-200 ${
+                section.expanded ? 'transform rotate-90' : ''
+              }`} />
+            </div>
+          </div>
+          
+          {/* Section description - always visible */}
+          <div className={`px-3 py-2 ${section.expanded ? 'border-b' : ''} ${
+            darkMode ? 'bg-slate-700/50 border-slate-700' : 'bg-gray-50/50 border-gray-200'
+          }`}>
+            <p className="text-sm text-muted-foreground">{section.description}</p>
+          </div>
+          
+          {/* Section content - only visible when expanded */}
+          {section.expanded && (
+            <div className="p-3">
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                {section.content.split('\n\n').map((paragraph, idx) => (
+                  <p key={idx} className="text-sm mb-2">{paragraph}</p>
+                ))}
               </div>
-            </TabsContent>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  </>
+)}
+    
+    {/* Empty state */}
+    {!isGeneratingNote && !note.id && (
+      <div className="text-center py-8">
+        <p className="text-muted-foreground">
+          No notes yet. Click the "Add to notes" button in the PDF viewer to generate a note.
+        </p>
+      </div>
+    )}
+  </div>
+</TabsContent>
             
             <TabsContent value="tests" className="p-4">
               <p className="text-muted-foreground text-center py-8">
@@ -787,17 +1004,32 @@ export default function PDFReader({ fileUrl, fileName, fileId, onClose }: PDFRea
 
           <Separator orientation="vertical" className="h-8" />
           
-          {/* Add to notes option */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={createNote}>
-                  <FileText className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t('addToNotes') || 'Add to notes'}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+{/* Add to notes option */}
+<TooltipProvider>
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <Button 
+        variant="ghost" 
+        size="icon" 
+        onClick={generateInitialNote}
+        disabled={isGeneratingNote || noteGenerated}
+      >
+        {isGeneratingNote ? (
+          <RefreshCw className="h-4 w-4 animate-spin" />
+        ) : (
+          <FileText className="h-4 w-4" />
+        )}
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent>
+      {isGeneratingNote 
+        ? 'Generating note...' 
+        : noteGenerated
+          ? 'Note already generated'
+          : (t('addToNotes') || 'Add to notes')}
+    </TooltipContent>
+  </Tooltip>
+</TooltipProvider>
 
           <Separator orientation="vertical" className="h-8" />
           
