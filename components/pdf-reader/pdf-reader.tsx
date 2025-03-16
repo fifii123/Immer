@@ -114,8 +114,64 @@ const [note, setNote] = useState<{
   sections: []
 });
 
+
+const fetchExistingNote = async (fileId: number) => {
+  try {
+    const response = await fetch(`/api/notes?fileId=${fileId}`);
+    
+    if (response.ok) {
+      const data = await response.json();
+      setNote({
+        id: data.id,
+        sections: data.sections
+      });
+      setNoteGenerated(true);
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error("Błąd pobierania notatki:", error);
+    return false;
+  }
+};
+
+useEffect(() => {
+  if (fileId) {
+    fetchExistingNote(fileId);
+  }
+}, [fileId]);
+
+const saveNoteToDatabase = async (noteData: any) => {
+  try {
+    const response = await fetch('/api/notes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileId: fileId,
+        projectId: project?.project_id,
+        noteName: `Notatka dla ${fileName}`,
+        sections: noteData.sections
+      }),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Nie udało się zapisać notatki w bazie danych');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error("Błąd zapisywania notatki:", error);
+    throw error;
+  }
+};
+
+
+
 // Check for existing notes in localStorage when component mounts
-// Check for existing notes in localStorage when component mounts
+
 useEffect(() => {
   if (fileId) {
     const existingNote = localStorage.getItem(`pdf_note_${fileId}`);
@@ -137,7 +193,9 @@ useEffect(() => {
 
 
 // Function to toggle section expansion
-const toggleSection = (sectionId: number) => {
+// Zmodyfikowana funkcja toggleSection
+const toggleSection = async (sectionId: number) => {
+  // Najpierw zaktualizuj stan lokalnie dla natychmiastowej reakcji UI
   setNote(prevNote => ({
     ...prevNote,
     sections: prevNote.sections.map(section => 
@@ -146,8 +204,29 @@ const toggleSection = (sectionId: number) => {
         : section
     )
   }));
+  
+  // Następnie zapisz zmiany w bazie danych
+  try {
+    // Znajdź bieżący stan sekcji
+    const section = note.sections.find(s => s.id === sectionId);
+    if (!section) return;
+    
+    // Aktualizuj stan w bazie danych
+    await fetch('/api/notes/section', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sectionId,
+        data: { expanded: !section.expanded }
+      }),
+    });
+  } catch (error) {
+    console.error("Błąd aktualizacji stanu sekcji:", error);
+    // Możesz dodać obsługę błędów, np. wyświetlenie powiadomienia toast
+  }
 };
-
 
 // Function to generate initial note from PDF
 
@@ -159,6 +238,18 @@ const generateInitialNote = async () => {
   setGenerationProgress(0);
   
   try {
+    // Najpierw sprawdź, czy notatka już istnieje w bazie danych
+    const noteExists = await fetchExistingNote(fileId);
+    
+    if (noteExists) {
+      setIsGeneratingNote(false);
+      toast({
+        title: "Notatka załadowana",
+        description: "Znaleziono i załadowano istniejącą notatkę z bazy danych.",
+      });
+      return;
+    }
+    
     // Krok 1: Ekstrakcja tekstu z PDF
     const extractedText = await extractPdfText();
     
@@ -207,8 +298,8 @@ const generateInitialNote = async () => {
     // Krok 4: Pobierz wygenerowaną notatkę
     const generatedNote = await response.json();
     
-    // Krok 5: Zapisz do localStorage
-    localStorage.setItem(`pdf_note_${fileId}`, JSON.stringify(generatedNote));
+    // Krok 5: Zapisz do bazy danych
+    await saveNoteToDatabase(generatedNote);
     
     // Krok 6: Zaktualizuj stan
     setNote({
@@ -232,7 +323,7 @@ const generateInitialNote = async () => {
       
       toast({
         title: "Notatka wygenerowana",
-        description: "Twoja notatka została pomyślnie wygenerowana z sekcjami tematycznymi.",
+        description: "Twoja notatka została pomyślnie wygenerowana i zapisana w bazie danych.",
       });
     }, 500);
   } catch (error) {
