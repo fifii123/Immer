@@ -67,6 +67,7 @@ export default function PDFReader({ fileUrl, fileName, fileId, onClose }: PDFRea
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [selectedText, setSelectedText] = useState<string>("");
   const [usingDirectUrl, setUsingDirectUrl] = useState(false);
+  const [extractingText, setExtractingText] = useState(false);
   // New state for the rendering method
   const [renderMethod, setRenderMethod] = useState<RenderMethod>('pdf.js');
   const MAX_RETRIES = 3;
@@ -149,29 +150,38 @@ const toggleSection = (sectionId: number) => {
 
 
 // Function to generate initial note from PDF
+
 const generateInitialNote = async () => {
-  // Check if note was already generated
+  // Sprawdź, czy notatka została już wygenerowana
   if (noteGenerated || isGeneratingNote) return;
   
   setIsGeneratingNote(true);
-  setGenerationProgress(20); // Start with some progress
+  setGenerationProgress(0);
   
   try {
-    // Notify the user
+    // Krok 1: Ekstrakcja tekstu z PDF
+    const extractedText = await extractPdfText();
+    
+    if (!extractedText || extractedText.trim().length === 0) {
+      throw new Error('Nie udało się wyodrębnić tekstu z PDF');
+    }
+    
+    // Krok 2: Powiadom użytkownika o analizie
+    setGenerationProgress(40);
     toast({
-      title: "Note generation started",
-      description: "Analyzing PDF content to generate note...",
+      title: "Analiza treści PDF",
+      description: "Identyfikacja kluczowych tematów i sekcji...",
     });
     
-    // Simulate progress increases
+    // Symuluj przyrosty postępu dla analizy AI
     const progressInterval = setInterval(() => {
       setGenerationProgress(prev => {
-        const newProgress = prev + Math.floor(Math.random() * 15);
-        return newProgress < 90 ? newProgress : 90; // Cap at 90% until complete
+        const newProgress = prev + Math.floor(Math.random() * 5);
+        return newProgress < 90 ? newProgress : 90;
       });
     }, 800);
     
-    // Call the API to get generated note
+    // Krok 3: Wywołaj API do uzyskania wygenerowanej notatki
     const response = await fetch('/api/generate-note', {
       method: 'POST',
       headers: {
@@ -181,58 +191,100 @@ const generateInitialNote = async () => {
         fileId: fileId,
         fileName: fileName,
         projectId: project?.project_id,
-        totalPages: numPages || 0
+        totalPages: numPages || 0,
+        pdfContent: extractedText // Przekaż wyodrębniony tekst
       }),
     });
     
-    // Clear the progress interval
+    // Wyczyść interwał postępu
     clearInterval(progressInterval);
     
     if (!response.ok) {
-      throw new Error(`Failed to generate note: ${response.statusText}`);
+      const errorData = await response.json();
+      throw new Error(`Nie udało się wygenerować notatki: ${errorData.error || response.statusText}`);
     }
     
-    // Get the generated note directly
+    // Krok 4: Pobierz wygenerowaną notatkę
     const generatedNote = await response.json();
     
-    // Save to localStorage
+    // Krok 5: Zapisz do localStorage
     localStorage.setItem(`pdf_note_${fileId}`, JSON.stringify(generatedNote));
     
-    // Update state
+    // Krok 6: Zaktualizuj stan
     setNote({
       id: generatedNote.id,
       sections: generatedNote.sections
     });
     
-    // Set progress to 100%
+    // Krok 7: Ustaw postęp na 100%
     setGenerationProgress(100);
     
-    // Mark as complete after a short delay
+    // Krok 8: Oznacz jako zakończone po krótkim opóźnieniu
     setTimeout(() => {
       setIsGeneratingNote(false);
       setNoteGenerated(true);
       
-      // Show the notes tab
+      // Pokaż zakładkę z notatkami
       const notesTab = document.querySelector('[data-state="inactive"][value="notes"]');
       if (notesTab) {
         (notesTab as HTMLElement).click();
       }
       
       toast({
-        title: "Note generated",
-        description: "Your note has been successfully generated with thematic sections.",
+        title: "Notatka wygenerowana",
+        description: "Twoja notatka została pomyślnie wygenerowana z sekcjami tematycznymi.",
       });
     }, 500);
-    
   } catch (error) {
-    console.error("Error generating note:", error);
+    console.error("Błąd generowania notatki:", error);
     setIsGeneratingNote(false);
     
     toast({
-      title: "Error generating note",
-      description: "There was a problem analyzing this PDF. Please try again.",
+      title: "Błąd generowania notatki",
+      description: error instanceof Error ? error.message : "Wystąpił problem z analizą tego PDF. Spróbuj ponownie.",
       variant: "destructive",
     });
+  }
+};
+// Funkcja do ekstrakcji tekstu z PDF
+const extractPdfText = async () => {
+  if (!pdfSource) return '';
+  
+  try {
+    setExtractingText(true);
+    setGenerationProgress(5);
+    
+    // Użyj API pdf.js do wczytania dokumentu
+    const loadingTask = pdfjs.getDocument(pdfSource);
+    const pdf = await loadingTask.promise;
+    
+    // Ogranicz liczbę stron dla wydajności
+    const numPagesToExtract = Math.min(pdf.numPages, 50);
+    let extractedText = '';
+    
+    // Ekstrakcja tekstu ze wszystkich stron
+    for (let i = 1; i <= numPagesToExtract; i++) {
+      // Aktualizacja postępu
+      setGenerationProgress(5 + Math.round((i / numPagesToExtract) * 35));
+      
+      // Pobierz stronę i jej zawartość tekstową
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      
+      // Złącz elementy tekstowe
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(' ');
+      
+      extractedText += pageText + '\n\n';
+    }
+    
+    return extractedText;
+  } catch (error) {
+    console.error('Błąd ekstrakcji tekstu PDF:', error);
+    throw new Error('Nie udało się odczytać treści PDF');
+  } finally {
+    setExtractingText(false);
   }
 };
 
@@ -774,7 +826,7 @@ const generateInitialNote = async () => {
         </div>
 
         {/* Sidebar - for notes, tests, etc. */}
-        <div className={`w-80 border-l overflow-auto ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-white'}`}>
+        <div className={`w-96 border-l overflow-auto ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-gray-200 bg-white'}`}>
           <Tabs defaultValue="notes">
             <TabsList className="w-full">
               <TabsTrigger value="notes" className="flex-1">
@@ -793,78 +845,84 @@ const generateInitialNote = async () => {
             
             <TabsContent value="notes" className="p-4">
   <div className="flex flex-col gap-4">
-    {/* Note generation progress indicator */}
+    {/* Wskaźnik postępu generowania notatek */}
     {isGeneratingNote && (
       <div className={`border rounded-md p-3 ${darkMode ? 'border-slate-700' : 'border-gray-200'}`}>
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-medium">Generating note</h3>
+          <h3 className="text-sm font-medium">
+            {generationProgress < 40 
+              ? "Ekstrakcja treści PDF" 
+              : "Generowanie notatki"}
+          </h3>
           <span className="text-xs text-muted-foreground">{generationProgress}%</span>
         </div>
         <Progress value={generationProgress} className="w-full h-2" />
         <p className="text-xs text-muted-foreground mt-2">
-          Analyzing PDF content and creating thematic sections...
+          {generationProgress < 40 
+            ? "Odczytywanie tekstu dokumentu do analizy..." 
+            : "Analiza treści PDF i tworzenie sekcji tematycznych..."}
         </p>
       </div>
     )}
     
-{/* Generated note with sections */}
-{!isGeneratingNote && note.id && (
-  <>
-    <div className="flex items-center justify-between mb-4">
-      <h3 className="text-sm font-medium">Note for: {fileName}</h3>
-    </div>
-    
-    <div className="space-y-4">
-      {note.sections.map((section) => (
-        <div 
-          key={section.id}
-          className={`border rounded-md overflow-hidden ${
-            darkMode ? 'border-slate-700' : 'border-gray-200'
-          }`}
-        >
-          {/* Section header with title */}
-          <div 
-            className={`p-3 ${section.expanded ? 'border-b' : ''} ${
-              darkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'
-            } cursor-pointer`}
-            onClick={() => toggleSection(section.id)}
-          >
-            <div className="flex justify-between items-center">
-              <h3 className="font-medium text-base">{section.title}</h3>
-              <ChevronRight className={`h-4 w-4 transition-transform duration-200 ${
-                section.expanded ? 'transform rotate-90' : ''
-              }`} />
-            </div>
-          </div>
-          
-          {/* Section description - always visible */}
-          <div className={`px-3 py-2 ${section.expanded ? 'border-b' : ''} ${
-            darkMode ? 'bg-slate-700/50 border-slate-700' : 'bg-gray-50/50 border-gray-200'
-          }`}>
-            <p className="text-sm text-muted-foreground">{section.description}</p>
-          </div>
-          
-          {/* Section content - only visible when expanded */}
-          {section.expanded && (
-            <div className="p-3">
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                {section.content.split('\n\n').map((paragraph, idx) => (
-                  <p key={idx} className="text-sm mb-2">{paragraph}</p>
-                ))}
-              </div>
-            </div>
-          )}
+    {/* Wygenerowana notatka z sekcjami */}
+    {!isGeneratingNote && note.id && (
+      <>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-medium">Notatka dla: {fileName}</h3>
         </div>
-      ))}
-    </div>
-  </>
-)}
+        
+        <div className="space-y-4">
+          {note.sections.map((section) => (
+            <div 
+              key={section.id}
+              className={`border rounded-md overflow-hidden ${
+                darkMode ? 'border-slate-700' : 'border-gray-200'
+              }`}
+            >
+              {/* Nagłówek sekcji z tytułem */}
+              <div 
+                className={`p-3 ${section.expanded ? 'border-b' : ''} ${
+                  darkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'
+                } cursor-pointer`}
+                onClick={() => toggleSection(section.id)}
+              >
+                <div className="flex justify-between items-center">
+                  <h3 className="font-medium text-base">{section.title}</h3>
+                  <ChevronRight className={`h-4 w-4 transition-transform duration-200 ${
+                    section.expanded ? 'transform rotate-90' : ''
+                  }`} />
+                </div>
+              </div>
+              
+              {/* Opis sekcji - zawsze widoczny */}
+              <div className={`px-3 py-2 ${section.expanded ? 'border-b' : ''} ${
+                darkMode ? 'bg-slate-700/50 border-slate-700' : 'bg-gray-50/50 border-gray-200'
+              }`}>
+                <p className="text-sm text-muted-foreground">{section.description}</p>
+              </div>
+              
+              {/* Treść sekcji - widoczna tylko po rozwinięciu */}
+              {section.expanded && (
+                <div className="p-3">
+                  <div className="prose prose-sm dark:prose-invert max-w-none">
+                    {section.content.split('\n\n').map((paragraph, idx) => (
+                      <p key={idx} className="text-sm mb-2">{paragraph}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </>
+    )}
     
-    {/* Empty state */}
+    {/* Stan pustych notatek */}
     {!isGeneratingNote && !note.id && (
       <div className="text-center py-8">
         <p className="text-muted-foreground">
-          No notes yet. Click the "Add to notes" button in the PDF viewer to generate a note.
+          Brak notatek. Kliknij przycisk "Dodaj do notatek" w przeglądarce PDF, aby wygenerować notatkę.
         </p>
       </div>
     )}

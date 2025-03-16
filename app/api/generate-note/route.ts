@@ -1,70 +1,102 @@
 // File: /app/api/generate-note/route.ts
 import { NextResponse } from 'next/server';
+import OpenAI from 'openai';
 
-export async function POST(request: NextResponse) {
+// Inicjalizacja klienta OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { fileId, fileName } = body;
+    const { fileId, fileName, projectId, totalPages, pdfContent } = body;
     
     if (!fileId || !fileName) {
       return NextResponse.json(
-        { error: 'Missing required fields: fileId and fileName are required' },
+        { error: 'Brakuje wymaganych pól: fileId i fileName są wymagane' },
         { status: 400 }
       );
     }
+
+    // Sprawdź, czy mamy treść PDF do analizy
+    if (!pdfContent || pdfContent.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Brak treści PDF do analizy' },
+        { status: 400 }
+      );
+    }
+
+    // Wywołanie API OpenAI do analizy treści PDF i generowania inteligentnych sekcji
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: `Jesteś asystentem tworzącym pomocne notatki studenckie na podstawie dokumentów akademickich. Twoim zadaniem jest:
+
+          1. Stworzyć naturalne notatki, które student mógłby sporządzić podczas nauki materiału
+          2. Podzielić materiał na 4-7 logicznych sekcji tematycznych
+          3. Używać prostego, zrozumiałego języka, ale z zachowaniem poprawnej terminologii akademickiej
+          4. Zawrzeć konkretne informacje: definicje, wzory, przykłady, ważne koncepcje
+          5. Unikać zdań w stylu "zostało omówione", "przedstawiono" - zamiast tego pisać bezpośrednio o zagadnieniach
+          
+          Odpowiedz w formacie JSON zgodnie z tą strukturą:
+          {
+            "sections": [
+              {
+                "title": "Tytuł sekcji (krótki, konkretny)",
+                "description": "Jedno zdanie streszczające zawartość sekcji",
+                "content": "Treść notatki zawierająca ważne pojęcia, definicje, wzory, przykłady itp. Pisz w stylu naturalnych notatek studenckich, nie jako formalne streszczenie. Używaj punktów, podkreśleń, pogrubień tam gdzie to ma sens."
+              }
+            ]
+          }`
+        },
+        {
+          role: "user",
+          content: `Stwórz dla mnie notatki ze studiów na podstawie tego dokumentu. Chcę, żeby notatki były napisane jak prawdziwe notatki studenckie - konkretne, z definicjami, wzorami i przykładami tam gdzie to potrzebne. Unikaj pisania w stylu "dokument omawia X" - zamiast tego wyciągnij te informacje i zapisz je bezpośrednio. Zwróć wynik jako obiekt JSON.
+          
+          Dokument: "${fileName}"
+          Liczba stron: ${totalPages}
+          
+          Treść dokumentu:
+          ${pdfContent.slice(0, 15000)}`
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 2000,
+      response_format: { type: "json_object" }
+    });
+
+    // Wyodrębnienie wygenerowanych sekcji z odpowiedzi AI
+    const aiResponse = JSON.parse(response.choices[0].message.content);
     
-    // Generate sample sections with title, description, and content
-    const sectionTypes = [
-      { 
-        title: "Introduction", 
-        description: "Overview of the document's purpose and scope",
-        content: "This section provides a comprehensive introduction to the document, establishing its context, purpose, and relevance. It outlines the key themes that will be explored throughout and sets the stage for the detailed analysis that follows."
-      },
-      { 
-        title: "Background", 
-        description: "Historical and contextual information",
-        content: "This section explores the historical context and relevant background information needed to fully understand the main topics. It provides essential facts, definitions, and prior research that form the foundation for the current work. This background creates a framework for interpreting the findings presented later."
-      },
-      { 
-        title: "Methodology", 
-        description: "Approaches and techniques used",
-        content: "This section details the specific methods, procedures, and analytical techniques employed in the research or analysis. It covers data collection processes, experimental designs, and analytical frameworks. The methodology provides transparency about how conclusions were reached and enables evaluation of the work's rigor."
-      },
-      { 
-        title: "Results", 
-        description: "Key findings and outcomes",
-        content: "This section presents the primary findings, data, and outcomes discovered through the research or analysis. It includes relevant statistics, measurements, observations, and other empirical evidence. The results are presented objectively without interpretation, focusing on what was found rather than what it means."
-      },
-      { 
-        title: "Discussion", 
-        description: "Analysis and interpretation of results",
-        content: "This section analyzes and interprets the results, exploring their implications and significance. It connects findings to the broader context established earlier and examines how they relate to existing knowledge. The discussion addresses unexpected outcomes, limitations, and alternative explanations for the results."
-      },
-      { 
-        title: "Conclusion", 
-        description: "Summary and final thoughts",
-        content: "This section summarizes the key points and main takeaways from the document. It synthesizes the findings into cohesive conclusions and may suggest practical applications or recommendations. The conclusion often identifies areas for future research or exploration and reinforces the document's overall contribution."
-      }
-    ];
-    
-    // Create the note structure
+    // Jeśli nie wygenerowano sekcji, zapewnij fallback
+    if (!aiResponse.sections || aiResponse.sections.length === 0) {
+      return NextResponse.json(
+        { error: 'AI nie wygenerowało sensownych sekcji' },
+        { status: 500 }
+      );
+    }
+
+    // Utwórz strukturę notatki z sekcjami wygenerowanymi przez AI
     const generatedNote = {
       id: `note_${Date.now()}`,
-      title: `Note for ${fileName}`,
-      sections: sectionTypes.map((section, index) => ({
+      title: `Notatka dla ${fileName}`,
+      sections: aiResponse.sections.map((section, index) => ({
         id: index + 1,
         title: section.title,
         description: section.description,
         content: section.content,
-        expanded: false // Default state is collapsed
+        expanded: false // Domyślny stan to zwinięty
       }))
     };
-    
+
     return NextResponse.json(generatedNote);
   } catch (error) {
-    console.error("Error generating note:", error);
+    console.error("Błąd generowania notatki:", error);
     return NextResponse.json(
-      { error: 'Failed to generate note' },
+      { error: 'Nie udało się wygenerować notatki' },
       { status: 500 }
     );
   }
