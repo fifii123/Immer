@@ -75,10 +75,15 @@ export default function PDFReader({ fileUrl, fileName, fileId, onClose }: PDFRea
   const documentRef = useRef<HTMLDivElement>(null);
   // Ref do śledzenia aktualnie renderowanych stron
   const pagesRef = useRef<{ [pageNumber: number]: HTMLDivElement }>({});
+  const autoGenerationAttemptedRef = useRef(false);
   const params = useParams();
   // Determine if we're using native browser rendering (vs PDF.js)
   const usingNativeRenderer = renderMethod !== 'pdf.js';
-const { toast } = useToast()
+  const [isAddingNote, setIsAddingNote] = useState(false);
+  const [highlightedSectionId, setHighlightedSectionId] = useState<number | null>(null);
+  // Reference for scrolling to sections
+  const sectionRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+  const { toast } = useToast()
   // Use the custom hook to get the signed URL
   const { signedUrl, loading, error, retry } = usePdfFile({ 
     fileId: typeof fileId === 'number' ? fileId : -1, 
@@ -89,6 +94,18 @@ const { toast } = useToast()
   // Detekcja urządzeń o wysokiej gęstości pikseli
   const devicePixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   const project = projects.find((p) => p.project_id.toString() === params.id);
+
+  const pulseAnimation = `
+  @keyframes pulse-highlight {
+    0% { background-color: rgba(59, 130, 246, 0); }
+    30% { background-color: rgba(59, 130, 246, 0.15); }
+    100% { background-color: rgba(59, 130, 246, 0); }
+  }
+  
+  .section-highlight {
+    animation: pulse-highlight 5.5s ease-in-out;
+  }
+`;
 
 
 // NOTE CREATION WILL BE IMPLEMENTED HERE ///////////////////////////////////////////////////////////////////////////
@@ -190,6 +207,25 @@ useEffect(() => {
     }
   }
 }, [fileId]);
+
+
+// Add this with the other useEffect hooks
+useEffect(() => {
+  // Only run when the PDF is fully loaded and has pages
+  // and we haven't attempted auto-generation yet
+  if (!documentLoading && numPages && numPages > 0 && !autoGenerationAttemptedRef.current && !noteGenerated) {
+    // Mark that we've attempted auto-generation
+    autoGenerationAttemptedRef.current = true;
+    
+    // Slight delay to ensure PDF is fully rendered
+    const timer = setTimeout(() => {
+      // Generate note automatically
+      generateInitialNote();
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }
+}, [documentLoading, numPages, noteGenerated]);
 
 
 // Function to toggle section expansion
@@ -379,7 +415,146 @@ const extractPdfText = async () => {
   }
 };
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Replace existing createNote function with:
+const addTextToNotes = async () => {
+  if (!selectedText || selectedText.trim().length === 0) {
+    toast({
+      title: "Brak zaznaczonego tekstu",
+      description: "Zaznacz fragment tekstu, który chcesz dodać do notatek.",
+      variant: "destructive",
+    });
+    return;
+  }
+  
+  // If no note exists yet, generate initial note first
+  if (!note.id) {
+    toast({
+      title: "Generowanie głównej notatki",
+      description: "Najpierw musimy wygenerować podstawową notatkę...",
+    });
+    await generateInitialNote();
+    // Wait for the note to be generated
+    if (!note.id) return;
+  }
+  
+  // Set loading state
+  setIsAddingNote(true);
+  
+  
+  try {
+    // Get surrounding context if possible
+    let surroundingContext = "";
+    try {
+      if (renderMethod === 'pdf.js' && pagesRef.current[pageNumber]) {
+        const pageElement = pagesRef.current[pageNumber];
+        const textLayer = pageElement.querySelector('.react-pdf__Page__textContent');
+        if (textLayer) {
+          surroundingContext = textLayer.textContent || "";
+          
+          // Limit context size
+          if (surroundingContext.length > 1000) {
+            const position = surroundingContext.indexOf(selectedText);
+            if (position > 0) {
+              const startPos = Math.max(0, position - 300);
+              const endPos = Math.min(surroundingContext.length, position + selectedText.length + 300);
+              surroundingContext = surroundingContext.substring(startPos, endPos);
+            } else {
+              surroundingContext = surroundingContext.substring(0, 1000);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error getting context:", error);
+    }
+    
+    // Call the API to process the selected text
+    const response = await fetch('/api/notes/add-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        selectedText,
+        fileId,
+        noteId: note.id,
+        surroundingContext,
+        pageNumber
+      }),
+    });
+    
+    const result = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(result.error || 'Nie udało się przetworzyć tekstu');
+    }
+    
+    // Handle different responses
+    if (result.action === "ignore") {
+      toast({
+        title: "Tekst pominięty",
+        description: result.message,
+        variant: "default",
+      });
+      return;
+    }
+    
+    // Refresh note sections from the server
+    await fetchExistingNote(fileId);
+    
+    // Switch to notes tab
+    const notesTab = document.querySelector('[data-state="inactive"][value="notes"]');
+    if (notesTab) {
+      (notesTab as HTMLElement).click();
+    }
+    
+    // Highlight and scroll to the updated section
+    if (result.sectionId) {
+      // Set highlight state
+      setHighlightedSectionId(result.sectionId);
+      
+      // Expand the section
+      setNote(prevNote => ({
+        ...prevNote,
+        sections: prevNote.sections.map(section => 
+          section.id === result.sectionId 
+            ? { ...section, expanded: true } 
+            : section
+        )
+      }));
+      
+      // Scroll to section with a slight delay to ensure rendering
+      setTimeout(() => {
+        if (sectionRefs.current[result.sectionId]) {
+          sectionRefs.current[result.sectionId]?.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+        }
+        
+        // Remove highlight after animation completes
+        setTimeout(() => {
+          setHighlightedSectionId(null);
+        }, 3000);
+      }, 200);
+    }
+    
+    // Show success message
+    toast({
+      title: result.action === "updated" ? "Dodano do istniejącej sekcji" : "Utworzono nową sekcję",
+      description: result.message,
+    });
+  } catch (error) {
+    console.error("Error adding text to notes:", error);
+    toast({
+      title: "Błąd",
+      description: error instanceof Error ? error.message : "Nie udało się dodać tekstu do notatek.",
+      variant: "destructive",
+    });
+  } finally {
+    setIsAddingNote(false);
+  }
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   // Apply TextLayer styles globally with enhanced alignment
   useEffect(() => {
@@ -957,57 +1132,84 @@ const extractPdfText = async () => {
     )}
     
     {/* Wygenerowana notatka z sekcjami */}
-    {!isGeneratingNote && note.id && (
-      <>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium">Notatka dla: {fileName}</h3>
-        </div>
-        
-        <div className="space-y-4">
-          {note.sections.map((section) => (
-            <div 
-              key={section.id}
-              className={`border rounded-md overflow-hidden ${
-                darkMode ? 'border-slate-700' : 'border-gray-200'
-              }`}
-            >
-              {/* Nagłówek sekcji z tytułem */}
-              <div 
-                className={`p-3 ${section.expanded ? 'border-b' : ''} ${
-                  darkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'
-                } cursor-pointer`}
-                onClick={() => toggleSection(section.id)}
-              >
-                <div className="flex justify-between items-center">
-                  <h3 className="font-medium text-base">{section.title}</h3>
-                  <ChevronRight className={`h-4 w-4 transition-transform duration-200 ${
-                    section.expanded ? 'transform rotate-90' : ''
-                  }`} />
-                </div>
+    {/* Add the animation style */}
+<style dangerouslySetInnerHTML={{ __html: pulseAnimation }} />
+
+{!isGeneratingNote && note.id && (
+  <>
+    <div className="flex items-center justify-between mb-4">
+      <h3 className="text-sm font-medium">Notatka dla: {fileName}</h3>
+    </div>
+    
+    <div className="space-y-4">
+      {note.sections.map((section) => (
+        <div 
+          key={section.id}
+          ref={(el) => sectionRefs.current[section.id] = el}
+          className={`border rounded-md overflow-hidden transition-all duration-300 ${
+            darkMode ? 'border-slate-700' : 'border-gray-200'
+          } ${
+            highlightedSectionId === section.id 
+              ? 'shadow-lg ring-2 ring-blue-500 dark:ring-blue-400 section-highlight' 
+              : ''
+          }`}
+        >
+          {/* Nagłówek sekcji z tytułem */}
+          <div 
+            className={`p-3 ${section.expanded ? 'border-b' : ''} ${
+              darkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'
+            } ${
+              highlightedSectionId === section.id 
+                ? 'bg-blue-50 dark:bg-blue-900/30' 
+                : ''
+            } cursor-pointer`}
+            onClick={() => toggleSection(section.id)}
+          >
+            <div className="flex justify-between items-center">
+              <div className="flex items-center">
+                <h3 className="font-medium text-base">{section.title}</h3>
+                {highlightedSectionId === section.id && (
+                  <span className="ml-2 text-xs px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100 rounded-full inline-block animate-pulse">
+                    Zaktualizowano
+                  </span>
+                )}
               </div>
-              
-              {/* Opis sekcji - zawsze widoczny */}
-              <div className={`px-3 py-2 ${section.expanded ? 'border-b' : ''} ${
-                darkMode ? 'bg-slate-700/50 border-slate-700' : 'bg-gray-50/50 border-gray-200'
-              }`}>
-                <p className="text-sm text-muted-foreground">{section.description}</p>
-              </div>
-              
-              {/* Treść sekcji - widoczna tylko po rozwinięciu */}
-              {section.expanded && (
-                <div className="p-3">
-                  <div className="prose prose-sm dark:prose-invert max-w-none">
-                    {section.content.split('\n\n').map((paragraph, idx) => (
-                      <p key={idx} className="text-sm mb-2">{paragraph}</p>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <ChevronRight className={`h-4 w-4 transition-transform duration-200 ${
+                section.expanded ? 'transform rotate-90' : ''
+              }`} />
             </div>
-          ))}
+          </div>
+          
+          {/* Opis sekcji - zawsze widoczny */}
+          <div className={`px-3 py-2 ${section.expanded ? 'border-b' : ''} ${
+            darkMode ? 'bg-slate-700/50 border-slate-700' : 'bg-gray-50/50 border-gray-200'
+          } ${
+            highlightedSectionId === section.id 
+              ? 'bg-blue-50/50 dark:bg-blue-900/20' 
+              : ''
+          }`}>
+            <p className="text-sm text-muted-foreground">{section.description}</p>
+          </div>
+          
+          {/* Treść sekcji - widoczna tylko po rozwinięciu */}
+          {section.expanded && (
+            <div className={`p-3 ${
+              highlightedSectionId === section.id 
+                ? 'bg-blue-50/30 dark:bg-blue-900/10' 
+                : ''
+            }`}>
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                {section.content.split('\n\n').map((paragraph, idx) => (
+                  <p key={idx} className="text-sm mb-2">{paragraph}</p>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      </>
-    )}
+      ))}
+    </div>
+  </>
+)}
     
     {/* Stan pustych notatek */}
     {!isGeneratingNote && !note.id && (
@@ -1160,10 +1362,10 @@ const extractPdfText = async () => {
       <Button 
         variant="ghost" 
         size="icon" 
-        onClick={generateInitialNote}
-        disabled={isGeneratingNote || noteGenerated}
+        onClick={noteGenerated ? addTextToNotes : generateInitialNote}
+        disabled={isGeneratingNote || isAddingNote}
       >
-        {isGeneratingNote ? (
+        {isGeneratingNote || isAddingNote ? (
           <RefreshCw className="h-4 w-4 animate-spin" />
         ) : (
           <FileText className="h-4 w-4" />
@@ -1172,10 +1374,12 @@ const extractPdfText = async () => {
     </TooltipTrigger>
     <TooltipContent>
       {isGeneratingNote 
-        ? 'Generating note...' 
-        : noteGenerated
-          ? 'Note already generated'
-          : (t('addToNotes') || 'Add to notes')}
+        ? 'Generowanie notatki...' 
+        : isAddingNote
+          ? 'Dodawanie tekstu do notatek...'
+          : noteGenerated
+            ? 'Dodaj zaznaczony tekst do notatek'
+            : 'Utwórz notatkę dla dokumentu'}
     </TooltipContent>
   </Tooltip>
 </TooltipProvider>
