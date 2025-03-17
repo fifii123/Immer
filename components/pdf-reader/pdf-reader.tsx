@@ -17,7 +17,10 @@ import {
   Search,
   RefreshCw,
   Download,
-  // Add these icons for renderer selection
+  Maximize2,
+  Type,
+  MessageSquare,
+  Check,
   Globe,
   Layers
 } from "lucide-react";
@@ -94,6 +97,18 @@ export default function PDFReader({ fileUrl, fileName, fileId, onClose }: PDFRea
   // Detekcja urządzeń o wysokiej gęstości pikseli
   const devicePixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   const project = projects.find((p) => p.project_id.toString() === params.id);
+
+
+// Section editing states
+const [editingSection, setEditingSection] = useState<null | {
+  id: number;
+  action: 'expand' | 'format' | 'custom' | 'confirm';
+  prompt?: string; 
+  result?: string;
+}>(null);
+const [customPrompt, setCustomPrompt] = useState('');
+const [isProcessingAction, setIsProcessingAction] = useState(false);
+
 
   const pulseAnimation = `
   @keyframes pulse-highlight {
@@ -440,6 +455,11 @@ const addTextToNotes = async () => {
   // Set loading state
   setIsAddingNote(true);
   
+  // Show loading toast instead of hiding tools immediately
+  toast({
+    title: "Przetwarzanie tekstu",
+    description: "Analizowanie i dopasowywanie tekstu do sekcji...",
+  });
   
   try {
     // Get surrounding context if possible
@@ -487,8 +507,9 @@ const addTextToNotes = async () => {
       throw new Error(result.error || 'Nie udało się przetworzyć tekstu');
     }
     
-    // Handle different responses
+    // Handle "ignore" action immediately
     if (result.action === "ignore") {
+      setShowTools(false); // Now safe to hide tools
       toast({
         title: "Tekst pominięty",
         description: result.message,
@@ -497,7 +518,7 @@ const addTextToNotes = async () => {
       return;
     }
     
-    // Refresh note sections from the server
+    // Refresh note sections from the server to ensure we have latest data
     await fetchExistingNote(fileId);
     
     // Switch to notes tab
@@ -506,10 +527,21 @@ const addTextToNotes = async () => {
       (notesTab as HTMLElement).click();
     }
     
-    // Highlight and scroll to the updated section
+    // Hide tools now that we're switching tabs
+    setShowTools(false);
+    
+    // Process section updates with confirmation flow
     if (result.sectionId) {
-      // Set highlight state
-      setHighlightedSectionId(result.sectionId);
+      // Get the section content from result or find it in our current state
+      const currentSection = note.sections.find(s => s.id === result.sectionId);
+      const contentToShow = result.enhancedContent || currentSection?.content || '';
+      
+      // Set editing state for confirmation
+      setEditingSection({ 
+        id: result.sectionId, 
+        action: 'confirm', 
+        result: contentToShow
+      });
       
       // Expand the section
       setNote(prevNote => ({
@@ -529,21 +561,24 @@ const addTextToNotes = async () => {
             block: 'center' 
           });
         }
-        
-        // Remove highlight after animation completes
-        setTimeout(() => {
-          setHighlightedSectionId(null);
-        }, 3000);
       }, 200);
+      
+      // Show informational toast about confirmation
+      toast({
+        title: result.action === "updated" ? "Propozycja zmian do sekcji" : "Propozycja nowej sekcji",
+        description: "Sprawdź propozycję i zatwierdź lub odrzuć zmiany.",
+      });
+    } else {
+      // No section ID returned - unusual case
+      toast({
+        title: "Coś poszło nie tak",
+        description: "Nie udało się zidentyfikować sekcji do aktualizacji.",
+        variant: "destructive",
+      });
     }
-    
-    // Show success message
-    toast({
-      title: result.action === "updated" ? "Dodano do istniejącej sekcji" : "Utworzono nową sekcję",
-      description: result.message,
-    });
   } catch (error) {
     console.error("Error adding text to notes:", error);
+    setShowTools(false); // Hide tools on error
     toast({
       title: "Błąd",
       description: error instanceof Error ? error.message : "Nie udało się dodać tekstu do notatek.",
@@ -552,6 +587,212 @@ const addTextToNotes = async () => {
   } finally {
     setIsAddingNote(false);
   }
+};
+
+// Section action handlers
+// Handle section expansion
+const expandSection = async (sectionId: number) => {
+  setEditingSection({ id: sectionId, action: 'expand' });
+  setIsProcessingAction(true);
+  
+  try {
+    const section = note.sections.find(s => s.id === sectionId);
+    if (!section) return;
+    
+    // Call AI to expand the section
+    const response = await fetch('/api/notes/enhance-section', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sectionId,
+        action: 'expand',
+        currentContent: section.content
+      }),
+    });
+    
+    if (!response.ok) throw new Error('Failed to expand section');
+    
+    const result = await response.json();
+    
+    // Show the result for confirmation
+    setEditingSection({ 
+      id: sectionId, 
+      action: 'confirm', 
+      result: result.enhancedContent 
+    });
+  } catch (error) {
+    console.error("Error expanding section:", error);
+    toast({
+      title: "Błąd",
+      description: "Nie udało się poszerzyć sekcji.",
+      variant: "destructive",
+    });
+    setEditingSection(null);
+  } finally {
+    setIsProcessingAction(false);
+  }
+};
+
+// Handle section formatting
+const formatSection = async (sectionId: number) => {
+  setEditingSection({ id: sectionId, action: 'format' });
+  setIsProcessingAction(true);
+  
+  try {
+    const section = note.sections.find(s => s.id === sectionId);
+    if (!section) return;
+    
+    // Call AI to format the section
+    const response = await fetch('/api/notes/enhance-section', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sectionId,
+        action: 'format',
+        currentContent: section.content
+      }),
+    });
+    
+    if (!response.ok) throw new Error('Failed to format section');
+    
+    const result = await response.json();
+    
+    // Show the result for confirmation
+    setEditingSection({ 
+      id: sectionId, 
+      action: 'confirm', 
+      result: result.enhancedContent 
+    });
+  } catch (error) {
+    console.error("Error formatting section:", error);
+    toast({
+      title: "Błąd",
+      description: "Nie udało się sformatować sekcji.",
+      variant: "destructive",
+    });
+    setEditingSection(null);
+  } finally {
+    setIsProcessingAction(false);
+  }
+};
+
+// Open custom prompt dialog
+const openCustomPrompt = (sectionId: number) => {
+  setEditingSection({ id: sectionId, action: 'custom' });
+  setCustomPrompt('');
+};
+
+// Submit custom prompt
+const submitCustomPrompt = async () => {
+  if (!editingSection || !customPrompt.trim()) return;
+  
+  setIsProcessingAction(true);
+  
+  try {
+    const section = note.sections.find(s => s.id === editingSection.id);
+    if (!section) return;
+    
+    // Validate the prompt
+    if (customPrompt.toLowerCase().includes("delete") || 
+        customPrompt.toLowerCase().includes("remove")) {
+      throw new Error("Aby usunąć sekcję, użyj opcji usuwania.");
+    }
+    
+    // Call AI with custom prompt
+    const response = await fetch('/api/notes/enhance-section', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sectionId: editingSection.id,
+        action: 'custom',
+        customPrompt,
+        currentContent: section.content
+      }),
+    });
+    
+    if (!response.ok) throw new Error('Failed to process custom prompt');
+    
+    const result = await response.json();
+    
+    // Show the result for confirmation
+    setEditingSection({ 
+      id: editingSection.id, 
+      action: 'confirm', 
+      prompt: customPrompt,
+      result: result.enhancedContent 
+    });
+  } catch (error) {
+    console.error("Error processing custom prompt:", error);
+    toast({
+      title: "Błąd",
+      description: error instanceof Error ? error.message : "Nie udało się przetworzyć zapytania.",
+      variant: "destructive",
+    });
+  } finally {
+    setIsProcessingAction(false);
+  }
+};
+
+// Confirm section changes
+const confirmSectionChanges = async () => {
+  if (!editingSection || !editingSection.result) return;
+  
+  setIsProcessingAction(true);
+  
+  try {
+    // Save changes to database
+    const response = await fetch('/api/notes/section', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sectionId: editingSection.id,
+        data: { content: editingSection.result }
+      }),
+    });
+    
+    if (!response.ok) throw new Error('Failed to save changes');
+    
+    // Update local state
+    setNote(prevNote => ({
+      ...prevNote,
+      sections: prevNote.sections.map(section => 
+        section.id === editingSection.id 
+          ? { ...section, content: editingSection.result || section.content } 
+          : section
+      )
+    }));
+    
+    // Show highlight effect
+    setHighlightedSectionId(editingSection.id);
+    
+    // Remove highlight after 6 seconds
+    setTimeout(() => {
+      setHighlightedSectionId(null);
+    }, 6000);
+    
+    // Clear editing state
+    setEditingSection(null);
+    
+    toast({
+      title: "Zmiany zapisane",
+      description: "Twoje zmiany zostały zapisane pomyślnie.",
+    });
+  } catch (error) {
+    console.error("Error saving section changes:", error);
+    toast({
+      title: "Błąd",
+      description: "Nie udało się zapisać zmian.",
+      variant: "destructive",
+    });
+  } finally {
+    setIsProcessingAction(false);
+  }
+};
+
+// Cancel section changes
+const cancelSectionChanges = () => {
+  setEditingSection(null);
+  setCustomPrompt('');
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1142,71 +1383,168 @@ const addTextToNotes = async () => {
     </div>
     
     <div className="space-y-4">
-      {note.sections.map((section) => (
-        <div 
-          key={section.id}
-          ref={(el) => sectionRefs.current[section.id] = el}
-          className={`border rounded-md overflow-hidden transition-all duration-300 ${
-            darkMode ? 'border-slate-700' : 'border-gray-200'
-          } ${
-            highlightedSectionId === section.id 
-              ? 'shadow-lg ring-2 ring-blue-500 dark:ring-blue-400 section-highlight' 
-              : ''
-          }`}
-        >
-          {/* Nagłówek sekcji z tytułem */}
-          <div 
-            className={`p-3 ${section.expanded ? 'border-b' : ''} ${
-              darkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'
-            } ${
-              highlightedSectionId === section.id 
-                ? 'bg-blue-50 dark:bg-blue-900/30' 
-                : ''
-            } cursor-pointer`}
-            onClick={() => toggleSection(section.id)}
-          >
-            <div className="flex justify-between items-center">
-              <div className="flex items-center">
-                <h3 className="font-medium text-base">{section.title}</h3>
-                {highlightedSectionId === section.id && (
-                  <span className="ml-2 text-xs px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100 rounded-full inline-block animate-pulse">
-                    Zaktualizowano
-                  </span>
-                )}
-              </div>
-              <ChevronRight className={`h-4 w-4 transition-transform duration-200 ${
-                section.expanded ? 'transform rotate-90' : ''
-              }`} />
-            </div>
-          </div>
-          
-          {/* Opis sekcji - zawsze widoczny */}
-          <div className={`px-3 py-2 ${section.expanded ? 'border-b' : ''} ${
-            darkMode ? 'bg-slate-700/50 border-slate-700' : 'bg-gray-50/50 border-gray-200'
-          } ${
-            highlightedSectionId === section.id 
-              ? 'bg-blue-50/50 dark:bg-blue-900/20' 
-              : ''
-          }`}>
-            <p className="text-sm text-muted-foreground">{section.description}</p>
-          </div>
-          
-          {/* Treść sekcji - widoczna tylko po rozwinięciu */}
-          {section.expanded && (
-            <div className={`p-3 ${
-              highlightedSectionId === section.id 
-                ? 'bg-blue-50/30 dark:bg-blue-900/10' 
-                : ''
-            }`}>
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                {section.content.split('\n\n').map((paragraph, idx) => (
-                  <p key={idx} className="text-sm mb-2">{paragraph}</p>
-                ))}
-              </div>
-            </div>
+    {note.sections.map((section) => (
+  <div 
+    key={section.id}
+    ref={(el) => sectionRefs.current[section.id] = el}
+    className={`border rounded-md overflow-hidden transition-all duration-300 ${
+      darkMode ? 'border-slate-700' : 'border-gray-200'
+    } ${
+      highlightedSectionId === section.id 
+        ? 'shadow-lg ring-2 ring-blue-500 dark:ring-blue-400 section-highlight' 
+        : ''
+    }`}
+  >
+    {/* Nagłówek sekcji z tytułem */}
+    <div 
+      className={`p-3 ${section.expanded ? 'border-b' : ''} ${
+        darkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'
+      } ${
+        highlightedSectionId === section.id 
+          ? 'bg-blue-50 dark:bg-blue-900/30' 
+          : ''
+      }`}
+    >
+      <div className="flex justify-between items-center">
+        <div className="flex items-center" onClick={() => toggleSection(section.id)} style={{ cursor: 'pointer', width: '80%' }}>
+          <h3 className="font-medium text-base">{section.title}</h3>
+          {highlightedSectionId === section.id && (
+            <span className="ml-2 text-xs px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100 rounded-full inline-block animate-pulse">
+              Zaktualizowano
+            </span>
           )}
+          <ChevronRight className={`ml-2 h-4 w-4 transition-transform duration-200 ${
+            section.expanded ? 'transform rotate-90' : ''
+          }`} />
         </div>
-      ))}
+        
+        {/* Section action buttons */}
+        <div className="flex space-x-1">
+          <Button variant="ghost" size="icon" className="h-7 w-7" title="Poszerz zawartość sekcji" onClick={() => expandSection(section.id)}>
+            <Maximize2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" title="Formatuj sekcję" onClick={() => formatSection(section.id)}>
+            <Type className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" title="Zadaj własne pytanie" onClick={() => openCustomPrompt(section.id)}>
+            <MessageSquare className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+    </div>
+    
+    {/* Opis sekcji - zawsze widoczny */}
+    <div className={`px-3 py-2 ${section.expanded ? 'border-b' : ''} ${
+      darkMode ? 'bg-slate-700/50 border-slate-700' : 'bg-gray-50/50 border-gray-200'
+    } ${
+      highlightedSectionId === section.id 
+        ? 'bg-blue-50/50 dark:bg-blue-900/20' 
+        : ''
+    }`}>
+      <p className="text-sm text-muted-foreground">{section.description}</p>
+    </div>
+    
+    {/* Treść sekcji - widoczna tylko po rozwinięciu */}
+    {section.expanded && (
+      <div className={`p-3 ${
+        highlightedSectionId === section.id 
+          ? 'bg-blue-50/30 dark:bg-blue-900/10' 
+          : ''
+      }`}>
+        <div className="prose prose-sm dark:prose-invert max-w-none">
+          {section.content.split('\n\n').map((paragraph, idx) => (
+            <p key={idx} className="text-sm mb-2">{paragraph}</p>
+          ))}
+        </div>
+      </div>
+    )}
+    
+    {/* Confirmation UI */}
+    {editingSection && editingSection.id === section.id && editingSection.action === 'confirm' && (
+      <div className="border-t p-3 bg-blue-50/30 dark:bg-blue-900/10">
+        <div className="mb-3">
+          <h4 className="text-sm font-medium mb-2">Proponowane zmiany:</h4>
+          <div className="bg-white dark:bg-slate-800 rounded p-3 max-h-60 overflow-y-auto text-sm border border-blue-200 dark:border-blue-800">
+            {editingSection.result?.split('\n\n').map((paragraph, idx) => (
+              <p key={idx} className="mb-2">{paragraph}</p>
+            ))}
+          </div>
+        </div>
+        <div className="flex justify-end space-x-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={cancelSectionChanges}
+            disabled={isProcessingAction}
+          >
+            <X className="h-4 w-4 mr-1" />
+            Odrzuć
+          </Button>
+          <Button 
+            variant="default" 
+            size="sm" 
+            onClick={confirmSectionChanges}
+            disabled={isProcessingAction}
+          >
+            {isProcessingAction ? (
+              <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <Check className="h-4 w-4 mr-1" />
+            )}
+            Zatwierdź
+          </Button>
+        </div>
+      </div>
+    )}
+
+    {/* Custom prompt dialog */}
+    {editingSection && editingSection.id === section.id && editingSection.action === 'custom' && (
+      <div className="border-t p-3 bg-blue-50/30 dark:bg-blue-900/10">
+        <div className="mb-3">
+          <h4 className="text-sm font-medium mb-2">Wprowadź własne polecenie:</h4>
+          <textarea
+            className="w-full p-2 border rounded dark:bg-slate-800 dark:border-slate-700"
+            placeholder="Np. 'Dodaj więcej szczegółów o...' lub 'Wyjaśnij pojęcie...'"
+            rows={3}
+            value={customPrompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
+          />
+        </div>
+        <div className="flex justify-end space-x-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={cancelSectionChanges}
+            disabled={isProcessingAction}
+          >
+            Anuluj
+          </Button>
+          <Button 
+            variant="default" 
+            size="sm" 
+            onClick={submitCustomPrompt}
+            disabled={isProcessingAction || !customPrompt.trim()}
+          >
+            {isProcessingAction ? (
+              <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+            ) : 'Wyślij'}
+          </Button>
+        </div>
+      </div>
+    )}
+
+    {/* Processing indicator */}
+    {editingSection && editingSection.id === section.id && 
+     (editingSection.action === 'expand' || editingSection.action === 'format') && (
+      <div className="border-t p-4 bg-blue-50/30 dark:bg-blue-900/10 flex justify-center items-center">
+        <RefreshCw className="h-5 w-5 animate-spin mr-2" />
+        <span>
+          {editingSection.action === 'expand' ? 'Poszerzanie sekcji...' : 'Formatowanie sekcji...'}
+        </span>
+      </div>
+    )}
+  </div>
+))}
     </div>
   </>
 )}
