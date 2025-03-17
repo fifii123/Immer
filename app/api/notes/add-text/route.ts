@@ -3,13 +3,11 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import pool from '@/lib/db';
 
-// Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
 export async function POST(request: Request) {
-  // Create a client from the pool for this request
   const client = await pool.connect();
   
   try {
@@ -22,7 +20,7 @@ export async function POST(request: Request) {
       pageNumber 
     } = body;
     
-    // Extract numeric parts from IDs (handles both "note_60" format and numeric formats)
+    // Extract numeric parts from IDs
     let noteId;
     if (typeof rawNoteId === 'string' && rawNoteId.includes('_')) {
       noteId = parseInt(rawNoteId.split('_')[1], 10);
@@ -47,7 +45,7 @@ export async function POST(request: Request) {
 
     // 1. Fetch existing note sections to provide context
     const sectionsQuery = `
-      SELECT section_id, title, description, content
+      SELECT section_id, title, description, content, order_index
       FROM note_section
       WHERE note_id = $1
       ORDER BY order_index ASC
@@ -55,6 +53,11 @@ export async function POST(request: Request) {
     
     const sectionsResult = await client.query(sectionsQuery, [noteId]);
     const existingSections = sectionsResult.rows;
+
+    // Calculate next order index for potential new sections
+    const nextOrderIndex = existingSections.length > 0 
+      ? Math.max(...existingSections.map(s => s.order_index)) + 1 
+      : 0;
 
     // 2. Create a simplified context to save tokens
     const sectionsContext = existingSections.map(section => 
@@ -107,7 +110,7 @@ export async function POST(request: Request) {
 
     const aiResponse = JSON.parse(response.choices[0].message.content);
     
-    // 4. Process the AI's decision
+    // 4. Process the AI's decision (WITHOUT SAVING TO DATABASE)
     if (aiResponse.action === "ignore") {
       return NextResponse.json({
         success: false,
@@ -117,9 +120,6 @@ export async function POST(request: Request) {
     }
     
     if (aiResponse.action === "add_to_existing") {
-      // Start a transaction for the update
-      await client.query('BEGIN');
-      
       // Parse the target section ID if it's a string
       let targetSectionId = aiResponse.targetSectionId;
       if (typeof targetSectionId === 'string' && targetSectionId.includes('_')) {
@@ -132,101 +132,45 @@ export async function POST(request: Request) {
         throw new Error('Nieprawidłowy format ID sekcji');
       }
       
-      // Update existing section
-      const updateQuery = `
-        UPDATE note_section
-        SET content = $1, updated_at = NOW()
-        WHERE section_id = $2
-        RETURNING section_id
-      `;
-      
-      const updateResult = await client.query(updateQuery, [
-        aiResponse.enhancedContent,
-        targetSectionId
-      ]);
-      
-      await client.query('COMMIT');
-      
-      if (updateResult.rows.length === 0) {
+      // Find the existing section
+      const section = existingSections.find(s => s.section_id === targetSectionId);
+      if (!section) {
         throw new Error('Nie znaleziono sekcji do aktualizacji');
       }
       
+      // Return the proposal but DON'T modify database
       return NextResponse.json({
         success: true,
         message: aiResponse.reason,
-        action: "updated",
-        sectionId: updateResult.rows[0].section_id
+        action: "update_proposed",
+        sectionId: targetSectionId,
+        currentContent: section.content,
+        proposedContent: aiResponse.enhancedContent
       });
     }
     
     if (aiResponse.action === "create_new") {
-      // Start a transaction
-      await client.query('BEGIN');
-      
-      // Find the highest order_index
-      const orderQuery = `
-        SELECT order_index 
-        FROM note_section 
-        WHERE note_id = $1 
-        ORDER BY order_index DESC 
-        LIMIT 1
-      `;
-      
-      const orderResult = await client.query(orderQuery, [noteId]);
-      const highestOrderIndex = orderResult.rows.length > 0 ? orderResult.rows[0].order_index : -1;
-      const newOrderIndex = highestOrderIndex + 1;
-      
-      // Create new section
-      const createQuery = `
-        INSERT INTO note_section (
-          note_id, 
-          title, 
-          description, 
-          content, 
-          order_index, 
-          expanded, 
-          created_at, 
-          updated_at
-        ) 
-        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-        RETURNING section_id
-      `;
-      
-      const createResult = await client.query(createQuery, [
-        noteId,
-        aiResponse.newSectionTitle,
-        aiResponse.newSectionDescription,
-        aiResponse.enhancedContent,
-        newOrderIndex,
-        true // expanded
-      ]);
-      
-      await client.query('COMMIT');
-      
+      // Return the proposal to create a new section but DON'T modify database
       return NextResponse.json({
         success: true,
         message: aiResponse.reason,
-        action: "created",
-        sectionId: createResult.rows[0].section_id
+        action: "create_proposed",
+        noteId: noteId,
+        title: aiResponse.newSectionTitle,
+        description: aiResponse.newSectionDescription,
+        proposedContent: aiResponse.enhancedContent,
+        orderIndex: nextOrderIndex
       });
     }
 
     return NextResponse.json({ error: 'Nieznana akcja' }, { status: 400 });
   } catch (error) {
-    // If there's an active transaction, roll it back
-    try {
-      await client.query('ROLLBACK');
-    } catch (rollbackError) {
-      console.error("Error during rollback:", rollbackError);
-    }
-    
-    console.error("Błąd dodawania tekstu do notatek:", error);
+    console.error("Błąd analizy tekstu:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Wystąpił błąd podczas przetwarzania tekstu' },
+      { error: error instanceof Error ? error.message : 'Wystąpił błąd podczas analizy tekstu' },
       { status: 500 }
     );
   } finally {
-    // Always release the client back to the pool
     client.release();
   }
 }

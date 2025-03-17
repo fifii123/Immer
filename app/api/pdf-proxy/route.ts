@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 import { PrismaClient } from "@prisma/client";
 import AWS from "aws-sdk";
+import {prisma} from "../../../lib/prisma"
 
-const prisma = new PrismaClient();
 const SECRET_KEY = process.env.JWT_SECRET_KEY || "secret_key";
 
 const s3 = new AWS.S3({

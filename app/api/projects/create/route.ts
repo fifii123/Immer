@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { config } from "dotenv";
 
 config();
-const prisma = new PrismaClient();
+import { prisma } from "../../../../lib/prisma"
 
 export async function POST(req: NextRequest) {
   try {

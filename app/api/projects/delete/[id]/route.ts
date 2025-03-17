@@ -4,7 +4,7 @@ import { config } from "dotenv";
 import AWS from "aws-sdk";
 
 config();
-const prisma = new PrismaClient();
+import { prisma } from "../../../../../lib/prisma"
 
 // Configure AWS S3 to use Backblaze's S3-Compatible endpoint
 const s3 = new AWS.S3({

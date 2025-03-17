@@ -6,7 +6,7 @@ import AWS from "aws-sdk";
 import jwt from "jsonwebtoken";
 
 config();
-const prisma = new PrismaClient();
+import { prisma } from "../../../../lib/prisma"
 const SECRET_KEY = process.env.JWT_SECRET_KEY || "secret_key";
 
 // Configure AWS S3 to use Backblaze's S3-Compatible endpoint

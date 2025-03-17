@@ -100,12 +100,24 @@ export default function PDFReader({ fileUrl, fileName, fileId, onClose }: PDFRea
 
 
 // Section editing states
+// Update this state declaration
 const [editingSection, setEditingSection] = useState<null | {
   id: number;
-  action: 'expand' | 'format' | 'custom' | 'confirm';
+  action: 'expand' | 'format' | 'custom' | 'confirm' | 'confirm_new'; // Add 'confirm_new'
   prompt?: string; 
   result?: string;
+  // Add these new properties for the expanded functionality
+  noteId?: number;
+  title?: string;
+  description?: string;
+  orderIndex?: number;
+  currentContent?: string;
 }>(null);
+
+// Find this type definition for the note state
+
+
+
 const [customPrompt, setCustomPrompt] = useState('');
 const [isProcessingAction, setIsProcessingAction] = useState(false);
 
@@ -140,12 +152,12 @@ const [note, setNote] = useState<{
     description: string;
     content: string;
     expanded: boolean;
+    isTemporary?: boolean; // Add this property
   }>;
 }>({
   id: null,
   sections: []
 });
-
 
 const fetchExistingNote = async (fileId: number) => {
   try {
@@ -430,7 +442,10 @@ const extractPdfText = async () => {
   }
 };
 
-// Replace existing createNote function with:
+/**
+ * Adds selected text to note sections with user confirmation
+ * Uses two-phase commit pattern: propose changes first, commit after confirmation
+ */
 const addTextToNotes = async () => {
   if (!selectedText || selectedText.trim().length === 0) {
     toast({
@@ -488,7 +503,7 @@ const addTextToNotes = async () => {
       console.error("Error getting context:", error);
     }
     
-    // Call the API to process the selected text
+    // Call the API to process the selected text (phase 1: analysis)
     const response = await fetch('/api/notes/add-text', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -518,9 +533,6 @@ const addTextToNotes = async () => {
       return;
     }
     
-    // Refresh note sections from the server to ensure we have latest data
-    await fetchExistingNote(fileId);
-    
     // Switch to notes tab
     const notesTab = document.querySelector('[data-state="inactive"][value="notes"]');
     if (notesTab) {
@@ -530,17 +542,14 @@ const addTextToNotes = async () => {
     // Hide tools now that we're switching tabs
     setShowTools(false);
     
-    // Process section updates with confirmation flow
-    if (result.sectionId) {
-      // Get the section content from result or find it in our current state
-      const currentSection = note.sections.find(s => s.id === result.sectionId);
-      const contentToShow = result.enhancedContent || currentSection?.content || '';
-      
-      // Set editing state for confirmation
+    // Process proposals and set up confirmation UI
+    if (result.action === "update_proposed") {
+      // Proposed update to existing section
       setEditingSection({ 
         id: result.sectionId, 
         action: 'confirm', 
-        result: contentToShow
+        currentContent: result.currentContent,
+        result: result.proposedContent
       });
       
       // Expand the section
@@ -553,7 +562,7 @@ const addTextToNotes = async () => {
         )
       }));
       
-      // Scroll to section with a slight delay to ensure rendering
+      // Scroll to section
       setTimeout(() => {
         if (sectionRefs.current[result.sectionId]) {
           sectionRefs.current[result.sectionId]?.scrollIntoView({ 
@@ -563,18 +572,49 @@ const addTextToNotes = async () => {
         }
       }, 200);
       
-      // Show informational toast about confirmation
       toast({
-        title: result.action === "updated" ? "Propozycja zmian do sekcji" : "Propozycja nowej sekcji",
-        description: "Sprawdź propozycję i zatwierdź lub odrzuć zmiany.",
+        title: "Propozycja aktualizacji sekcji",
+        description: "Sprawdź proponowane zmiany i zatwierdź lub odrzuć.",
       });
-    } else {
-      // No section ID returned - unusual case
+    } 
+    else if (result.action === "create_proposed") {
+      // Proposed creation of new section
+      setEditingSection({
+        id: -1, // Temporary ID for new section
+        action: 'confirm_new',
+        result: result.proposedContent,
+        title: result.title,
+        description: result.description,
+        noteId: result.noteId,
+        orderIndex: result.orderIndex
+      });
+      
       toast({
-        title: "Coś poszło nie tak",
-        description: "Nie udało się zidentyfikować sekcji do aktualizacji.",
-        variant: "destructive",
+        title: "Propozycja nowej sekcji",
+        description: "Sprawdź proponowaną nową sekcję i zatwierdź lub odrzuć.",
       });
+      
+      // Show temporary preview of new section at top of notes list
+      const tempSection = {
+        id: -1,
+        title: result.title,
+        description: result.description,
+        content: result.proposedContent,
+        expanded: true,
+        isTemporary: true
+      };
+      
+      // Add temporary section at the beginning for visibility
+      setNote(prevNote => ({
+        ...prevNote,
+        sections: [tempSection, ...prevNote.sections]
+      }));
+      
+      // Scroll to top to show the new section
+      setTimeout(() => {
+        const notesContainer = document.querySelector('[data-value="notes"]');
+        if (notesContainer) notesContainer.scrollTop = 0;
+      }, 200);
     }
   } catch (error) {
     console.error("Error adding text to notes:", error);
@@ -588,7 +628,6 @@ const addTextToNotes = async () => {
     setIsAddingNote(false);
   }
 };
-
 // Section action handlers
 // Handle section expansion
 const expandSection = async (sectionId: number) => {
@@ -733,39 +772,79 @@ const submitCustomPrompt = async () => {
   }
 };
 
-// Confirm section changes
+// Confirm section changes - phase 2: commit to database
 const confirmSectionChanges = async () => {
-  if (!editingSection || !editingSection.result) return;
+  if (!editingSection) return;
   
   setIsProcessingAction(true);
   
   try {
-    // Save changes to database
-    const response = await fetch('/api/notes/section', {
-      method: 'PATCH',
+    // Determine if we're confirming an update or a new section
+    const isNewSection = editingSection.action === 'confirm_new';
+    
+    // Construct request payload based on action type
+    const payload = isNewSection 
+      ? {
+          action: 'create',
+          noteId: editingSection.noteId,
+          title: editingSection.title,
+          description: editingSection.description,
+          content: editingSection.result,
+          orderIndex: editingSection.orderIndex
+        }
+      : {
+          action: 'update',
+          sectionId: editingSection.id,
+          content: editingSection.result
+        };
+    
+    // Call commit endpoint - phase 2: save to database
+    const response = await fetch('/api/notes/commit-changes', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sectionId: editingSection.id,
-        data: { content: editingSection.result }
-      }),
+      body: JSON.stringify(payload),
     });
     
-    if (!response.ok) throw new Error('Failed to save changes');
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Nie udało się zapisać zmian');
+    }
     
-    // Update local state
-    setNote(prevNote => ({
-      ...prevNote,
-      sections: prevNote.sections.map(section => 
-        section.id === editingSection.id 
-          ? { ...section, content: editingSection.result || section.content } 
-          : section
-      )
-    }));
+    const result = await response.json();
     
-    // Show highlight effect
-    setHighlightedSectionId(editingSection.id);
+    // Update local state with the saved data
+    if (isNewSection) {
+      // Remove temporary preview section and add the real one
+      setNote(prevNote => ({
+        ...prevNote,
+        // Filter out temporary section and add the real one with database ID
+        sections: [
+          ...prevNote.sections.filter(s => !s.isTemporary),
+          {
+            id: result.sectionId,
+            title: result.title || editingSection.title,
+            description: result.description || editingSection.description || '',
+            content: result.content,
+            expanded: true
+          }
+        ]
+      }));
+    } else {
+      // Update the existing section content
+      setNote(prevNote => ({
+        ...prevNote,
+        sections: prevNote.sections.map(section => 
+          section.id === editingSection.id
+            ? { ...section, content: result.content || editingSection.result }
+            : section
+        )
+      }));
+    }
     
-    // Remove highlight after 6 seconds
+    // Show highlight effect on the section
+    setHighlightedSectionId(result.sectionId);
+    
+    // Remove highlight after animation completes
     setTimeout(() => {
       setHighlightedSectionId(null);
     }, 6000);
@@ -774,14 +853,24 @@ const confirmSectionChanges = async () => {
     setEditingSection(null);
     
     toast({
-      title: "Zmiany zapisane",
-      description: "Twoje zmiany zostały zapisane pomyślnie.",
+      title: isNewSection ? "Nowa sekcja utworzona" : "Sekcja zaktualizowana",
+      description: "Zmiany zostały zapisane pomyślnie.",
     });
+    
+    // Scroll to the final section location
+    setTimeout(() => {
+      if (sectionRefs.current[result.sectionId]) {
+        sectionRefs.current[result.sectionId]?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+      }
+    }, 200);
   } catch (error) {
-    console.error("Error saving section changes:", error);
+    console.error("Error confirming changes:", error);
     toast({
       title: "Błąd",
-      description: "Nie udało się zapisać zmian.",
+      description: error instanceof Error ? error.message : "Nie udało się zapisać zmian.",
       variant: "destructive",
     });
   } finally {
@@ -789,12 +878,25 @@ const confirmSectionChanges = async () => {
   }
 };
 
-// Cancel section changes
+// Cancel section changes - discard proposal without saving
 const cancelSectionChanges = () => {
+  // If this was a new section preview, remove it from the UI
+  if (editingSection?.action === 'confirm_new') {
+    setNote(prevNote => ({
+      ...prevNote,
+      sections: prevNote.sections.filter(s => !s.isTemporary)
+    }));
+  }
+  
+  // Clear editing state
   setEditingSection(null);
   setCustomPrompt('');
+  
+  toast({
+    title: "Zmiany odrzucone",
+    description: "Zmiany nie zostały zapisane.",
+  });
 };
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   // Apply TextLayer styles globally with enhanced alignment
@@ -1385,51 +1487,66 @@ const cancelSectionChanges = () => {
     <div className="space-y-4">
     {note.sections.map((section) => (
   <div 
-    key={section.id}
-    ref={(el) => sectionRefs.current[section.id] = el}
+    key={section.id + (section.isTemporary ? '-temp' : '')}
+    ref={!section.isTemporary ? (el) => sectionRefs.current[section.id] = el : undefined}
     className={`border rounded-md overflow-hidden transition-all duration-300 ${
       darkMode ? 'border-slate-700' : 'border-gray-200'
+    } ${
+      section.isTemporary 
+        ? 'border-dashed border-blue-400 dark:border-blue-600' 
+        : ''
     } ${
       highlightedSectionId === section.id 
         ? 'shadow-lg ring-2 ring-blue-500 dark:ring-blue-400 section-highlight' 
         : ''
     }`}
   >
-    {/* Nagłówek sekcji z tytułem */}
+    {/* Section header with additional indicator for temporary sections */}
     <div 
       className={`p-3 ${section.expanded ? 'border-b' : ''} ${
         darkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'
       } ${
-        highlightedSectionId === section.id 
-          ? 'bg-blue-50 dark:bg-blue-900/30' 
-          : ''
+        section.isTemporary
+          ? 'bg-blue-50 dark:bg-blue-900/20'
+          : highlightedSectionId === section.id 
+            ? 'bg-blue-50 dark:bg-blue-900/30' 
+            : ''
       }`}
     >
       <div className="flex justify-between items-center">
-        <div className="flex items-center" onClick={() => toggleSection(section.id)} style={{ cursor: 'pointer', width: '80%' }}>
+        <div className="flex items-center" onClick={() => !section.isTemporary && toggleSection(section.id)} style={{ cursor: !section.isTemporary ? 'pointer' : 'default', width: '80%' }}>
           <h3 className="font-medium text-base">{section.title}</h3>
+          {section.isTemporary && (
+            <span className="ml-2 text-xs px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100 rounded-full inline-block">
+              Propozycja
+            </span>
+          )}
           {highlightedSectionId === section.id && (
             <span className="ml-2 text-xs px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100 rounded-full inline-block animate-pulse">
               Zaktualizowano
             </span>
           )}
-          <ChevronRight className={`ml-2 h-4 w-4 transition-transform duration-200 ${
-            section.expanded ? 'transform rotate-90' : ''
-          }`} />
+          {!section.isTemporary && (
+            <ChevronRight className={`ml-2 h-4 w-4 transition-transform duration-200 ${
+              section.expanded ? 'transform rotate-90' : ''
+            }`} />
+          )}
         </div>
         
-        {/* Section action buttons */}
-        <div className="flex space-x-1">
-          <Button variant="ghost" size="icon" className="h-7 w-7" title="Poszerz zawartość sekcji" onClick={() => expandSection(section.id)}>
-            <Maximize2 className="h-3.5 w-3.5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" title="Formatuj sekcję" onClick={() => formatSection(section.id)}>
-            <Type className="h-3.5 w-3.5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" title="Zadaj własne pytanie" onClick={() => openCustomPrompt(section.id)}>
-            <MessageSquare className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+        {/* Action buttons only for non-temporary sections */}
+        {!section.isTemporary && (
+          <div className="flex space-x-1">
+            <Button variant="ghost" size="icon" className="h-7 w-7" title="Poszerz zawartość sekcji" onClick={() => expandSection(section.id)}>
+              <Maximize2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" title="Formatuj sekcję" onClick={() => formatSection(section.id)}>
+              <Type className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" title="Zadaj własne pytanie" onClick={() => openCustomPrompt(section.id)}>
+              <MessageSquare className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
       </div>
     </div>
     

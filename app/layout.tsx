@@ -13,8 +13,8 @@ import '../lib/pdf-worker';
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Simple UI",
-  description: "A simple UI with sidebar and preferences",
+  title: "Immer App",
+  description: "Learn faster and better",
   generator: "v0.dev",
 };
 
