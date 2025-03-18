@@ -78,7 +78,7 @@ export async function POST(request: Request) {
           Twoje zadanie:
           1. Zdecyduj, czy zaznaczony fragment zawiera konstruktywne informacje warte dodania do notatek
           2. Jeśli tak, dopasuj go do istniejącej sekcji LUB zaproponuj utworzenie nowej
-          3. Podaj rozszerzony tekst, który wzbogaci istniejącą sekcję o nowe informacje
+          3. Podaj rozszerzony tekst, który wzbogaci istniejącą sekcję o nowe informacje zachowując wszystkie informacje z oryginalnej sekcji.
           
           Odpowiedz w formacie JSON:
           {
