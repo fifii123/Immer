@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { usePreferences } from "@/context/preferences-context";
 import { useParams } from "next/navigation";
+import ReactMarkdown from 'react-markdown';
 import { 
   X, 
   ChevronLeft, 
@@ -56,7 +57,114 @@ interface PDFReaderProps {
   fileId: number;
   onClose: () => void;
 }
-
+const markdownStyles = `
+  /* Style dla nagłówków */
+  .markdown-content h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    color: #2563eb;
+  }
+  
+  .dark .markdown-content h2 {
+    color: #60a5fa;
+  }
+  
+  .markdown-content h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-top: 1.25rem;
+    margin-bottom: 0.5rem;
+    color: #3b82f6;
+  }
+  
+  .dark .markdown-content h3 {
+    color: #93c5fd;
+  }
+  
+  /* Style dla list */
+  .markdown-content ul {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding-left: 1.5rem;
+    list-style-type: disc;
+  }
+  
+  .markdown-content li {
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+  }
+  
+  /* Style dla bloków kodu */
+  .markdown-content code {
+    background-color: #f3f4f6;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    font-family: monospace;
+  }
+  
+  .dark .markdown-content code {
+    background-color: #334155;
+  }
+  
+  /* Style dla bloków cytatu */
+  .markdown-content blockquote {
+    border-left: 4px solid #60a5fa;
+    padding-left: 1rem;
+    margin-left: 0;
+    margin-right: 0;
+    font-style: italic;
+    background-color: #eff6ff;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+  }
+  
+  .dark .markdown-content blockquote {
+    background-color: rgba(30, 58, 138, 0.2);
+    border-left-color: #3b82f6;
+  }
+  
+  /* Style dla pogrubienia i kursywy */
+  .markdown-content strong {
+    font-weight: 600;
+    color: #1d4ed8;
+  }
+  
+  .dark .markdown-content strong {
+    color: #93c5fd;
+  }
+  
+  .markdown-content em {
+    color: #4f46e5;
+  }
+  
+  .dark .markdown-content em {
+    color: #a5b4fc;
+  }
+  
+  /* Dodatkowe style dla lepszego wyglądu tekstu */
+  .markdown-content p {
+    margin-bottom: 0.75rem;
+    line-height: 1.5;
+  }
+  
+  /* Odstępy między elementami */
+  .markdown-content > * + * {
+    margin-top: 0.5rem;
+  }
+`;
+export const MarkdownContent = ({ content }) => {
+  return (
+    <div className="markdown-content text-sm">
+      <style dangerouslySetInnerHTML={{ __html: markdownStyles }} />
+      <ReactMarkdown>
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+};
 export default function PDFReader({ fileUrl, fileName, fileId, onClose }: PDFReaderProps) {
   const { darkMode, t } = usePreferences();
   
@@ -133,6 +241,7 @@ const [isProcessingAction, setIsProcessingAction] = useState(false);
     animation: pulse-highlight 5.5s ease-in-out;
   }
 `;
+
 
 
 // NOTE CREATION WILL BE IMPLEMENTED HERE ///////////////////////////////////////////////////////////////////////////
@@ -1569,50 +1678,47 @@ const cancelSectionChanges = () => {
           : ''
       }`}>
         <div className="prose prose-sm dark:prose-invert max-w-none">
-          {section.content.split('\n\n').map((paragraph, idx) => (
-            <p key={idx} className="text-sm mb-2">{paragraph}</p>
-          ))}
+        <MarkdownContent content={section.content} />
         </div>
       </div>
     )}
     
     {/* Confirmation UI */}
     {editingSection && editingSection.id === section.id && editingSection.action === 'confirm' && (
-      <div className="border-t p-3 bg-blue-50/30 dark:bg-blue-900/10">
-        <div className="mb-3">
-          <h4 className="text-sm font-medium mb-2">Proponowane zmiany:</h4>
-          <div className="bg-white dark:bg-slate-800 rounded p-3 max-h-60 overflow-y-auto text-sm border border-blue-200 dark:border-blue-800">
-            {editingSection.result?.split('\n\n').map((paragraph, idx) => (
-              <p key={idx} className="mb-2">{paragraph}</p>
-            ))}
-          </div>
-        </div>
-        <div className="flex justify-end space-x-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={cancelSectionChanges}
-            disabled={isProcessingAction}
-          >
-            <X className="h-4 w-4 mr-1" />
-            Odrzuć
-          </Button>
-          <Button 
-            variant="default" 
-            size="sm" 
-            onClick={confirmSectionChanges}
-            disabled={isProcessingAction}
-          >
-            {isProcessingAction ? (
-              <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-            ) : (
-              <Check className="h-4 w-4 mr-1" />
-            )}
-            Zatwierdź
-          </Button>
-        </div>
+  <div className="border-t p-3 bg-blue-50/30 dark:bg-blue-900/10">
+    <div className="mb-3">
+      <h4 className="text-sm font-medium mb-2">Proponowane zmiany:</h4>
+      <div className="bg-white dark:bg-slate-800 rounded p-3 max-h-60 overflow-y-auto text-sm border border-blue-200 dark:border-blue-800">
+        {/* Renderowanie podglądu markdown w potwierdzeniu */}
+        <MarkdownContent content={editingSection.result || ''} />
       </div>
-    )}
+    </div>
+    <div className="flex justify-end space-x-2">
+      <Button 
+        variant="outline" 
+        size="sm" 
+        onClick={cancelSectionChanges}
+        disabled={isProcessingAction}
+      >
+        <X className="h-4 w-4 mr-1" />
+        Odrzuć
+      </Button>
+      <Button 
+        variant="default" 
+        size="sm" 
+        onClick={confirmSectionChanges}
+        disabled={isProcessingAction}
+      >
+        {isProcessingAction ? (
+          <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+        ) : (
+          <Check className="h-4 w-4 mr-1" />
+        )}
+        Zatwierdź
+      </Button>
+    </div>
+  </div>
+)}
 
     {/* Custom prompt dialog */}
     {editingSection && editingSection.id === section.id && editingSection.action === 'custom' && (

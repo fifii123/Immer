@@ -30,12 +30,39 @@ export async function POST(request: Request) {
 
 Treść sekcji:
 ${currentContent}`;
-    } else if (action === 'format') {
-      prompt = `Zformatuj następującą sekcję dla lepszej czytelności. Możesz użyć punktów, nagłówków i akapitów ale zachowaj naturalny styl notatek. Nie dodawaj numerowania "1., 2., 3." ani sformułowań "oto lista". Zachowaj wszystkie informacje.
-
-Treść sekcji:
+    } 
+    else if (action === 'format') {
+      prompt = `Zformatuj następującą sekcję używając składni markdown dla lepszej czytelności. Stosuj następujące elementy:
+    
+1. Użyj nagłówków ## dla głównych punktów i ### dla podpunktów
+2. Użyj list punktowanych (- ) dla wyliczania elementów
+3. Użyj **pogrubienia** dla ważnych pojęć i definicji
+4. Użyj *kursywy* dla podkreślenia istotnych informacji
+5. Używaj krótkich akapitów (max 3-4 zdania)
+6. Dodaj odstępy między akapitami
+7. Wyróżnij definicje używając > dla cytatów blokowych
+8. Użyj \`kodu\` dla wzorów, równań lub specjalnych pojęć
+    
+Przykład dobrego formatowania:
+## Główny temat
+Wprowadzający akapit o temacie. Krótkie wyjaśnienie czego dotyczy sekcja.
+    
+### Podtemat 1
+Wyjaśnienie podtematu. **Ważne pojęcie** to kluczowy element który należy zapamiętać.
+    
+> Definicja: Formalne wyjaśnienie ważnego pojęcia.
+    
+- Punkt pierwszy dotyczący tematu
+- Punkt drugi z *dodatkowym podkreśleniem*
+- Punkt trzeci zawierający \`a = b + c\`
+    
+### Podtemat 2
+Kolejne wyjaśnienie z konkretami.
+    
+Treść sekcji do sformatowania:
 ${currentContent}`;
-    } else if (action === 'custom') {
+    } 
+    else if (action === 'custom') {
       if (!customPrompt) {
         return NextResponse.json({ error: 'Brak polecenia niestandardowego' }, { status: 400 });
       }
@@ -76,17 +103,23 @@ Istniejące notatki:
 ${currentContent}
 
 Kontynuacja notatek (napisz bezpośrednio w tonie kontynuacji, bez wprowadzeń):`;
-    } else {
+    } 
+    else {
       return NextResponse.json({ error: 'Nieznana akcja' }, { status: 400 });
     }
     
-    // Call the OpenAI API
+    // GŁÓWNA MODYFIKACJA: Dostosowanie wiadomości systemowej do akcji
+    const systemContent = action === 'format'
+      ? "Jesteś ekspertem w formatowaniu tekstu z wykorzystaniem składni markdown. Tworzysz czytelne, dobrze zorganizowane treści dla studentów, które będą wyświetlane w interfejsie notatek. Używasz nagłówków, punktów, pogrubień, kursywy i innych elementów markdown, aby tekst był przejrzysty i łatwy do nauki. Twój markdown musi być poprawny składniowo i gotowy do wyświetlenia."
+      : "Jesteś doświadczonym studentem tworzącym swoje notatki z wykładów. Piszesz w naturalnym stylu, bez formalnych struktur, nagłówków czy list numerowanych. Twoje notatki są zwięzłe, merytoryczne i przypominają prawdziwe zapiski z zajęć.";
+    
+    // Call the OpenAI API z zmodyfikowaną wiadomością systemową
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [
         {
           role: "system",
-          content: "Jesteś doświadczonym studentem tworzącym swoje notatki z wykładów. Piszesz w naturalnym stylu, bez formalnych struktur, nagłówków czy list numerowanych. Twoje notatki są zwięzłe, merytoryczne i przypominają prawdziwe zapiski z zajęć."
+          content: systemContent
         },
         {
           role: "user",
