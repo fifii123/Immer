@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,29 +12,39 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false) // Stan ładowania
+  const [loading, setLoading] = useState(false)
+  
   const router = useRouter()
+  const searchParams = useSearchParams()
+  // Pobieramy parametr redirectTo z URL
+  const redirectTo = searchParams.get('redirectTo') || "/"
+  
   const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
-    setLoading(true) // Włącz ładowanie
+    setLoading(true)
 
     // Prosta walidacja
     if (!email || !password) {
       setError("Please enter both email and password")
-      setLoading(false) // Zatrzymaj ładowanie
+      setLoading(false)
       return
     }
 
     try {
-      await login(email, password) // Zakładając, że login jest funkcją asynchroniczną
-      router.push("/") // Przekierowanie po udanym logowaniu
+      await login(email, password)
+      
+      // Kluczowa zmiana: przekierowanie do strony na którą użytkownik próbował wejść
+      // Dodajemy setTimeout, aby dać przeglądarce czas na zapisanie ciasteczka
+      setTimeout(() => {
+        router.push(redirectTo)
+      }, 100)
     } catch (err) {
       setError("Login failed. Please try again.")
     } finally {
-      setLoading(false) // Zatrzymaj ładowanie, niezależnie od wyniku
+      setLoading(false)
     }
   }
 

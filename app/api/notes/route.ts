@@ -109,59 +109,116 @@ export async function POST(request: Request) {
   }
 }
 
-// Pobieranie notatki po file_id
+// Pobieranie notatki po file_id lub wszystkich notatek dla project_id
 export async function GET(request: Request) {
   const client = await pool.connect();
   
   try {
     const { searchParams } = new URL(request.url);
     const fileId = searchParams.get('fileId');
+    const projectId = searchParams.get('projectId');
     
-    if (!fileId) {
+    // Jeśli podano projectId, pobieramy wszystkie notatki dla projektu
+    if (projectId) {
+      // 1. Pobierz wszystkie notatki dla projektu
+      const notesQuery = `
+        SELECT note_id, note_name, file_id, project_id
+        FROM notes
+        WHERE project_id = $1
+      `;
+      
+      const notesResult = await client.query(notesQuery, [parseInt(projectId)]);
+      
+      if (notesResult.rows.length === 0) {
+        return NextResponse.json([], { status: 200 }); // Zwróć pustą tablicę, jeśli nie ma notatek
+      }
+      
+      // 2. Dla każdej notatki:
+      // a) Pobierz jej sekcje
+      // b) Pobierz informacje o pliku bezpośrednio z projektu
+      const notesWithSectionsPromises = notesResult.rows.map(async (note) => {
+        // Pobierz sekcje dla tej notatki
+        const sectionsQuery = `
+          SELECT section_id, title, description, content, expanded, order_index 
+          FROM note_section 
+          WHERE note_id = $1 
+          ORDER BY order_index ASC
+        `;
+        
+        const sectionsResult = await client.query(sectionsQuery, [note.note_id]);
+        
+        // 3. Pobierz informacje o pliku z projektu
+        // Zakładamy, że dostęp do plików jest w obiekcie project, który mamy w komponencie ProjectPage
+        // Na potrzeby API zwracamy file_id jako identyfikator pliku, a nazwę pliku tworząc ją z ID
+        // W interfejsie te informacje są dostępne
+        
+        // Format zgodny z ProjectNotes
+        return {
+          id: note.note_id,
+          fileName: `File ID: ${note.file_id}`, // Nazwa pliku zostanie ustalona w komponencie na podstawie file_id
+          fileId: note.file_id,
+          sections: sectionsResult.rows.map(section => ({
+            id: section.section_id,
+            title: section.title,
+            description: section.description || '',
+            content: section.content || '',
+            expanded: section.expanded || false
+          }))
+        };
+      });
+      
+      // Wykonaj wszystkie zapytania równolegle
+      const allNotes = await Promise.all(notesWithSectionsPromises);
+      
+      return NextResponse.json(allNotes);
+    }
+    // Oryginalna logika dla pojedynczego pliku
+    else if (fileId) {
+      // Pobierz notatkę powiązaną z danym plikiem
+      const noteResult = await client.query(
+        `SELECT note_id, note_name FROM notes WHERE file_id = $1 LIMIT 1`,
+        [parseInt(fileId)]
+      );
+
+      if (noteResult.rows.length === 0) {
+        return NextResponse.json(
+          { error: 'Nie znaleziono notatki dla podanego pliku' },
+          { status: 404 }
+        );
+      }
+
+      const note = noteResult.rows[0];
+      
+      // Pobierz sekcje dla tej notatki
+      const sectionsResult = await client.query(
+        `SELECT section_id, title, description, content, expanded, order_index 
+         FROM note_section 
+         WHERE note_id = $1 
+         ORDER BY order_index ASC`,
+        [note.note_id]
+      );
+
+      // Przekształć dane do formatu używanego przez interfejs
+      const formattedNote = {
+        id: `note_${note.note_id}`,
+        title: note.note_name,
+        sections: sectionsResult.rows.map(section => ({
+          id: section.section_id,
+          title: section.title,
+          description: section.description || '',
+          content: section.content || '',
+          expanded: section.expanded || false
+        }))
+      };
+
+      return NextResponse.json(formattedNote);
+    }
+    else {
       return NextResponse.json(
-        { error: 'Brak wymaganego parametru fileId' },
+        { error: 'Brak wymaganego parametru: fileId lub projectId' },
         { status: 400 }
       );
     }
-
-    // Pobierz notatkę powiązaną z danym plikiem
-    const noteResult = await client.query(
-      `SELECT note_id, note_name FROM notes WHERE file_id = $1 LIMIT 1`,
-      [parseInt(fileId)]
-    );
-
-    if (noteResult.rows.length === 0) {
-      return NextResponse.json(
-        { error: 'Nie znaleziono notatki dla podanego pliku' },
-        { status: 404 }
-      );
-    }
-
-    const note = noteResult.rows[0];
-    
-    // Pobierz sekcje dla tej notatki
-    const sectionsResult = await client.query(
-      `SELECT section_id, title, description, content, expanded, order_index 
-       FROM note_section 
-       WHERE note_id = $1 
-       ORDER BY order_index ASC`,
-      [note.note_id]
-    );
-
-    // Przekształć dane do formatu używanego przez interfejs
-    const formattedNote = {
-      id: `note_${note.note_id}`,
-      title: note.note_name,
-      sections: sectionsResult.rows.map(section => ({
-        id: section.section_id,
-        title: section.title,
-        description: section.description || '',
-        content: section.content || '',
-        expanded: section.expanded || false
-      }))
-    };
-
-    return NextResponse.json(formattedNote);
   } catch (error) {
     console.error("Błąd pobierania notatki:", error);
     return NextResponse.json(

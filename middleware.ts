@@ -18,20 +18,27 @@ export async function middleware(request: NextRequest) {
 
   if (!token) {
     const loginUrl = new URL('/login', request.nextUrl.origin);
+    // Dodajemy parametr przekierowania
+    loginUrl.searchParams.set('redirectTo', request.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
   }
 
   try {
     // Weryfikacja tokenu za pomocą jose
-    const { payload } = await jwtVerify(token, SECRET_KEY);
-    console.log('Token zweryfikowany', payload);
+    await jwtVerify(token, SECRET_KEY);
+    // Jeśli weryfikacja się powiedzie, pozwól użytkownikowi przejść dalej
+    return NextResponse.next();
   } catch (error) {
-    console.error('Błąd weryfikacji tokenu', error);
+    // Jeśli token jest nieważny, usuń go z ciasteczek
     const loginUrl = new URL('/login', request.nextUrl.origin);
-    return NextResponse.redirect(loginUrl);
+    // Dodajemy parametr przekierowania
+    loginUrl.searchParams.set('redirectTo', request.nextUrl.pathname);
+    
+    // KLUCZOWA ZMIANA: Usuwamy nieważny token przy przekierowaniu
+    const response = NextResponse.redirect(loginUrl);
+    response.cookies.delete('token');
+    return response;
   }
-
-  return NextResponse.next();
 }
 
 export const config = {

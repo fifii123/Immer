@@ -9,6 +9,7 @@ import { usePreferences } from "@/context/preferences-context";
 import { useRouter } from "next/navigation";
 import { useProjects } from "@/context/projects-context";
 import PDFReader from "@/components/pdf-reader/pdf-reader"; // Zaimportuj komponent czytnika PDF
+import ProjectNotes from "../[id]/project-notes/project-notes"; // Zaimportuj komponent widoku notatek
 
 export default function ProjectPage() {
   const params = useParams();
@@ -20,6 +21,9 @@ export default function ProjectPage() {
     fileUrl: string;
     fileName: string;
   } | null>(null);
+  
+  // Dodany nowy stan dla widoku notatek
+  const [showNotesView, setShowNotesView] = useState(false);
 
   // Find the current project
   const project = projects.find((p) => p.project_id.toString() === params.id);
@@ -37,17 +41,33 @@ export default function ProjectPage() {
     );
   }
 
-  // Funkcja otwierająca PDF w interaktywnym czytniku - uproszczona
+  // Funkcja otwierająca PDF w interaktywnym czytniku
   const openPdfReader = (fileId: number, filePath: string, fileName: string) => {
     console.log(`File ID: ${fileId}, URL: ${filePath}`);
     
-    // Bezpośrednio ustaw plik do otwarcia bez pobierania signed URL
-    // URL będzie pobierany przez komponent PDFReader
+    // Zamknij widok notatek, jeśli był otwarty
+    setShowNotesView(false);
+    
+    // Otwórz PDF Reader
     setActivePdfFile({
       fileId,
       fileUrl: filePath,
       fileName,
     });
+  };
+  
+  // Funkcja otwierająca widok notatek
+  const openNotesView = () => {
+    // Zamknij PDF Reader, jeśli był otwarty
+    setActivePdfFile(null);
+    
+    // Otwórz widok notatek
+    setShowNotesView(true);
+  };
+  
+  // Funkcja zamykająca widok notatek
+  const closeNotesView = () => {
+    setShowNotesView(false);
   };
 
   return (
@@ -125,12 +145,14 @@ export default function ProjectPage() {
         <section>
           <h2 className="mb-4 text-lg font-semibold">{t("openResources")}</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {/* Karta "Notes" - otwiera nowy widok notatek */}
             <Card
               className={`group cursor-pointer transition-colors ${
                 darkMode
                   ? "bg-slate-800 border-slate-700 hover:bg-slate-700"
                   : "bg-white hover:bg-gray-50"
               }`}
+              onClick={openNotesView} // Teraz otwiera nowy widok notatek
             >
               <CardContent className="flex items-center gap-3 p-4">
                 <GraduationCap className="h-8 w-8 text-indigo-500 shrink-0" />
@@ -183,6 +205,14 @@ export default function ProjectPage() {
           fileName={activePdfFile.fileName}
           fileId={activePdfFile.fileId}
           onClose={() => setActivePdfFile(null)}
+        />
+      )}
+      
+      {/* Notes View Modal */}
+      {showNotesView && (
+        <ProjectNotes
+          projectId={Number(params.id)}
+          onClose={closeNotesView}
         />
       )}
     </div>
