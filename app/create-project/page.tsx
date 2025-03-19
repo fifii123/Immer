@@ -19,7 +19,7 @@ export default function CreateProjectPage() {
   const { t, addProject } = usePreferences();
   const { user } = useAuth();
   const { projects } = useProjects();
-
+  
   const [formData, setFormData] = useState({
     subject: "",
     projectName: t("newProject") + "1",

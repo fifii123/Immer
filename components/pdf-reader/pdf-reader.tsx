@@ -1,8 +1,11 @@
+// TODO: test / note deletion, full-on testing
+
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
 import { usePreferences } from "@/context/preferences-context";
 import { useParams } from "next/navigation";
+import { useUserId } from '@/hooks/useAuthApi';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
@@ -30,7 +33,25 @@ import {
   MessageSquare,
   Check,
   Globe,
-  Layers
+  Layers,
+  ChevronDown
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
+import { 
+  CheckCircle, 
+  XCircle 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { 
@@ -69,7 +90,7 @@ interface PDFReaderProps {
 
 export default function PDFReader({ fileUrl, fileName, fileId, onClose }: PDFReaderProps) {
   const { darkMode, t } = usePreferences();
-  
+  const userId = useUserId();
   // PDF states
   const [pageNumber, setPageNumber] = useState(1);
   const [numPages, setNumPages] = useState<number | null>(null);
@@ -103,6 +124,7 @@ export default function PDFReader({ fileUrl, fileName, fileId, onClose }: PDFRea
     fileUrl 
   });
   const [retryCount, setRetryCount] = useState(0);
+  const { authFetch, isLoading: apiLoading } = useUserId();
   
   // Detekcja urządzeń o wysokiej gęstości pikseli
   const devicePixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
@@ -126,6 +148,72 @@ const [editingSection, setEditingSection] = useState<null | {
 
 // Find this type definition for the note state
 
+//// tests
+const [isCheckingAnswers, setIsCheckingAnswers] = useState(false);
+const [expandedQuestions, setExpandedQuestions] = useState<boolean[]>([]);
+const toggleQuestionExpand = (index: number) => {
+  const newExpandedState = [...expandedQuestions];
+  newExpandedState[index] = !newExpandedState[index];
+  setExpandedQuestions(newExpandedState);
+};
+// Stan do zarządzania testami
+const getInProgressTestStateKey = (testId) => `test_in_progress_${testId}`;
+const [tests, setTests] = useState<Array<{
+  test_id: number;
+  test_name: string;
+  question_type: string;
+  created_at: string;
+  content: string;
+  save_score: boolean;
+}>>([]);
+// Flaga wskazująca, czy test ma zapisane wyniki w bazie danych
+const [testHasResults, setTestHasResults] = useState(false);
+
+// Flaga wskazująca, czy test jest w trakcie rozwiązywania
+const [testInProgress, setTestInProgress] = useState(false);
+const [selectedTest, setSelectedTest] = useState<any>(null);
+const [isTestGenerationDialogOpen, setIsTestGenerationDialogOpen] = useState(false);
+const [isGeneratingTest, setIsGeneratingTest] = useState(false);
+const [isStartingTest, setIsStartingTest] = useState(false);
+const [takingTest, setTakingTest] = useState(false);
+const [testConfig, setTestConfig] = useState({
+  name: '',
+  questionType: 'multiple_choice', // domyślny typ: zamknięte
+  questionCount: 5,
+  optionsCount: 4, // tylko dla pytań zamkniętych
+  difficulty: 2,
+  saveScore: false
+});
+
+// Zmienne stanu dla pytań zamkniętych
+const [currentMultipleChoiceQuestions, setCurrentMultipleChoiceQuestions] = useState<Array<{
+  question: string;
+  context?: string;
+  options: string[];
+  correctAnswer: string;
+  explanation?: string;
+}>>([]);
+
+// Zmienne stanu dla pytań otwartych
+const [currentOpenEndedQuestions, setCurrentOpenEndedQuestions] = useState<Array<{
+  question: string;
+  context?: string;
+  correctAnswer: string;
+}>>([]);
+
+// Wspólne zmienne stanu dla obu typów testów
+const [userAnswers, setUserAnswers] = useState<string[]>([]);
+const [answerFeedback, setAnswerFeedback] = useState<Array<{
+  isCorrect: boolean;
+  feedback: string;
+  correctAnswer?: string;
+} | null>>([]);
+const [testSubmitted, setTestSubmitted] = useState(false);
+const [testScore, setTestScore] = useState(0);
+
+
+//// tests \\\\
+
 
 
 const [customPrompt, setCustomPrompt] = useState('');
@@ -144,7 +232,548 @@ const [isProcessingAction, setIsProcessingAction] = useState(false);
   }
 `;
 
+// TEST CREATION WILL BE IMPLEMENTED HERE //////////////////////////////////////////////////////////////////////////
+const handleToggleTest = (test) => {
+  // Jeśli test jest już wybrany, odznacz go
+  if (selectedTest?.test_id === test.test_id) {
+    setSelectedTest(null);
+    setTestHasResults(false);
+    setTestInProgress(false);
+  } else {
+    // W przeciwnym razie, wybierz ten test
+    setSelectedTest(test);
+    
+    // Resetowanie stanów
+    setUserAnswers([]);
+    setAnswerFeedback([]);
+    setTestSubmitted(false);
+    setTakingTest(false);
+    setCurrentMultipleChoiceQuestions([]);
+    setCurrentOpenEndedQuestions([]);
+    setTestHasResults(false);
+    setTestInProgress(false);
+    
+    // Sprawdź tymczasowy stan testu
+    const inProgressState = loadInProgressTestState(test.test_id);
+    if (inProgressState && inProgressState.userAnswers.some(answer => answer)) {
+      setTestInProgress(true);
+    }
+    
+    // Sprawdź czy userId jest dostępne i pobierz wyniki testu
+    if (userId) {
+      fetchTestResults(test.test_id).then(results => {
+        if (results.exists) {
+          try {
+            // Ustaw wynik testu
+            setTestScore(results.score);
+            setTestHasResults(true);
+          } catch (error) {
+            console.error("Błąd przetwarzania wyników testu:", error);
+          }
+        }
+      }).catch(error => {
+        console.error("Błąd podczas pobierania wyników testu:", error);
+      });
+    }
+  }
+};
+const saveInProgressTestState = (testId, userAnswers) => {
+  if (!testId) return;
+  
+  const testState = {
+    testId,
+    userAnswers,
+    lastUpdated: Date.now()
+  };
+  
+  localStorage.setItem(getInProgressTestStateKey(testId), JSON.stringify(testState));
+};
 
+// Funkcja wczytująca tymczasowy stan testu z localStorage
+const loadInProgressTestState = (testId) => {
+  if (!testId) return null;
+  
+  const storedState = localStorage.getItem(getInProgressTestStateKey(testId));
+  if (!storedState) return null;
+  
+  try {
+    return JSON.parse(storedState);
+  } catch (error) {
+    console.error("Błąd podczas wczytywania stanu testu:", error);
+    return null;
+  }
+};
+
+// Funkcja usuwająca tymczasowy stan testu (np. po ukończeniu testu)
+const clearInProgressTestState = (testId) => {
+  if (!testId) return;
+  localStorage.removeItem(getInProgressTestStateKey(testId));
+};
+
+// Funkcja do pobierania wyników testu z bazy danych
+const fetchTestResults = async (testId) => {
+  try {
+    // Sprawdź czy userId jest dostępne
+    if (!userId) {
+      console.warn("User ID not available. Cannot fetch test results.");
+      return { exists: false };
+    }
+    
+    // Wywołaj API z userId jako parametr zapytania
+    const response = await fetch(`/api/tests/results?testId=${testId}&userId=${userId}`);
+    
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || `API error: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error("Błąd pobierania wyników testu:", error);
+    return { exists: false };
+  }
+};
+// Funkcja pobierająca testy
+const fetchTests = async () => {
+  if (!fileId) return;
+  
+  try {
+    const response = await fetch(`/api/tests?fileId=${fileId}`);
+    
+    if (response.ok) {
+      const data = await response.json();
+      setTests(data);
+    }
+  } catch (error) {
+    console.error("Błąd pobierania testów:", error);
+  }
+};
+
+// useEffect do pobierania testów po załadowaniu komponentu
+useEffect(() => {
+  if (fileId) {
+    fetchTests();
+  }
+}, [fileId]);
+
+// Funkcja zwracająca liczbę pytań w teście
+const getTestQuestionCount = (test) => {
+  if (!test || !test.content) return 0;
+  
+  try {
+    const content = JSON.parse(test.content);
+    return content.questions ? content.questions.length : 0;
+  } catch (error) {
+    console.error("Błąd parsowania zawartości testu:", error);
+    return 0;
+  }
+};
+
+// Funkcja obsługująca wybór testu
+const handleSelectTest = (test) => {
+  setSelectedTest(test);
+  
+  // Resetowanie stanów
+  setUserAnswers([]);
+  setAnswerFeedback([]);
+  setTestSubmitted(false);
+  setTakingTest(false);
+  setCurrentMultipleChoiceQuestions([]);
+  setCurrentOpenEndedQuestions([]);
+  setTestHasResults(false);
+  setTestInProgress(false);
+  
+  // Sprawdź tymczasowy stan testu
+  const inProgressState = loadInProgressTestState(test.test_id);
+  if (inProgressState && inProgressState.userAnswers.some(answer => answer)) {
+    setTestInProgress(true);
+  }
+  
+  // Sprawdź czy userId jest dostępne i pobierz wyniki testu
+  if (userId) {
+    fetchTestResults(test.test_id).then(results => {
+      if (results.exists) {
+        try {
+          // Wczytaj zawartość testu
+          const content = JSON.parse(test.content);
+          if (content.questions && content.questions.length > 0) {
+            if (test.question_type === 'multiple_choice') {
+              setCurrentMultipleChoiceQuestions(content.questions);
+            } else if (test.question_type === 'open_ended') {
+              setCurrentOpenEndedQuestions(content.questions);
+            }
+            
+            // Ustaw odpowiedzi i wyniki
+            const userAnswersArray = new Array(content.questions.length).fill('');
+            results.answers.forEach(answer => {
+              if (answer.question_id >= 0 && answer.question_id < userAnswersArray.length) {
+                userAnswersArray[answer.question_id] = answer.user_answer;
+              }
+            });
+            
+            setUserAnswers(userAnswersArray);
+            setAnswerFeedback(results.feedback);
+            setTestScore(results.score);
+            setTestHasResults(true);
+          }
+        } catch (error) {
+          console.error("Błąd przetwarzania zawartości testu:", error);
+        }
+      }
+    }).catch(error => {
+      console.error("Błąd podczas pobierania wyników testu:", error);
+    });
+  }
+};
+
+// Funkcja generująca test
+const generateTest = async () => {
+  setIsGeneratingTest(true);
+  
+  try {
+    const response = await fetch('/api/tests/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileId: fileId,
+        projectId: project?.project_id,
+        testName: testConfig.name,
+        questionType: testConfig.questionType,
+        questionCount: testConfig.questionCount,
+        optionsCount: testConfig.optionsCount,
+        difficulty: testConfig.difficulty,
+        saveScore: testConfig.saveScore,
+        noteId: note.id // Przekazywanie ID notatki, jeśli istnieje
+      }),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Nie udało się wygenerować testu');
+    }
+    
+    const result = await response.json();
+    
+    // Dodanie nowo utworzonego testu do listy
+    setTests(prevTests => [result, ...prevTests]);
+    
+    // Zamknięcie dialogu konfiguracji
+    setIsTestGenerationDialogOpen(false);
+    
+    // Resetowanie konfiguracji
+    setTestConfig({
+      name: '',
+      questionType: 'multiple_choice',
+      questionCount: 5,
+      optionsCount: 4,
+      difficulty: 2,
+      saveScore: false
+    });
+    
+    // Powiadomienie o sukcesie
+    toast({
+      title: "Test wygenerowany",
+      description: "Twój test został pomyślnie utworzony.",
+    });
+    
+    // Wybierz nowo utworzony test
+    handleSelectTest(result);
+  } catch (error) {
+    console.error("Błąd generowania testu:", error);
+    toast({
+      title: "Błąd generowania testu",
+      description: error instanceof Error ? error.message : "Wystąpił problem z generowaniem testu.",
+      variant: "destructive",
+    });
+  } finally {
+    setIsGeneratingTest(false);
+  }
+};
+
+// Funkcja rozpoczynająca test
+const startTest = () => {
+  if (!selectedTest || !selectedTest.content) return;
+  
+  try {
+    const content = JSON.parse(selectedTest.content);
+    if (!content.questions || !content.questions.length) {
+      throw new Error('Brak pytań w teście');
+    }
+    
+    // Resetuj wszystkie stany testu
+    setIsCheckingAnswers(false);
+    setTestSubmitted(false);
+    setTestHasResults(false);
+    
+    // Ustawienie odpowiedniego typu pytań
+    if (selectedTest.question_type === 'multiple_choice') {
+      setCurrentMultipleChoiceQuestions(content.questions);
+      setCurrentOpenEndedQuestions([]);
+    } else if (selectedTest.question_type === 'open_ended') {
+      setCurrentOpenEndedQuestions(content.questions);
+      setCurrentMultipleChoiceQuestions([]);
+    }
+    
+    // Użyj zapisanych odpowiedzi lub utwórz nowe puste odpowiedzi
+    const savedState = loadInProgressTestState(selectedTest.test_id);
+    if (savedState && !savedState.completed && savedState.userAnswers.length > 0) {
+      setUserAnswers(savedState.userAnswers);
+    } else {
+      setUserAnswers(new Array(content.questions.length).fill(''));
+    }
+    
+    // Inicjalizuj stan rozwijania - domyślnie wszystkie pytania rozwinięte
+    setExpandedQuestions(new Array(content.questions.length).fill(true));
+    
+    // Wyraźnie ustaw stan wykonywania testu
+    setAnswerFeedback(new Array(content.questions.length).fill(null));
+    setTakingTest(true);
+    setTestInProgress(true);
+  } catch (error) {
+    console.error("Błąd rozpoczynania testu:", error);
+    toast({
+      title: "Błąd rozpoczynania testu",
+      description: "Nie można wczytać pytań. Format testu jest nieprawidłowy.",
+      variant: "destructive",
+    });
+  }
+};
+// Funkcja obsługująca zmianę odpowiedzi
+const handleAnswerChange = (index, value) => {
+  const newAnswers = [...userAnswers];
+  newAnswers[index] = value;
+  setUserAnswers(newAnswers);
+  
+  // Zapisz tymczasowy stan testu w localStorage
+  if (selectedTest) {
+    saveInProgressTestState(selectedTest.test_id, newAnswers);
+  }
+};
+
+// Funkcja sprawdzająca odpowiedzi dla testów zamkniętych
+const handleSubmitMultipleChoiceTest = () => {
+  // Sprawdzenie, czy wszystkie odpowiedzi zostały udzielone
+  const unansweredQuestions = userAnswers.filter(answer => !answer).length;
+  
+  if (unansweredQuestions > 0) {
+    toast({
+      title: "Uzupełnij wszystkie odpowiedzi",
+      description: `Nie odpowiedziano na ${unansweredQuestions} ${
+        unansweredQuestions === 1 ? 'pytanie' : unansweredQuestions < 5 ? 'pytania' : 'pytań'
+      }.`,
+      variant: "warning",
+    });
+    return;
+  }
+  
+  // Obliczanie wyniku
+  let correctCount = 0;
+  const feedback = [];
+  
+  for (let i = 0; i < currentMultipleChoiceQuestions.length; i++) {
+    const isCorrect = userAnswers[i] === currentMultipleChoiceQuestions[i].correctAnswer;
+    if (isCorrect) {
+      correctCount++;
+    }
+    
+    feedback.push({
+      isCorrect,
+      feedback: isCorrect 
+        ? "Poprawna odpowiedź" 
+        : `Niepoprawna odpowiedź. Wybrano: ${userAnswers[i]}`,
+      correctAnswer: currentMultipleChoiceQuestions[i].correctAnswer
+    });
+  }
+  
+  const score = Math.round((correctCount / currentMultipleChoiceQuestions.length) * 100);
+  
+  // Ustaw stany interfejsu
+  setTestScore(score);
+  setAnswerFeedback(feedback);
+  setTestSubmitted(true);
+  setTestHasResults(true);
+  
+  // Usuń tymczasowy stan z localStorage
+  clearInProgressTestState(selectedTest.test_id);
+  
+  // Zapisz wyniki w bazie danych
+  saveTestResults(score, feedback);
+};
+
+// Funkcja sprawdzająca odpowiedzi dla testów otwartych
+// Funkcja sprawdzająca odpowiedzi dla testów otwartych
+const handleCheckOpenEndedAnswers = async () => {
+
+  // Sprawdź czy userId jest dostępne
+  if (!userId) {
+    console.warn("User ID not available. Cannot check answers.");
+    return;
+  }
+  
+  // Sprawdzenie, czy wszystkie odpowiedzi zostały wprowadzone
+  const unansweredQuestions = userAnswers.filter(answer => !answer.trim()).length;
+  
+  if (unansweredQuestions > 0) {
+    toast({
+      title: "Uzupełnij wszystkie odpowiedzi",
+      description: `Nie odpowiedziano na ${unansweredQuestions} ${
+        unansweredQuestions === 1 ? 'pytanie' : unansweredQuestions < 5 ? 'pytania' : 'pytań'
+      }.`,
+      variant: "warning",
+    });
+    return;
+  }
+  
+  // Włącz stan ładowania
+  setIsCheckingAnswers(true);
+  
+  try {
+    // Pokaż toast informujący o sprawdzaniu odpowiedzi
+    toast({
+      title: "Sprawdzanie odpowiedzi",
+      description: "Trwa analizowanie odpowiedzi przez AI. Może to potrwać do 30 sekund.",
+    });
+    
+    const response = await fetch('/api/tests/check-answers', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        testId: selectedTest.test_id,
+        userId,
+        questions: currentOpenEndedQuestions,
+        answers: userAnswers
+      }),
+    });
+    
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Nie udało się sprawdzić odpowiedzi');
+    }
+    
+    const result = await response.json();
+    
+    // Ustawienie oceny i informacji zwrotnej
+    setAnswerFeedback(result.feedback);
+    setTestScore(result.score);
+    setTestSubmitted(true);
+    setTestHasResults(true);
+    
+    // Usuń tymczasowy stan z localStorage
+    clearInProgressTestState(selectedTest.test_id);
+    
+    // Zapisz wyniki w bazie danych
+    saveTestResults(result.score, result.feedback);
+    
+    // Pokaż toast z wynikiem
+    toast({
+      title: "Sprawdzanie zakończone",
+      description: `Twój wynik: ${result.score}%. ${
+        result.score >= 70 
+          ? 'Dobra robota!' 
+          : 'Przejrzyj informację zwrotną, aby dowiedzieć się więcej.'
+      }`,
+      variant: result.score >= 70 ? "default" : "warning",
+    });
+  } catch (error) {
+    console.error("Błąd sprawdzania odpowiedzi:", error);
+    toast({
+      title: "Błąd sprawdzania odpowiedzi",
+      description: error instanceof Error ? error.message : "Wystąpił problem ze sprawdzaniem odpowiedzi.",
+      variant: "destructive",
+    });
+  } finally {
+    // Zawsze wyłącz stan ładowania po zakończeniu
+    setIsCheckingAnswers(false);
+  }
+};
+// Funkcja zapisująca wyniki testu
+const saveTestResults = async (score, feedback = null) => {
+  try {
+    // Sprawdź czy userId jest dostępne
+    if (!userId) {
+      console.warn("User ID not available. Cannot save test results.");
+      return;
+    }
+    
+    // Przygotowanie odpowiedzi do zapisu
+    let answers;
+    
+    if (selectedTest.question_type === 'multiple_choice') {
+      answers = currentMultipleChoiceQuestions.map((question, index) => ({
+        question_id: index,
+        user_answer: userAnswers[index],
+        is_correct: userAnswers[index] === question.correctAnswer,
+        points: userAnswers[index] === question.correctAnswer ? 1 : 0
+      }));
+    } else {
+      // Dla pytań otwartych wykorzystujemy informację zwrotną
+      answers = feedback.map((fb, index) => ({
+        question_id: index,
+        user_answer: userAnswers[index],
+        is_correct: fb ? fb.isCorrect : false,
+        points: fb && fb.isCorrect ? 1 : 0
+      }));
+    }
+    
+    // Wywołanie API do zapisu wyników
+    const response = await fetch('/api/tests/save-results', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        testId: selectedTest.test_id,
+        userId, // Przekazanie userId w ciele zapytania
+        score,
+        answers
+      }),
+    });
+    
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Nie udało się zapisać wyników testu');
+    }
+    
+    const result = await response.json();
+    console.log("Wyniki testu zostały zapisane:", result);
+    
+  } catch (error) {
+    console.error("Błąd zapisywania wyników testu:", error);
+    toast({
+      title: "Błąd zapisywania wyników",
+      description: "Nie udało się zapisać wyników testu w bazie danych.",
+      variant: "destructive",
+    });
+  }
+};
+// Funkcja kończąca test
+const handleFinishTest = () => {
+  setTakingTest(false);
+  setIsStartingTest(false);
+  
+  // Pokazanie komunikatu o wyniku
+  toast({
+    title: "Test zakończony",
+    description: `Twój wynik: ${testScore}%.`,
+    variant: testScore >= 70 ? "default" : "warning",
+  });
+};
+
+// Funkcja obsługująca sprawdzanie odpowiedzi (uniwersalna)
+const handleSubmitTest = () => {
+  if (selectedTest.question_type === 'multiple_choice') {
+    handleSubmitMultipleChoiceTest();
+  } else {
+    handleCheckOpenEndedAnswers();
+  }
+};
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // NOTE CREATION WILL BE IMPLEMENTED HERE ///////////////////////////////////////////////////////////////////////////
 
@@ -996,6 +1625,104 @@ const cancelSectionChanges = () => {
       retry();
     }
   };
+  const handleRestartTest = () => {
+    // Resetowanie stanów testu
+    setUserAnswers([]);
+    setAnswerFeedback([]);
+    setTestSubmitted(false);
+    setTestScore(0);
+    setTestHasResults(false);
+    setTestInProgress(false);
+    
+    // Usuń tymczasowy stan z localStorage
+    clearInProgressTestState(selectedTest.test_id);
+    
+    // Rozpoczęcie testu od nowa
+    startTest();
+  };
+// Funkcja do podglądu wyników testu
+const handleViewTestResults = async () => {
+  if (!userId || !selectedTest) {
+    console.warn('User ID not available or no selected test');
+    return;
+  }
+  
+  try {
+    // Pobierz wyniki z bazy danych
+    const response = await fetch(`/api/tests/results?testId=${selectedTest.test_id}&userId=${userId}`);
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const results = await response.json();
+    
+    if (results.exists) {
+      try {
+        // Wczytaj pytania z testu
+        const content = JSON.parse(selectedTest.content);
+        if (content.questions && content.questions.length > 0) {
+          if (selectedTest.question_type === 'multiple_choice') {
+            setCurrentMultipleChoiceQuestions(content.questions);
+            setCurrentOpenEndedQuestions([]);
+          } else if (selectedTest.question_type === 'open_ended') {
+            setCurrentOpenEndedQuestions(content.questions);
+            setCurrentMultipleChoiceQuestions([]);
+          }
+          
+          // Przetwórz odpowiedzi z bazy danych
+          const userAnswersArray = new Array(content.questions.length).fill('');
+          results.answers.forEach(answer => {
+            if (answer.question_id >= 0 && answer.question_id < userAnswersArray.length) {
+              userAnswersArray[answer.question_id] = answer.user_answer;
+            }
+          });
+          
+          // Inicjalizuj stan rozwijania - domyślnie wszystkie pytania zwinięte
+          setExpandedQuestions(new Array(content.questions.length).fill(false));
+          
+          // Ustaw stany do wyświetlenia wyników
+          setUserAnswers(userAnswersArray);
+          setAnswerFeedback(results.feedback || []);
+          setTestScore(results.score);
+          setTestSubmitted(true);
+          setTestHasResults(true);
+          
+          // KLUCZOWA ZMIANA: Ustaw takingTest i otwórz dialog
+          setTakingTest(true);
+          setIsStartingTest(true);
+          
+          toast({
+            title: "Podgląd wyników",
+            description: `Twój wynik: ${results.score}%`,
+          });
+        } else {
+          throw new Error('Nie znaleziono pytań w teście');
+        }
+      } catch (error) {
+        console.error("Błąd przetwarzania zawartości testu:", error);
+        toast({
+          title: "Błąd",
+          description: "Nie udało się wczytać wyników testu.",
+          variant: "destructive",
+        });
+      }
+    } else {
+      toast({
+        title: "Brak wyników",
+        description: "Nie znaleziono zapisanych wyników dla tego testu.",
+        variant: "destructive",
+      });
+    }
+  } catch (error) {
+    console.error("Błąd pobierania wyników testu:", error);
+    toast({
+      title: "Błąd",
+      description: "Nie udało się pobrać wyników testu.",
+      variant: "destructive",
+    });
+  }
+};
 
   // Track text selection - improved to work with iframe/embed/object elements
   useEffect(() => {
@@ -1685,11 +2412,602 @@ const cancelSectionChanges = () => {
   </div>
 </TabsContent>
             
-            <TabsContent value="tests" className="p-4">
-              <p className="text-muted-foreground text-center py-8">
-                {t('noTestsYet') || 'No tests yet. Select text to create a test.'}
+<TabsContent value="tests" className="p-4 h-full overflow-y-auto">
+  <div className="flex flex-col gap-4 h-full">
+    {/* Generator testów */}
+    <div className="flex justify-between items-center">
+      <h3 className="text-sm font-medium">Testy dla: {fileName}</h3>
+      <Button 
+        variant="outline" 
+        size="sm" 
+        className="flex items-center gap-2"
+        onClick={() => setIsTestGenerationDialogOpen(true)}
+        disabled={isGeneratingTest || !noteGenerated}
+      >
+        <GraduationCap className="h-4 w-4" />
+        {isGeneratingTest ? 'Generowanie...' : 'Utwórz test'}
+      </Button>
+    </div>
+    
+   {/* Lista testów */}
+   <div className="space-y-3 flex-1 overflow-y-auto">
+  {tests.length > 0 ? (
+    tests.map((test) => {
+      // Sprawdź tymczasowy stan testu w localStorage
+      const inProgressState = loadInProgressTestState(test.test_id);
+      const isInProgress = inProgressState && inProgressState.userAnswers.some(answer => answer);
+      
+      // Sprawdź czy to aktualnie wybrany test
+      const isSelected = selectedTest?.test_id === test.test_id;
+      
+      return (
+        <div 
+          key={test.test_id} 
+          className={`border rounded-md overflow-hidden transition-all duration-200 ${
+            darkMode ? 'border-slate-700' : 'border-gray-200'
+          }`}
+        >
+          {/* Nagłówek karty testu - zawsze widoczny */}
+          <div 
+            className={`p-3 cursor-pointer ${
+              darkMode ? 'hover:bg-slate-800 border-slate-700' : 'hover:bg-gray-50 border-gray-200'
+            } ${isSelected ? (darkMode ? 'bg-slate-800' : 'bg-gray-50') : ''}`}
+            onClick={() => handleToggleTest(test)}
+          >
+            <div className="flex justify-between items-center">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-medium">{test.test_name}</h4>
+                  
+                  {testHasResults && isSelected && (
+                    <Badge variant="success" className="text-xs">
+                      Wynik: {testScore}%
+                    </Badge>
+                  )}
+                  
+                  {isInProgress && !testHasResults && (
+                    <Badge variant="outline" className="text-xs">
+                      Rozpoczęty
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {new Date(test.created_at).toLocaleDateString()} · {getTestQuestionCount(test)} pytań
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Badge variant={test.question_type === 'open_ended' ? 'outline' : 'secondary'}>
+                  {test.question_type === 'open_ended' ? 'Otwarte' : 'Zamknięte'}
+                </Badge>
+                <ChevronDown 
+                  className={`h-5 w-5 transition-transform ${isSelected ? 'transform rotate-180' : ''}`} 
+                />
+              </div>
+            </div>
+          </div>
+          
+          {/* Rozwijane szczegóły testu - widoczne tylko po kliknięciu */}
+          {isSelected && (
+            <div className="p-3 border-t">
+              <div className="mb-4">
+                <p className="text-sm mb-3">
+                  Ten test zawiera {getTestQuestionCount(test)} pytań {test.question_type === 'open_ended' ? 'otwartych' : 'jednokrotnego wyboru'} dotyczących treści dokumentu.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  <Badge variant="outline" className="text-xs">
+                    {test.question_type === 'open_ended' ? 'Pytania otwarte' : 'Pytania zamknięte'}
+                  </Badge>
+                  <Badge variant={test.save_score ? 'default' : 'secondary'} className="text-xs">
+                    {test.save_score ? 'Zapisywanie wyników' : 'Tryb ćwiczeniowy'}
+                  </Badge>
+                </div>
+                
+                {/* Informacja o statusie testu */}
+                {testHasResults && (
+                  <div className="mt-3 p-3 border rounded-md bg-blue-50 dark:bg-blue-900/20">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="font-medium">Ten test został już rozwiązany.</p>
+                      <Badge variant="success">Wynik: {testScore}%</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Możesz przejrzeć swoje odpowiedzi i wyniki lub rozwiązać test ponownie.
+                    </p>
+                  </div>
+                )}
+                
+                {isInProgress && !testHasResults && (
+                  <div className="mt-3 p-3 border rounded-md bg-amber-50 dark:bg-amber-900/20">
+                    <p className="font-medium">Ten test został rozpoczęty.</p>
+                    <p className="text-sm text-muted-foreground">
+                      Możesz kontynuować rozwiązywanie testu od miejsca, w którym przerwałeś.
+                    </p>
+                  </div>
+                )}
+              </div>
+              
+{/* Przyciski akcji */}
+<div className="flex justify-end mt-4 w-full">
+  {testHasResults ? (
+    <div className="flex flex-wrap sm:flex-nowrap gap-2 w-full justify-end">
+      <Button 
+        variant="outline" 
+        size="sm" 
+        onClick={handleViewTestResults}
+        className="h-8 text-xs sm:text-sm min-w-0 flex-shrink"
+      >
+        <FileText className="h-4 w-4 mr-1 flex-shrink-0" />
+        <span className="truncate">Podgląd wyników</span>
+      </Button>
+      <Button 
+        variant="outline" 
+        size="sm" 
+        onClick={handleRestartTest}
+        className="h-8 text-xs sm:text-sm min-w-0 flex-shrink"
+      >
+        <RefreshCw className="h-4 w-4 mr-1 flex-shrink-0" />
+        <span className="truncate">Rozwiąż ponownie</span>
+      </Button>
+    </div>
+  ) : isInProgress ? (
+    <Button 
+      size="sm" 
+      onClick={() => {
+        startTest();
+        setIsStartingTest(true);
+      }}
+      className="h-8"
+    >
+      <BookOpen className="h-4 w-4 mr-1" />
+      Kontynuuj test
+    </Button>
+  ) : (
+    <Button 
+      size="sm" 
+      onClick={() => {
+        startTest();
+        setIsStartingTest(true);
+      }}
+      className="h-8"
+    >
+      <GraduationCap className="h-4 w-4 mr-1" />
+      Rozpocznij test
+    </Button>
+  )}
+</div>
+            </div>
+          )}
+        </div>
+      );
+    })
+  ) : (
+    <div className="flex-1 flex flex-col items-center justify-center text-center py-8">
+      <GraduationCap className="h-10 w-10 text-muted-foreground mb-2" />
+      <p className="text-muted-foreground">
+        {isGeneratingTest 
+          ? 'Generowanie testu...'
+          : noteGenerated 
+            ? 'Nie masz jeszcze testów. Kliknij "Utwórz test" aby wygenerować pierwszy test.'
+            : 'Aby wygenerować test, najpierw utwórz lub wczytaj notatkę dla tego dokumentu.'}
+      </p>
+    </div>
+  )}
+</div>
+    
+
+  </div>
+  
+  {/* Dialog generowania testu */}
+  {/* Dialog generowania testu */}
+<Dialog open={isTestGenerationDialogOpen} onOpenChange={setIsTestGenerationDialogOpen}>
+  <DialogContent className="sm:max-w-[500px]">
+    <DialogHeader>
+      <DialogTitle>Utwórz nowy test</DialogTitle>
+      <DialogDescription>
+        Skonfiguruj parametry testu, który zostanie wygenerowany na podstawie treści dokumentu i notatek.
+      </DialogDescription>
+    </DialogHeader>
+    
+    <div className="space-y-4 py-4">
+      <div className="space-y-2">
+        <Label htmlFor="test-name">Nazwa testu</Label>
+        <Input 
+          id="test-name" 
+          value={testConfig.name} 
+          onChange={(e) => setTestConfig({...testConfig, name: e.target.value})}
+          placeholder="np. Test z rozdziału 3"
+        />
+      </div>
+      
+      <div className="space-y-2">
+        <Label>Typ pytań</Label>
+        <div className="flex gap-4">
+          <div className="flex items-center gap-2">
+            <RadioGroup 
+              value={testConfig.questionType} 
+              onValueChange={(value) => setTestConfig({...testConfig, questionType: value})}
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="multiple_choice" id="multiple_choice" />
+                <Label htmlFor="multiple_choice">Pytania zamknięte</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="open_ended" id="open_ended" />
+                <Label htmlFor="open_ended">Pytania otwarte</Label>
+              </div>
+            </RadioGroup>
+          </div>
+        </div>
+      </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="question-count">Liczba pytań</Label>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-muted-foreground w-6">{testConfig.questionCount}</span>
+          <Slider 
+            id="question-count"
+            value={[testConfig.questionCount]} 
+            min={3} 
+            max={10}
+            step={1}
+            onValueChange={(value) => setTestConfig({...testConfig, questionCount: value[0]})}
+            className="flex-1"
+          />
+        </div>
+      </div>
+      
+      {/* Opcje dostępne tylko dla pytań zamkniętych */}
+      {testConfig.questionType === 'multiple_choice' && (
+        <div className="space-y-2">
+          <Label htmlFor="options-count">Liczba opcji odpowiedzi</Label>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-muted-foreground w-6">{testConfig.optionsCount}</span>
+            <Slider 
+              id="options-count"
+              value={[testConfig.optionsCount]} 
+              min={2} 
+              max={5}
+              step={1}
+              onValueChange={(value) => setTestConfig({...testConfig, optionsCount: value[0]})}
+              className="flex-1"
+            />
+          </div>
+        </div>
+      )}
+      
+      <div className="space-y-2">
+        <Label htmlFor="difficulty">Poziom trudności</Label>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-muted-foreground w-16">
+            {testConfig.difficulty === 1 ? 'Łatwy' : 
+             testConfig.difficulty === 2 ? 'Średni' : 'Trudny'}
+          </span>
+          <Slider 
+            id="difficulty"
+            value={[testConfig.difficulty]} 
+            min={1} 
+            max={3}
+            step={1}
+            onValueChange={(value) => setTestConfig({...testConfig, difficulty: value[0]})}
+            className="flex-1"
+          />
+        </div>
+      </div>
+      
+      <div className="flex items-center space-x-2 pt-2">
+        <Checkbox 
+          id="save-score" 
+          checked={testConfig.saveScore}
+          onCheckedChange={(checked) => setTestConfig({...testConfig, saveScore: !!checked})}
+        />
+        <Label htmlFor="save-score">Zapisuj wyniki do historii</Label>
+      </div>
+    </div>
+    
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setIsTestGenerationDialogOpen(false)}>Anuluj</Button>
+      <Button 
+        onClick={generateTest} 
+        disabled={!testConfig.name || isGeneratingTest}
+      >
+        {isGeneratingTest ? (
+          <>
+            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            Generowanie...
+          </>
+        ) : 'Utwórz test'}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+  <Dialog open={isStartingTest} onOpenChange={setIsStartingTest}>
+  <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
+    <DialogHeader>
+      <DialogTitle className="flex items-center justify-between">
+        <span>{selectedTest?.test_name}</span>
+        {takingTest && testSubmitted && (
+          <Badge variant={testScore >= 70 ? 'success' : testScore >= 50 ? 'warning' : 'destructive'} className="ml-2">
+            {testScore}%
+          </Badge>
+        )}
+      </DialogTitle>
+      <DialogDescription>
+        {takingTest ? 
+          `Test ${testSubmitted ? 'ukończony' : 'w trakcie'} - ${selectedTest?.question_type === 'open_ended' ? 'pytania otwarte' : 'pytania jednokrotnego wyboru'}` : 
+          `Przygotuj się do odpowiedzi na ${selectedTest?.question_type === 'open_ended' ? 'pytania otwarte' : 'pytania jednokrotnego wyboru'}. Możesz korzystać z dokumentu podczas testu.`
+        }
+      </DialogDescription>
+    </DialogHeader>
+    
+    {takingTest ? (
+      <div className="space-y-6 py-4 flex-1 overflow-y-auto pr-1">
+        {/* Renderowanie pytań zamkniętych */}
+        {selectedTest?.question_type === 'multiple_choice' && currentMultipleChoiceQuestions.map((question, index) => (
+          <div key={index} className="mb-6 border rounded-md overflow-hidden">
+            <div 
+              className={`p-3 border-b cursor-pointer flex justify-between items-center ${
+                darkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'
+              }`}
+              onClick={() => toggleQuestionExpand(index)}
+            >
+              <div className="flex items-center">
+                <span className="font-medium mr-2">{index + 1}.</span>
+                <span className="font-medium truncate">{question.question.length > 50 ? `${question.question.substring(0, 50)}...` : question.question}</span>
+              </div>
+              <div className="flex items-center">
+                {testSubmitted && (
+                  <Badge variant={userAnswers[index] === question.correctAnswer ? 'success' : 'destructive'} className="mr-2">
+                    {userAnswers[index] === question.correctAnswer ? 'Poprawna' : 'Błędna'}
+                  </Badge>
+                )}
+                <ChevronDown className={`h-5 w-5 transition-transform ${expandedQuestions[index] ? 'transform rotate-180' : ''}`} />
+              </div>
+            </div>
+            
+            {expandedQuestions[index] && (
+              <div className="p-3">
+                <div className="mb-3">
+                  <p className="font-medium">{question.question}</p>
+                  {question.context && (
+                    <p className="text-sm text-muted-foreground mt-1 mb-2 italic">
+                      Kontekst: {question.context}
+                    </p>
+                  )}
+                </div>
+                
+                <div className="pl-0">
+                  <RadioGroup 
+                    value={userAnswers[index] || ''}
+                    onValueChange={(value) => handleAnswerChange(index, value)}
+                    disabled={testSubmitted}
+                  >
+                    {question.options.map((option, optionIndex) => (
+                      <div key={optionIndex} className={`flex items-center space-x-2 p-2 rounded-md ${
+                        testSubmitted && option === question.correctAnswer 
+                          ? 'bg-green-50 dark:bg-green-900/20' 
+                          : testSubmitted && userAnswers[index] === option && option !== question.correctAnswer
+                            ? 'bg-red-50 dark:bg-red-900/20'
+                            : ''
+                      }`}>
+                        <RadioGroupItem 
+                          value={option} 
+                          id={`q${index}-option-${optionIndex}`} 
+                        />
+                        <Label htmlFor={`q${index}-option-${optionIndex}`} className="flex-1">
+                          {option}
+                        </Label>
+                        {testSubmitted && option === question.correctAnswer && (
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                        )}
+                        {testSubmitted && userAnswers[index] === option && option !== question.correctAnswer && (
+                          <XCircle className="h-4 w-4 text-red-500" />
+                        )}
+                      </div>
+                    ))}
+                  </RadioGroup>
+                  
+                  {testSubmitted && question.explanation && (
+                    <div className="mt-2 p-2 rounded-md text-sm bg-blue-50 dark:bg-blue-900/20">
+                      <p className="font-medium">Wyjaśnienie:</p>
+                      <p>{question.explanation}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        
+        {/* Renderowanie pytań otwartych */}
+        {selectedTest?.question_type === 'open_ended' && currentOpenEndedQuestions.map((question, index) => (
+          <div key={index} className="mb-6 border rounded-md overflow-hidden">
+            <div 
+              className={`p-3 border-b cursor-pointer flex justify-between items-center ${
+                darkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'
+              }`}
+              onClick={() => toggleQuestionExpand(index)}
+            >
+              <div className="flex items-center">
+                <span className="font-medium mr-2">{index + 1}.</span>
+                <span className="font-medium truncate">{question.question.length > 50 ? `${question.question.substring(0, 50)}...` : question.question}</span>
+              </div>
+              <div className="flex items-center">
+                {testSubmitted && answerFeedback[index] && (
+                  <Badge variant={answerFeedback[index].isCorrect ? 'success' : 'warning'} className="mr-2">
+                    {answerFeedback[index].isCorrect ? 'Poprawna' : 'Niepełna'}
+                  </Badge>
+                )}
+                <ChevronDown className={`h-5 w-5 transition-transform ${expandedQuestions[index] ? 'transform rotate-180' : ''}`} />
+              </div>
+            </div>
+            
+            {expandedQuestions[index] && (
+              <div className="p-3">
+                <div className="mb-3">
+                  <p className="font-medium">{question.question}</p>
+                  {question.context && (
+                    <p className="text-sm text-muted-foreground mt-1 mb-2 italic">
+                      Kontekst: {question.context}
+                    </p>
+                  )}
+                </div>
+                
+                <Textarea
+                  placeholder="Twoja odpowiedź..."
+                  value={userAnswers[index] || ''}
+                  onChange={(e) => handleAnswerChange(index, e.target.value)}
+                  rows={4}
+                  className="w-full"
+                  disabled={testSubmitted}
+                />
+                
+                {testSubmitted && answerFeedback[index] && (
+                  <div className={`p-2 mt-2 rounded-md text-sm ${
+                    answerFeedback[index].isCorrect
+                      ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300'
+                      : 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
+                  }`}>
+                    <p className="font-medium mb-1">
+                      {answerFeedback[index].isCorrect ? 'Dobra robota!' : 'Odpowiedź niepełna'}
+                    </p>
+                    <p>{answerFeedback[index].feedback}</p>
+                    
+                    {!answerFeedback[index].isCorrect && answerFeedback[index].correctAnswer && (
+                      <div className="mt-2 pt-2 border-t border-amber-200 dark:border-amber-700">
+                        <p className="font-medium">Przykładowa poprawna odpowiedź:</p>
+                        <p>{answerFeedback[index].correctAnswer}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div className="py-4 overflow-y-auto">
+        <p className="mb-4">Ten test zawiera {getTestQuestionCount(selectedTest)} pytań {selectedTest?.question_type === 'open_ended' ? 'otwartych' : 'jednokrotnego wyboru'}.</p>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span>Typ testu:</span>
+            <Badge variant="outline">
+              {selectedTest?.question_type === 'open_ended' ? 'Pytania otwarte' : 'Pytania zamknięte'}
+            </Badge>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Czas:</span>
+            <span>Nieograniczony</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Zapisywanie wyników:</span>
+            <Badge variant={selectedTest?.save_score ? 'default' : 'secondary'}>
+              {selectedTest?.save_score ? 'Tak' : 'Nie'}
+            </Badge>
+          </div>
+          
+          {/* Informacja o statusie testu */}
+          {testHasResults && (
+            <div className="mt-4 p-3 border rounded-md bg-blue-50 dark:bg-blue-900/20">
+              <div className="flex items-center justify-between mb-2">
+                <p className="font-medium">Ten test został już rozwiązany.</p>
+                <Badge variant="success">Wynik: {testScore}%</Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Możesz przejrzeć swoje odpowiedzi i wyniki lub rozwiązać test ponownie.
               </p>
-            </TabsContent>
+            </div>
+          )}
+          
+          {testInProgress && !testHasResults && (
+            <div className="mt-4 p-3 border rounded-md bg-amber-50 dark:bg-amber-900/20">
+              <p className="font-medium">Ten test został rozpoczęty.</p>
+              <p className="text-sm text-muted-foreground">
+                Możesz kontynuować rozwiązywanie testu od miejsca, w którym przerwałeś.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+    
+    <DialogFooter className="mt-4 pt-4 border-t flex-wrap gap-2">
+      {takingTest ? (
+        !testSubmitted ? (
+          <>
+            <Button variant="outline" onClick={() => {
+              // Zapisz stan i zamknij dialog
+              saveInProgressTestState(selectedTest.test_id, userAnswers);
+              setTakingTest(false);
+            }}>
+              Zapisz i wróć później
+            </Button>
+            <Button 
+  onClick={() => {
+    console.log("Button clicked", selectedTest?.question_type);
+    if (selectedTest?.question_type === 'multiple_choice') {
+      handleSubmitMultipleChoiceTest();
+    } else {
+      handleCheckOpenEndedAnswers();
+    }
+  }}
+  disabled={isCheckingAnswers}
+>
+  {selectedTest?.question_type === 'open_ended' && isCheckingAnswers ? (
+    <>
+      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+      Sprawdzanie...
+    </>
+  ) : (
+    'Sprawdź odpowiedzi'
+  )}
+</Button>
+          </>
+        ) : (
+          <div className="flex w-full justify-between">
+            <Button variant="outline" onClick={() => setTakingTest(false)}>
+              Zamknij podgląd
+            </Button>
+            <Button onClick={handleRestartTest}>
+              Rozwiąż ponownie
+            </Button>
+          </div>
+        )
+      ) : (
+        <>
+          <div className="flex w-full justify-between">
+            <Button variant="outline" onClick={() => setIsStartingTest(false)}>
+              Anuluj
+            </Button>
+            
+            {/* Dodatkowe przyciski w zależności od stanu testu */}
+            {testHasResults ? (
+              <div className="flex space-x-2">
+                <Button variant="outline" onClick={handleViewTestResults}>
+                  Podgląd wyników
+                </Button>
+                <Button onClick={handleRestartTest}>
+                  Rozwiąż ponownie
+                </Button>
+              </div>
+            ) : testInProgress ? (
+              <Button onClick={() => startTest()}>
+                Kontynuuj test
+              </Button>
+            ) : (
+              <Button onClick={() => startTest()}>
+                Rozpocznij test
+              </Button>
+            )}
+          </div>
+        </>
+      )}
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
+
+</TabsContent>
             
             <TabsContent value="terms" className="p-4">
               <p className="text-muted-foreground text-center py-8">
