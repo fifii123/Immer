@@ -66,10 +66,10 @@ export async function POST(request: NextRequest) {
     
     // Zapisz test w bazie danych
     const result = await Pool.query(
-      `INSERT INTO tests (project_id, test_name, content, question_type, save_score)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING test_id, test_name, content, created_at, question_type, save_score`,
-      [projectId, testName, testContent, questionType, saveScore]
+      `INSERT INTO tests (project_id, test_name, content, question_type, save_score, file_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING test_id, test_name, content, created_at, question_type, save_score, file_id`,
+      [projectId, testName, testContent, questionType, saveScore, fileId]
     );
     
     return NextResponse.json(result.rows[0]);

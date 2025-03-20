@@ -333,22 +333,69 @@ const fetchTestResults = async (testId) => {
     return { exists: false };
   }
 };
-// Funkcja pobierająca testy
+
+
+
 const fetchTests = async () => {
-  if (!fileId) return;
+  if (!fileId) {
+    console.log("Brak fileId, nie można pobrać testów");
+    return;
+  }
+  
+  console.log(`Pobieranie testów dla fileId: ${fileId} (${typeof fileId})`);
   
   try {
+    // Pobierz wszystkie testy (bez filtrowania po fileId na poziomie API)
     const response = await fetch(`/api/tests?fileId=${fileId}`);
     
     if (response.ok) {
       const data = await response.json();
-      setTests(data);
+      console.log(`Pobrano ${data.length} testów z API`);
+      
+      // Dodaj debugowanie struktury danych
+      if (data.length > 0) {
+        const firstTest = data[0];
+        console.log("Przykładowy test:", {
+          test_id: firstTest.test_id,
+          test_name: firstTest.test_name,
+          file_id: firstTest.file_id,
+          fileId: firstTest.fileId // sprawdź, czy to pole też istnieje
+        });
+      }
+      
+      // Normalizuj dane - zapewnij, że każdy test ma pole fileId dla łatwiejszego filtrowania
+      // To zostanie użyte tylko lokalnie i nie wpłynie na backend
+      const processedTests = data.map(test => {
+        // Jeśli test ma file_id (snake_case), ale nie ma fileId (camelCase)
+        if (test.file_id !== undefined && test.fileId === undefined) {
+          return { ...test, fileId: test.file_id };
+        }
+        // Jeśli test ma fileId (camelCase), ale nie ma file_id (snake_case)
+        else if (test.fileId !== undefined && test.file_id === undefined) {
+          return { ...test, file_id: test.fileId };
+        }
+        // Pozostaw bez zmian
+        return test;
+      });
+      
+      // Filtruj testy, aby pokazywać tylko te związane z bieżącym plikiem
+      // oraz testy bez przypisanego pliku (dla kompatybilności wstecznej)
+      const filteredTests = processedTests.filter(test => {
+        const testFileId = test.file_id !== undefined ? test.file_id : test.fileId;
+        return testFileId == fileId || testFileId === undefined || testFileId === null;
+      });
+      
+      console.log(`Po przetworzeniu pozostało ${filteredTests.length} testów dla fileId=${fileId}`);
+      
+      // Ustaw przetworzone i przefiltrowane testy
+      setTests(filteredTests);
+    } else {
+      console.error(`Błąd pobierania testów: ${response.status}`);
     }
   } catch (error) {
     console.error("Błąd pobierania testów:", error);
   }
 };
-
 // useEffect do pobierania testów po załadowaniu komponentu
 useEffect(() => {
   if (fileId) {
