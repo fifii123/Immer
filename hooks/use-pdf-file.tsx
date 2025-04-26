@@ -65,17 +65,40 @@ export function usePdfFile({ fileId, fileUrl }: UsePdfFileProps): UsePdfFileResu
         
         const data = await response.json();
         
-        // Debug response data (without showing the full signed URL for security)
-        console.log('API response received', { 
-          hasSignedUrl: !!data.signedUrl,
-          signedUrlPrefix: data.signedUrl ? data.signedUrl.substring(0, 30) + '...' : null 
-        });
+        // Log full response for debugging
+        console.log('Full API response:', data);
         
-        if (!data.signedUrl) {
-          throw new Error('No signed URL returned from server');
+        // Check which format the API is returning
+        if (data.signedUrl) {
+          // Original expected format
+          setSignedUrl(data.signedUrl);
+          console.log('Using direct signedUrl from API');
+        } else if (data.hasSignedUrl && data.signedUrlPrefix) {
+          // Format from console logs
+          console.log('Using signedUrlPrefix from API');
+          
+          // Check if the prefix already includes the filename or if we need to append it
+          const prefix = data.signedUrlPrefix.endsWith('/') 
+            ? data.signedUrlPrefix.slice(0, -1) 
+            : data.signedUrlPrefix;
+            
+          // Extract filename from original URL
+          const filename = fileUrl.split('/').pop();
+          
+          // If the prefix already seems to contain the full path, use it directly
+          if (prefix.includes(filename || '')) {
+            setSignedUrl(prefix);
+          } else {
+            // Otherwise construct the URL by appending the filename
+            setSignedUrl(`${prefix}/${filename}`);
+          }
+          
+          console.log('Constructed signed URL:', `${prefix}/${filename}`);
+        } else {
+          // Fallback to original URL if API response isn't in expected format
+          console.warn('Unexpected API response format, using original URL');
+          setSignedUrl(fileUrl);
         }
-        
-        setSignedUrl(data.signedUrl);
       } catch (err) {
         console.error('Error fetching signed URL:', err);
         setError(typeof err === 'object' && err !== null && 'message' in err 
