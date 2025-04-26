@@ -5,8 +5,6 @@ import { Document, Page } from 'react-pdf';
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Download } from "lucide-react";
-// Import the pdfjs from our setup file instead
-
 
 interface PDFViewerProps {
   pdfSource: string | null;
@@ -29,6 +27,9 @@ interface PDFViewerProps {
   fileName: string;
   setSelectedText: (text: string) => void;
   setShowTools: (show: boolean) => void;
+  // Section-specific props
+  sectionStartPage?: number;
+  sectionEndPage?: number;
 }
 
 export default function PDFViewer({
@@ -51,7 +52,9 @@ export default function PDFViewer({
   downloadUrl,
   fileName,
   setSelectedText,
-  setShowTools
+  setShowTools,
+  sectionStartPage = 1,
+  sectionEndPage
 }: PDFViewerProps) {
   // Device pixel ratio for high-DPI displays
   const devicePixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
@@ -63,23 +66,10 @@ export default function PDFViewer({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const embedRef = useRef<HTMLEmbedElement | null>(null);
   const objectRef = useRef<HTMLObjectElement | null>(null);
-  
-  // Dodaj logowanie dla debugowania
-  console.log("PDFViewer rendering with:", { 
-    pdfSource: pdfSource ? `${pdfSource.substring(0, 50)}...` : null,
-    renderMethod, 
-    documentLoading, 
-    loadingProgress,
-    documentError,
-    numPages
-  });
 
   // Reset loading state when PDF source changes
   useEffect(() => {
-    console.log("pdfSource changed:", pdfSource ? `${pdfSource.substring(0, 50)}...` : null);
-    
     if (pdfSource) {
-      console.log("Resetting loading state for new PDF source");
       setDocumentLoading(true);
       setLoadingProgress(0);
       setDocumentError(null);
@@ -211,8 +201,6 @@ export default function PDFViewer({
 
   // Function for page load success
   const onPageLoadSuccess = (page: any) => {
-    console.log(`Page ${page.pageNumber} loaded successfully`);
-    
     // Only adjust layers when using PDF.js
     if (renderMethod === 'pdf.js') {
       setTimeout(() => {
@@ -238,7 +226,6 @@ export default function PDFViewer({
 
   // Function to handle document loading success
   const onDocumentLoadSuccess = ({ numPages: loadedPages }: { numPages: number }) => {
-    console.log(`PDF loaded successfully with ${loadedPages} pages`);
     setNumPages(loadedPages);
     setDocumentLoading(false);
     setDocumentError(null);
@@ -265,29 +252,15 @@ export default function PDFViewer({
     }, 100);
   };
 
-  // Function to handle document loading progress
-  // const onDocumentLoadProgress = ({ loaded, total }: { loaded: number; total: number }) => {
-  //   const progress = Math.round((loaded / total) * 100);
-  //   console.log(`PDF loading progress: ${progress}%`);
-  //   setLoadingProgress(progress);
-  // };
-
   // Function to handle document loading error
   const onDocumentLoadError = (error: Error) => {
     console.error("PDF loading error:", error);
-    console.error("Error details:", {
-      name: error.name,
-      message: error.message,
-      stack: error.stack
-    });
-    
     setDocumentError(`Failed to load PDF: ${error.message}`);
     setDocumentLoading(false);
   };
 
   // Function to handle native renderer load events
   const handleNativeLoad = () => {
-    console.log(`Native ${renderMethod} renderer loaded successfully`);
     setDocumentLoading(false);
     setLoadingProgress(100);
     setDocumentError(null);
@@ -303,7 +276,6 @@ export default function PDFViewer({
   // Function to download the PDF
   const downloadPdf = () => {
     if (downloadUrl) {
-      console.log("Downloading PDF from:", downloadUrl);
       const link = document.createElement('a');
       link.href = downloadUrl;
       link.download = fileName || 'document.pdf';
@@ -313,17 +285,18 @@ export default function PDFViewer({
     }
   };
 
+  // Calculate pages to render based on section
+  const actualEndPage = sectionEndPage || numPages || 0;
+  
   // Function to render PDF based on selected method
   const renderPdf = () => {
     if (!pdfSource) {
-      console.warn("Cannot render PDF: no source URL provided");
       return null;
     }
     
-    console.log(`Rendering PDF using ${renderMethod} method`);
-    
     switch (renderMethod) {
       case 'iframe':
+        // Native renderers can't limit to specific page ranges
         return (
           <div className="w-full h-full flex justify-center">
             <iframe 
@@ -378,12 +351,10 @@ export default function PDFViewer({
         );
       
       default: // 'pdf.js'
-        console.log("Rendering with PDF.js, file:", pdfSource);
         return (
           <Document
             file={pdfSource}
             onLoadSuccess={onDocumentLoadSuccess}
-     //       onLoadProgress={onDocumentLoadProgress}
             onLoadError={onDocumentLoadError}
             loading={
               <div className="flex justify-center p-4">
@@ -402,35 +373,39 @@ export default function PDFViewer({
               rangeChunkSize: 65536,
             }}
           >
+            {/* Only render pages in the current section */}
             {Array.from(
-              new Array(numPages || 0),
-              (_, index) => (
-                <div 
-                  key={`page_${index + 1}`} 
-                  className="mb-8 shadow-lg shadow-gray-300 dark:shadow-slate-700"
-                  ref={(el) => {
-                    if (el) {
-                      pagesRef.current[index + 1] = el;
-                    }
-                  }}
-                >
-                  <Page
-                    key={`page_${index + 1}`}
-                    pageNumber={index + 1}
-                    scale={scale}
-                    renderTextLayer={true}
-                    renderAnnotationLayer={true}
-                    className="bg-white"
-                    onLoadSuccess={onPageLoadSuccess}
-                    devicePixelRatio={devicePixelRatio}
-                    renderForms={true}
-                    renderMode="canvas"
-                    customTextRenderer={({ str }) => {
-                      return str;
+              new Array(actualEndPage - sectionStartPage + 1),
+              (_, index) => {
+                const actualPageNumber = sectionStartPage + index;
+                return (
+                  <div 
+                    key={`page_${actualPageNumber}`} 
+                    className="mb-8 shadow-lg shadow-gray-300 dark:shadow-slate-700"
+                    ref={(el) => {
+                      if (el) {
+                        pagesRef.current[actualPageNumber] = el;
+                      }
                     }}
-                  />
-                </div>
-              )
+                  >
+                    <Page
+                      key={`page_${actualPageNumber}`}
+                      pageNumber={actualPageNumber}
+                      scale={scale}
+                      renderTextLayer={true}
+                      renderAnnotationLayer={true}
+                      className="bg-white"
+                      onLoadSuccess={onPageLoadSuccess}
+                      devicePixelRatio={devicePixelRatio}
+                      renderForms={true}
+                      renderMode="canvas"
+                      customTextRenderer={({ str }) => {
+                        return str;
+                      }}
+                    />
+                  </div>
+                );
+              }
             )}
           </Document>
         );
@@ -507,7 +482,15 @@ export default function PDFViewer({
   return (
     <div className={`flex flex-col items-center ${usingNativeRenderer ? 'h-full w-full' : 'py-8'}`}>
       {pdfSource ? (
-        renderPdf()
+        <div className="relative">
+          {/* Section indicator */}
+          {!usingNativeRenderer && (
+            <div className="absolute top-0 left-0 bg-black bg-opacity-60 text-white px-2 py-1 text-xs z-10 rounded-br">
+              Viewing pages {sectionStartPage}-{actualEndPage}
+            </div>
+          )}
+          {renderPdf()}
+        </div>
       ) : (
         <div className="flex flex-col items-center justify-center h-64 w-full">
           <p className="text-muted-foreground">No PDF source URL provided.</p>

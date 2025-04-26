@@ -11,6 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
 
 interface PDFControlsProps {
   pageNumber: number;
@@ -19,6 +20,9 @@ interface PDFControlsProps {
   scale: number;
   setScale: (scale: number) => void;
   renderMethod: 'pdf.js' | 'iframe' | 'embed' | 'object';
+  // Section-specific props
+  sectionStartPage?: number;
+  sectionEndPage?: number;
 }
 
 export default function PDFControls({
@@ -28,25 +32,30 @@ export default function PDFControls({
   scale,
   setScale,
   renderMethod,
+  sectionStartPage = 1,
+  sectionEndPage
 }: PDFControlsProps) {
   const { darkMode, t } = usePreferences();
   
   // Determine if we're using native browser rendering (vs PDF.js)
   const usingNativeRenderer = renderMethod !== 'pdf.js';
 
+  // Compute the actual end page with a fallback to the total pages
+  const actualEndPage = sectionEndPage || numPages || 0;
+
   // Zoom controls
   const zoomIn = () => setScale(prev => Math.min(prev + 0.2, 3));
   const zoomOut = () => setScale(prev => Math.max(prev - 0.2, 0.5));
   
-  // Page navigation functions
+  // Page navigation functions - constrained to section
   const goToPrevPage = () => {
-    if (pageNumber > 1) {
+    if (pageNumber > sectionStartPage) {
       setPageNumber(pageNumber - 1);
     }
   };
 
   const goToNextPage = () => {
-    if (numPages && pageNumber < numPages) {
+    if (pageNumber < actualEndPage) {
       setPageNumber(pageNumber + 1);
     }
   };
@@ -97,14 +106,21 @@ export default function PDFControls({
               Using {renderMethod} viewer (browser's native controls)
             </span>
           )}
+
+          {/* Section indicator badge */}
+          {!usingNativeRenderer && (
+            <Badge variant="outline" className="ml-2">
+              Section pages: {sectionStartPage}-{actualEndPage}
+            </Badge>
+          )}
         </div>
         
         <div className="flex items-center gap-3">
           {/* Only show page navigation for PDF.js renderer */}
-          {!usingNativeRenderer && numPages && (
+          {!usingNativeRenderer && (
             <>
               <span className="text-sm">
-                {pageNumber} / {numPages || 0}
+                {pageNumber} / {actualEndPage}
               </span>
               
               <div className="flex items-center">
@@ -115,7 +131,7 @@ export default function PDFControls({
                         variant="outline" 
                         size="icon" 
                         onClick={goToPrevPage} 
-                        disabled={pageNumber <= 1}
+                        disabled={pageNumber <= sectionStartPage}
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </Button>
@@ -131,7 +147,7 @@ export default function PDFControls({
                         variant="outline" 
                         size="icon" 
                         onClick={goToNextPage} 
-                        disabled={pageNumber >= (numPages || 0)}
+                        disabled={pageNumber >= actualEndPage}
                       >
                         <ChevronRight className="h-4 w-4" />
                       </Button>

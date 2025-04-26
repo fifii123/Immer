@@ -23,9 +23,19 @@ interface UseNotesProps {
   fileId: number;
   projectId?: number;
   fileName?: string;
+  noteId?: number | null;  // Specific note ID for a section
+  sectionStartPage?: number;  // Start page for the section
+  sectionEndPage?: number;  // End page for the section
 }
 
-export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
+export function useNotes({ 
+  fileId, 
+  projectId, 
+  fileName, 
+  noteId = null,
+  sectionStartPage = 1,
+  sectionEndPage
+}: UseNotesProps) {
   const [note, setNote] = useState<Note>({
     id: null,
     sections: []
@@ -54,33 +64,46 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
   const autoGenerationAttemptedRef = useRef(false);
   const { toast } = useToast();
   const { authFetch } = useUserId();
+  const fetchAttemptedRef = useRef(false);
 
   // Fetch existing note when component mounts
   useEffect(() => {
-    if (fileId) {
-      fetchExistingNote(fileId);
-    }
-  }, [fileId]);
 
-  // Also check localStorage for saved notes
-  useEffect(() => {
-    if (fileId) {
-      const existingNote = localStorage.getItem(`pdf_note_${fileId}`);
-      if (existingNote) {
-        const parsedNote = JSON.parse(existingNote);
-        // Make sure all sections have an expanded property
-        const sections = parsedNote.sections.map((section: NoteSection) => ({
-          ...section,
-          expanded: section.expanded || false
-        }));
-        setNote({
-          id: parsedNote.id,
-          sections: sections
-        });
-        setNoteGenerated(true);
+    if (!fetchAttemptedRef.current) {
+      fetchAttemptedRef.current = true;
+      
+      if (noteId) {
+        fetchNoteById(noteId);
+      } else if (fileId) {
+        fetchExistingNote(fileId);
       }
     }
-  }, [fileId]);
+  }, [fileId, noteId]);
+
+  // Function to fetch a specific note by ID
+  const fetchNoteById = async (id: number) => {
+    try {
+      const response = await fetch(`/api/notes/${id}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setNote({
+          id: data.id,
+          sections: data.sections.map((section: NoteSection) => ({
+            ...section,
+            expanded: section.expanded || false
+          }))
+        });
+        setNoteGenerated(true);
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("Error fetching note by ID:", error);
+      return false;
+    }
+  };
 
   // Function to fetch existing note from the database
   const fetchExistingNote = async (fileId: number) => {
@@ -91,7 +114,10 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
         const data = await response.json();
         setNote({
           id: data.id,
-          sections: data.sections
+          sections: data.sections.map((section: NoteSection) => ({
+            ...section,
+            expanded: section.expanded || false
+          }))
         });
         setNoteGenerated(true);
         return true;
@@ -115,18 +141,18 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
         body: JSON.stringify({
           fileId: fileId,
           projectId: projectId,
-          noteName: `Note for ${fileName}`,
+          noteName: `Notatka dla ${fileName}`,
           sections: noteData.sections
         }),
       });
       
       if (!response.ok) {
-        throw new Error('Failed to save note to database');
+        throw new Error('Nie udało się zapisać notatki w bazie danych');
       }
       
       return await response.json();
     } catch (error) {
-      console.error("Error saving note:", error);
+      console.error("Błąd zapisywania notatki:", error);
       throw error;
     }
   };
@@ -165,29 +191,42 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
     }
   };
 
-  // Function to extract text from PDF
-  const extractPdfText = async (pdfSource: string) => {
-    console.log("exctracting...");
+  // Function to extract text from PDF (specific page range)
+  const extractPdfText = async (pdfSource: string, totalPages: number = 0, sectioned: boolean = false, startPage: number = 1, endPage?: number) => {
     if (!pdfSource) return '';
-    console.log("source ok...");
+    
     try {
       setExtractingText(true);
       setGenerationProgress(5);
       
       // Use pdf.js API to load the document
-      
       const loadingTask = pdfjs.getDocument(pdfSource);
-      console.log("new ok");
       const pdf = await loadingTask.promise;
      
-      // Limit number of pages for efficiency
-      const numPagesToExtract = Math.min(pdf.numPages, 50);
+      // Determine page range to extract
+      const numPagesToExtract = sectioned 
+        ? Math.min(endPage || startPage + 9, pdf.numPages) - startPage + 1 
+        : Math.min(pdf.numPages, 50);
+      
       let extractedText = '';
       
-      // Extract text from all pages
-      for (let i = 1; i <= numPagesToExtract; i++) {
+      // Extract text from specified page range
+      const actualStartPage = sectioned ? startPage : 1;
+      const actualEndPage = sectioned ? Math.min(endPage || (startPage + 9), pdf.numPages) : numPagesToExtract;
+      
+      // Update progress message
+      if (sectioned) {
+        toast({
+          title: "Extracting section text",
+          description: `Processing pages ${actualStartPage}-${actualEndPage}`,
+        });
+      }
+      
+      // Extract text from all pages in the range
+      for (let i = actualStartPage; i <= actualEndPage; i++) {
         // Update progress
-        setGenerationProgress(5 + Math.round((i / numPagesToExtract) * 35));
+        const progressPercentage = 5 + Math.round(((i - actualStartPage) / (actualEndPage - actualStartPage + 1)) * 35);
+        setGenerationProgress(progressPercentage);
         
         // Get page and its text content
         const page = await pdf.getPage(i);
@@ -198,7 +237,7 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
           .map((item: any) => item.str)
           .join(' ');
         
-        extractedText += pageText + '\n\n';
+        extractedText += `[Page ${i}]\n${pageText}\n\n`;
       }
       
       return extractedText;
@@ -211,7 +250,13 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
   };
 
   // Function to generate initial note from PDF
-  const generateInitialNote = async (pdfSource: string, numPages: number) => {
+  const generateInitialNote = async (
+    pdfSource: string, 
+    numPages: number, 
+    sectioned: boolean = false,
+    startPage: number = 1,
+    endPage?: number
+  ) => {
     // Check if note already generated
     if (noteGenerated || isGeneratingNote) return;
     
@@ -219,34 +264,45 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
     setGenerationProgress(0);
     
     try {
-      // First check if note already exists in database
-      const noteExists = await fetchExistingNote(fileId);
+      // First check if note already exists
+      let noteExists = false;
+      
+      if (noteId) {
+        noteExists = await fetchNoteById(noteId);
+      } else {
+        noteExists = await fetchExistingNote(fileId);
+      }
       
       if (noteExists) {
-        console.log("note detected somehow>>>>>>........");
         setIsGeneratingNote(false);
         toast({
           title: "Note loaded",
           description: "Found and loaded existing note from database.",
         });
         return;
-      } else {
-        console.log("no existing note detected, extracting text....");
       }
       
-      // Step 1: Extract text from PDF
-      const extractedText = await extractPdfText(pdfSource);
-      console.log("extracted text: " +  extractedText);
+      // Step 1: Extract text from PDF (specific pages for sections)
+      const extractedText = await extractPdfText(pdfSource, numPages, sectioned, startPage, endPage);
+      
       if (!extractedText || extractedText.trim().length === 0) {
         throw new Error('Failed to extract text from PDF');
       }
       
       // Step 2: Notify user about analysis
       setGenerationProgress(40);
-      toast({
-        title: "Analyzing PDF content",
-        description: "Identifying key topics and sections...",
-      });
+      
+      if (sectioned) {
+        toast({
+          title: "Analyzing section content",
+          description: `Processing content from pages ${startPage}-${endPage || (startPage + 9)}...`,
+        });
+      } else {
+        toast({
+          title: "Analyzing PDF content",
+          description: "Identifying key topics and sections...",
+        });
+      }
       
       // Simulate progress increments for AI analysis
       const progressInterval = setInterval(() => {
@@ -257,7 +313,9 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
       }, 800);
       
       // Step 3: Call API to get generated note
-      const response = await fetch('/api/generate-note', {
+      const endpoint = sectioned ? '/api/generate-section-note' : '/api/generate-note';
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -266,8 +324,13 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
           fileId: fileId,
           fileName: fileName,
           projectId: projectId,
-          totalPages: numPages || 0,
-          pdfContent: extractedText
+          totalPages: numPages,
+          pdfContent: extractedText,
+          // Section-specific data
+          sectionNumber: sectioned ? Math.ceil(startPage / 10) : undefined,
+          startPage: sectioned ? startPage : undefined,
+          endPage: sectioned ? endPage : undefined,
+          noteId: noteId // Pass existing note ID if available
         }),
       });
       
@@ -299,15 +362,9 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
         setIsGeneratingNote(false);
         setNoteGenerated(true);
         
-        // Show notes tab
-        const notesTab = document.querySelector('[data-state="inactive"][value="notes"]');
-        if (notesTab) {
-          (notesTab as HTMLElement).click();
-        }
-        
         toast({
-          title: "Note generated",
-          description: "Your note has been successfully generated and saved to the database.",
+          title: sectioned ? "Section note generated" : "Note generated",
+          description: `Notes have been successfully generated for pages ${startPage}-${endPage || (startPage + 9)}.`,
         });
       }, 500);
     } catch (error) {
@@ -321,6 +378,126 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
       });
     }
   };
+  // Zmodyfikowana funkcja generowania notatek dla sekcji
+// Do użycia w useNotes.ts
+
+/**
+ * Generuje wstępne notatki dla danej sekcji PDF (tylko nagłówki i opisy, bez treści)
+ * @param pdfSource URL do pliku PDF
+ * @param sectionNumber Numer aktualnej sekcji
+ * @param sectionStartPage Pierwsza strona sekcji
+ * @param sectionEndPage Ostatnia strona sekcji
+ */
+const generateSectionOutline  = async (
+  pdfSource: string,
+  sectionNumber: number,
+  sectionStartPage: number,
+  sectionEndPage: number
+) => {
+  setIsGeneratingNote(true);
+  setGenerationProgress(0);
+  
+  try {
+    // Sprawdź, czy notatka już istnieje
+    if (noteId) {
+      const noteExists = await fetchNoteById(noteId);
+      if (noteExists) {
+        setIsGeneratingNote(false);
+        setNoteGenerated(true);
+        return;
+      }
+    }
+    
+    // Step 1: Ekstrakcja tekstu z sekcji PDF
+    const extractedText = await extractPdfText(
+      pdfSource, 
+      sectionEndPage - sectionStartPage + 1, 
+      true, 
+      sectionStartPage, 
+      sectionEndPage
+    );
+    
+    if (!extractedText || extractedText.trim().length === 0) {
+      throw new Error('Nie udało się odczytać tekstu z sekcji PDF');
+    }
+    
+    // Step 2: Informacja o analizie
+    setGenerationProgress(40);
+    toast({
+      title: `Analiza sekcji ${sectionNumber}`,
+      description: `Identyfikowanie kluczowych tematów ze stron ${sectionStartPage}-${sectionEndPage}...`,
+    });
+    
+    // Symulacja postępu
+    const progressInterval = setInterval(() => {
+      setGenerationProgress(prev => {
+        const newProgress = prev + Math.floor(Math.random() * 5);
+        return newProgress < 90 ? newProgress : 90;
+      });
+    }, 800);
+    
+    // Step 3: Wywołanie API tylko do generowania struktury notatki (bez pełnej treści)
+    const response = await fetch('/api/generate-section-outline', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileId,
+        fileName,
+        projectId,
+        sectionNumber,
+        startPage: sectionStartPage,
+        endPage: sectionEndPage,
+        pdfContent: extractedText,
+        outlineOnly: true // Ważny parametr - generuje tylko strukturę bez treści
+      }),
+    });
+    
+    clearInterval(progressInterval);
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Błąd generowania notatki: ${errorData.error || response.statusText}`);
+    }
+    
+    // Step 4: Pobieranie wygenerowanej struktury notatki
+    const generatedNote = await response.json();
+    
+    // Step 5: Zapisanie do bazy danych
+    
+    const savedNote = await saveNoteToDatabase(generatedNote);
+    console.log(savedNote);
+    // Step 6: Aktualizacja stanu
+    setNote({
+      id: savedNote.id,
+      sections: savedNote.sections
+    });
+    
+    // Step 7: Postęp 100%
+    setGenerationProgress(100);
+    
+    // Step 8: Zakończenie
+    setTimeout(() => {
+      setIsGeneratingNote(false);
+      setNoteGenerated(true);
+      
+      toast({
+        title: `Struktura notatki dla sekcji ${sectionNumber} utworzona`,
+        description: "Wygenerowano podstawową strukturę notatki. Użyj narzędzi, aby rozwinąć poszczególne sekcje.",
+      });
+    }, 500);
+  } catch (error) {
+    console.error("Błąd generowania notatki:", error);
+    setIsGeneratingNote(false);
+    
+    toast({
+      title: "Błąd generowania struktury notatki",
+      description: error instanceof Error ? error.message : "Wystąpił problem podczas analizy tej sekcji PDF. Spróbuj ponownie.",
+      variant: "destructive",
+    });
+  }
+};
 
   // Function to add selected text to notes
   const addTextToNotes = async (selectedText: string, pageNumber: number, surroundingContext: string) => {
@@ -336,8 +513,8 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
     // If no note exists yet, generate initial note first
     if (!note.id) {
       toast({
-        title: "Generating main note",
-        description: "We need to generate a basic note first...",
+        title: "Generating section note",
+        description: "We need to generate a basic note for this section first...",
       });
       // Wait for the note to be generated
       if (!note.id) return;
@@ -362,7 +539,10 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
           fileId,
           noteId: note.id,
           surroundingContext,
-          pageNumber
+          pageNumber,
+          // Section-specific data
+          sectionStartPage,
+          sectionEndPage
         }),
       });
       
@@ -380,12 +560,6 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
           variant: "default",
         });
         return;
-      }
-      
-      // Switch to notes tab
-      const notesTab = document.querySelector('[data-state="inactive"][value="notes"]');
-      if (notesTab) {
-        (notesTab as HTMLElement).click();
       }
       
       // Process proposals and set up confirmation UI
@@ -491,7 +665,10 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
         body: JSON.stringify({
           sectionId,
           action: 'expand',
-          currentContent: section.content
+          currentContent: section.content,
+          // Section-specific data
+          sectionStartPage,
+          sectionEndPage
         }),
       });
       
@@ -591,7 +768,10 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
           sectionId: editingSection.id,
           action: 'custom',
           customPrompt,
-          currentContent: section.content
+          currentContent: section.content,
+          // Section-specific data
+          sectionStartPage,
+          sectionEndPage
         }),
       });
       
@@ -756,6 +936,7 @@ export function useNotes({ fileId, projectId, fileName }: UseNotesProps) {
     isAddingNote,
     sectionRefs,
     generateInitialNote,
+    generateSectionOutline,
     addTextToNotes,
     toggleSection,
     expandSection,

@@ -6,9 +6,17 @@ import { usePreferences } from "@/context/preferences-context";
 
 interface NoteGenerationProgressProps {
   progress: number;
+  sectionSpecific?: boolean;
+  sectionNumber?: number;
+  outlineOnly?: boolean; // Czy generujemy tylko strukturę bez treści
 }
 
-export default function NoteGenerationProgress({ progress }: NoteGenerationProgressProps) {
+export default function NoteGenerationProgress({ 
+  progress, 
+  sectionSpecific = false,
+  sectionNumber = 1,
+  outlineOnly = false
+}: NoteGenerationProgressProps) {
   const { darkMode } = usePreferences();
 
   return (
@@ -16,16 +24,28 @@ export default function NoteGenerationProgress({ progress }: NoteGenerationProgr
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-medium">
           {progress < 40 
-            ? "Extracting PDF content" 
-            : "Generating note"}
+            ? (sectionSpecific 
+                ? `Odczytywanie treści z sekcji ${sectionNumber}`
+                : "Odczytywanie treści dokumentu") 
+            : (outlineOnly
+                ? `Tworzenie struktury notatki dla sekcji ${sectionNumber}`
+                : (sectionSpecific
+                    ? `Generowanie notatki dla sekcji ${sectionNumber}`
+                    : "Generowanie notatki"))}
         </h3>
         <span className="text-xs text-muted-foreground">{progress}%</span>
       </div>
       <Progress value={progress} className="w-full h-2" />
       <p className="text-xs text-muted-foreground mt-2">
         {progress < 40 
-          ? "Reading document text for analysis..." 
-          : "Analyzing PDF content and creating thematic sections..."}
+          ? (sectionSpecific
+              ? "Odczytywanie tekstu z tej sekcji..."
+              : "Odczytywanie tekstu dokumentu...") 
+          : (outlineOnly
+              ? "Analizowanie treści sekcji i tworzenie struktury nagłówków..."
+              : (sectionSpecific
+                  ? "Analizowanie treści sekcji i tworzenie szczegółowych notatek..."
+                  : "Analizowanie treści dokumentu i tworzenie notatek..."))}
       </p>
     </div>
   );

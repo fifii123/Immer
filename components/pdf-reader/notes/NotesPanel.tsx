@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { useNotes } from "..//hooks/useNotes";
+import { useNotes } from "../hooks/useNotes";
 import NoteSection from "./NoteSection";
 import NoteGenerationProgress from "./NoteGenerationProgress";
 import { usePdfFile } from "@/hooks/use-pdf-file";
-import pdfjs from "../pdfjs-setup";
+import { FileText, Book, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface NotesPanelProps {
   fileId: number;
@@ -16,6 +18,14 @@ interface NotesPanelProps {
   pagesRef: React.MutableRefObject<{ [pageNumber: number]: HTMLDivElement }>;
   renderMethod: 'pdf.js' | 'iframe' | 'embed' | 'object';
   setShowTools: (show: boolean) => void;
+  // Section-specific props
+  noteId?: number | null;
+  sectionNumber?: number;
+  sectionStartPage?: number;
+  sectionEndPage?: number;
+  isLoading?: boolean;
+  pdfSource?: string | null;
+  outlineOnly?: boolean; // Czy generować tylko strukturę bez treści
 }
 
 export default function NotesPanel({
@@ -26,7 +36,14 @@ export default function NotesPanel({
   pageNumber,
   pagesRef,
   renderMethod,
-  setShowTools
+  setShowTools,
+  noteId,
+  sectionNumber = 1,
+  sectionStartPage = 1,
+  sectionEndPage,
+  isLoading = false,
+  pdfSource,
+  outlineOnly = true
 }: NotesPanelProps) {
   const {
     note,
@@ -39,6 +56,7 @@ export default function NotesPanel({
     isProcessingAction,
     sectionRefs,
     generateInitialNote,
+    generateSectionOutline, // Nowa funkcja do generowania tylko struktury
     addTextToNotes,
     toggleSection,
     expandSection,
@@ -48,42 +66,62 @@ export default function NotesPanel({
     submitCustomPrompt,
     confirmSectionChanges,
     cancelSectionChanges,
-  } = useNotes({ fileId, projectId, fileName });
+  } = useNotes({ 
+    fileId, 
+    projectId, 
+    fileName,
+    noteId, // Przekaż konkretne ID notatki jeśli istnieje
+    sectionStartPage,
+    sectionEndPage,
+    outlineOnly
+  });
 
-  // Get PDF URL for extracting text
-  const { signedUrl } = usePdfFile({ fileId });
-
-  // Add auto-generation effect
+  // Auto-generowanie struktury notatki dla sekcji
   useEffect(() => {
-    // Function to auto-generate notes when PDF is loaded
-    const autoGenerateNotes = async () => {
-      if (signedUrl && !noteGenerated && !isGeneratingNote) {
+    // Automatycznie generuj strukturę notatki, gdy wszystkie warunki są spełnione
+    const autoGenerateSectionOutline = async () => {
+      if (
+        pdfSource && 
+        noteId && 
+        !noteGenerated && 
+        !isGeneratingNote && 
+        !isLoading &&
+        sectionStartPage && 
+        sectionEndPage
+      ) {
         try {
-          // Get total pages from the PDF
-          const loadingTask = pdfjs.getDocument(signedUrl);
-          const pdf = await loadingTask.promise;
-          const numPages = pdf.numPages;
-          
-          // Generate initial note
-          console.log("GENERATING INITIAL NOTE...............");
-          generateInitialNote(signedUrl, numPages);
+          if (outlineOnly) {
+            // Generuj tylko strukturę notatki bez treści
+            await generateSectionOutline(
+              pdfSource, 
+              sectionNumber, 
+              sectionStartPage, 
+              sectionEndPage
+            );
+          } else {
+            // Generuj pełną notatkę (dla kompatybilności wstecznej)
+            await generateInitialNote(
+              pdfSource, 
+              sectionEndPage - sectionStartPage + 1, 
+              true, 
+              sectionStartPage, 
+              sectionEndPage
+            );
+          }
         } catch (error) {
-          console.error("Error in auto-generation:", error);
+          console.error("Błąd auto-generowania notatki dla sekcji:", error);
         }
       }
     };
 
-    // Only run if we have a URL and notes aren't already generated
-    if (signedUrl && !noteGenerated && !isGeneratingNote) {
-      autoGenerateNotes();
-    }
-  }, [signedUrl, noteGenerated, isGeneratingNote, generateInitialNote]);
+    autoGenerateSectionOutline();
+  }, [pdfSource, noteId, noteGenerated, isGeneratingNote, isLoading, sectionStartPage, sectionEndPage, sectionNumber, outlineOnly]);
 
-  // Function to add selected text to notes
+  // Funkcja do dodawania zaznaczonego tekstu do notatek
   const handleAddSelectedText = async () => {
     if (!selectedText) return;
     
-    // Get surrounding context if possible
+    // Pobierz kontekst otaczający zaznaczony tekst
     let surroundingContext = "";
     try {
       if (renderMethod === 'pdf.js' && pagesRef.current[pageNumber]) {
@@ -92,7 +130,7 @@ export default function NotesPanel({
         if (textLayer) {
           surroundingContext = textLayer.textContent || "";
           
-          // Limit context size
+          // Ogranicz rozmiar kontekstu
           if (surroundingContext.length > 1000) {
             const position = surroundingContext.indexOf(selectedText);
             if (position > 0) {
@@ -106,15 +144,15 @@ export default function NotesPanel({
         }
       }
     } catch (error) {
-      console.error("Error getting context:", error);
+      console.error("Błąd pobierania kontekstu:", error);
     }
     
-    // Add text to notes
+    // Dodaj tekst do notatki dla tej sekcji
     await addTextToNotes(selectedText, pageNumber, surroundingContext);
     setShowTools(false);
   };
 
-  // Add the animation style for highlighting
+  // Dodaj animację podświetlania
   const pulseAnimation = `
     @keyframes pulse-highlight {
       0% { background-color: rgba(59, 130, 246, 0); }
@@ -127,21 +165,79 @@ export default function NotesPanel({
     }
   `;
 
+  // Funkcja do regeneracji struktury notatek
+  const handleRegenerateOutline = async () => {
+    if (!pdfSource) return;
+    
+    // Generuj strukturę notatki ponownie
+    if (outlineOnly) {
+      await generateSectionOutline(
+        pdfSource, 
+        sectionNumber, 
+        sectionStartPage, 
+        sectionEndPage || (sectionStartPage + 9)
+      );
+    } else {
+      await generateInitialNote(
+        pdfSource, 
+        sectionEndPage || (sectionStartPage + 9), 
+        true, 
+        sectionStartPage, 
+        sectionEndPage
+      );
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
-      {/* Add animation style */}
+      {/* Dodaj animację podświetlania */}
       <style dangerouslySetInnerHTML={{ __html: pulseAnimation }} />
       
-      {/* Generation progress indicator */}
+      {/* Nagłówek sekcji */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center">
+          <Book className="h-4 w-4 mr-2 text-blue-500" />
+          <h3 className="text-sm font-medium">
+            {sectionNumber ? `Notatki dla sekcji ${sectionNumber}` : 'Notatki'}
+            {sectionStartPage && sectionEndPage && (
+              <Badge variant="outline" className="ml-2 text-xs">
+                Strony {sectionStartPage}-{sectionEndPage}
+              </Badge>
+            )}
+          </h3>
+        </div>
+        
+        {/* Przycisk regeneracji struktury notatek */}
+        {noteGenerated && !isGeneratingNote && (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleRegenerateOutline}
+            className="flex items-center gap-1"
+          >
+            <RefreshCw className="h-3 w-3" />
+            <span className="text-xs">Odśwież</span>
+          </Button>
+        )}
+      </div>
+      
+      {/* Wskaźnik postępu generowania */}
       {isGeneratingNote && (
-        <NoteGenerationProgress progress={generationProgress} />
+        <NoteGenerationProgress 
+          progress={generationProgress} 
+          sectionSpecific={true}
+          sectionNumber={sectionNumber}
+          outlineOnly={outlineOnly}
+        />
       )}
       
-      {/* Generated note with sections */}
+      {/* Wygenerowane sekcje notatek */}
       {!isGeneratingNote && note.id && (
         <>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium">Note for: {fileName}</h3>
+            <h3 className="text-sm font-medium">
+              {fileName ? `Notatki dla: ${fileName}` : 'Notatki sekcji'}
+            </h3>
           </div>
           
           <div className="space-y-4">
@@ -164,30 +260,54 @@ export default function NotesPanel({
                 onSubmitCustomPrompt={submitCustomPrompt}
                 onConfirm={confirmSectionChanges}
                 onCancel={cancelSectionChanges}
+                outlineOnly={outlineOnly} // Przekaż informację o trybie generowania
               />
             ))}
           </div>
+          
+          {/* Informacja o trybie generowania */}
+          {outlineOnly && note.sections.length > 0 && (
+            <div className="mt-4 p-3 bg-gray-50 dark:bg-slate-700 rounded-md text-sm text-muted-foreground">
+              <p>Wygenerowano strukturę notatek bez treści. Użyj przycisków "Poszerz" lub "Formatuj", aby uzupełnić treść wybranych sekcji.</p>
+            </div>
+          )}
         </>
       )}
       
-      {/* Empty state */}
-      {!isGeneratingNote && !note.id && (
+      {/* Pusty stan */}
+      {!isGeneratingNote && !note.id && !isLoading && (
+        <div className="text-center py-8">
+          <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <p className="text-muted-foreground mb-4">
+            Brak notatek dla tej sekcji. Kliknij przycisk "Wygeneruj strukturę notatek" dla stron {sectionStartPage}-{sectionEndPage || (sectionStartPage + 9)}.
+          </p>
+          <Button 
+            onClick={handleRegenerateOutline}
+            disabled={!pdfSource}
+          >
+            Wygeneruj strukturę notatek
+          </Button>
+        </div>
+      )}
+      
+      {/* Stan ładowania */}
+      {isLoading && !note.id && !isGeneratingNote && (
         <div className="text-center py-8">
           <p className="text-muted-foreground">
-            No notes yet. Click the "Add to notes" button in the PDF viewer to generate a note.
+            Ładowanie notatek dla tej sekcji...
           </p>
         </div>
       )}
       
-      {/* Action button for selected text */}
+      {/* Przycisk akcji dla zaznaczonego tekstu */}
       {selectedText && (
         <div className="fixed bottom-4 right-4">
-          <button 
+          <Button 
             className="bg-blue-600 text-white px-4 py-2 rounded-md shadow-lg"
             onClick={handleAddSelectedText}
           >
-            Add to Notes
-          </button>
+            Dodaj do notatek
+          </Button>
         </div>
       )}
     </div>
