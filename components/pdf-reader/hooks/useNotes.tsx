@@ -131,31 +131,41 @@ export function useNotes({
   };
 
   // Function to save note to the database
-  const saveNoteToDatabase = async (noteData: any) => {
-    try {
-      const response = await fetch('/api/notes', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileId: fileId,
-          projectId: projectId,
-          noteName: `Notatka dla ${fileName}`,
-          sections: noteData.sections
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Nie udało się zapisać notatki w bazie danych');
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error("Błąd zapisywania notatki:", error);
-      throw error;
+const saveNoteToDatabase = async (noteData: any) => {
+  try {
+    // Create a note name that includes section information if available
+    const noteName = sectionStartPage && sectionEndPage
+      ? `Section ${Math.ceil(sectionStartPage / 10)} - ${fileName} (Pages ${sectionStartPage}-${sectionEndPage})`
+      : `Notatka dla ${fileName}`;
+    
+    const response = await fetch('/api/notes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileId: fileId,
+        projectId: projectId,
+        noteName: noteName,
+        sections: noteData.sections,
+        // Include section information
+        pdfSectionNumber: sectionStartPage ? Math.ceil(sectionStartPage / 10) : undefined,
+        sectionStartPage: sectionStartPage,
+        sectionEndPage: sectionEndPage
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Failed to save note: ${errorData.error || response.statusText}`);
     }
-  };
+    
+    return await response.json();
+  } catch (error) {
+    console.error("Error saving note:", error);
+    throw error;
+  }
+};
 
   // Function to toggle section expansion
   const toggleSection = async (sectionId: number) => {
@@ -673,7 +683,7 @@ const generateSectionOutline = async (
           action: 'expand',
           currentContent: section.content,
           // // Section-specific data
-          // sectionStartPage,
+          // sectionStartPage
           // sectionEndPage
         }),
       });

@@ -2,116 +2,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 
-// Funkcja pomocnicza do wykonywania zapytań z ponownymi próbami
-async function executeWithRetry<T>(operation: () => Promise<T>, maxRetries = 3): Promise<T> {
-  let lastError;
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      return await operation();
-    } catch (error) {
-        
-      console.error(`Próba ${attempt}/${maxRetries} nie powiodła się:`, error);
-      lastError = error;
-      
-      // Jeśli to nie ostatnia próba, czekaj przed ponowną próbą
-      if (attempt < maxRetries) {
-        // Wykładniczy backoff - czekaj coraz dłużej przy kolejnych próbach
-        await new Promise(resolve => setTimeout(resolve, 500 * Math.pow(2, attempt - 1)));
-      }
-    }
-  }
-  
-  throw lastError;
-}
-
-export async function POST(request: Request) {
-  // Używamy jednego klienta dla całej operacji
-  const client = await pool.connect();
-  
-  try {
-    const { fileId, projectId, noteName, sections } = await request.json();
-    
-    if (!fileId || !projectId || !noteName || !sections) {
-      return NextResponse.json(
-        { error: 'Brakuje wymaganych pól: fileId, projectId, noteName i sections są wymagane' },
-        { status: 400 }
-      );
-    }
-
-    // Rozpocznij transakcję
-    await client.query('BEGIN');
-
-    // Utwórz nową notatkę w bazie danych
-    const noteResult = await executeWithRetry(() => 
-      client.query(
-        `INSERT INTO notes (file_id, project_id, note_name, created_at, updated_at) 
-         VALUES ($1, $2, $3, NOW(), NOW()) 
-         RETURNING note_id`,
-        [fileId, projectId, noteName]
-      )
-    );
-    
-    const noteId = noteResult.rows[0].note_id;
-    
-    // Dodaj sekcje notatki
-    const sectionPromises = sections.map(async (section, index) => {
-      // Sprawdź czy content jest tablicą i przekształć go na string jeśli tak
-      let contentValue = section.content;
-      
-      if (Array.isArray(contentValue)) {
-        contentValue = contentValue.join('\n\n');
-      } else if (typeof contentValue !== 'string' && contentValue !== null) {
-        contentValue = String(contentValue);
-      }
-      
-      const sectionResult = await executeWithRetry(() => 
-        client.query(
-          `INSERT INTO note_section (note_id, title, description, content, order_index, expanded, created_at, updated_at) 
-           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) 
-           RETURNING section_id, title, description, content, expanded, order_index`,
-          [
-            noteId, 
-            section.title, 
-            section.description || '', 
-            contentValue, 
-            index, 
-            Boolean(section.expanded) || false
-          ]
-        )
-      );
-      
-      return sectionResult.rows[0];
-    });
-
-    const sectionsData = await Promise.all(sectionPromises);
-    
-    // Zatwierdź transakcję
-    await client.query('COMMIT');
-
-    return NextResponse.json({
-      id: noteId,
-      sections: sectionsData,
-      success: true,
-    });
-  } catch (error) {
-    // Wycofaj transakcję w przypadku błędu
-    await client.query('ROLLBACK');
-    
-    console.error("Błąd zapisywania notatki:", error);
-    return NextResponse.json(
-      { error: 'Nie udało się zapisać notatki w bazie danych', details: error instanceof Error ? error.message : String(error) },
-      { status: 500 }
-    );
-  } finally {
-    // Zawsze zwolnij klienta
-    client.release();
-  }
-}
-
-// Pobieranie notatki po file_id lub wszystkich notatek dla project_id
-// W api/notes/route.ts - funkcja GET
-
 export async function GET(request: Request) {
   const client = await pool.connect();
   
@@ -121,28 +11,88 @@ export async function GET(request: Request) {
     const projectId = searchParams.get('projectId');
     const sectionNumber = searchParams.get('sectionNumber');
     
-    // Jeśli podano sectionNumber, szukaj notatki dla tej sekcji
+    // Handle section-specific note query
     if (fileId && sectionNumber) {
-      // Pobierz notatkę z określonym numerem sekcji w nazwie
-      const sectionName = `Notatka dla ${fileName} (Sekcja ${sectionNumber})`;
+      const fileIdNum = parseInt(fileId);
+      const sectionNum = parseInt(sectionNumber);
       
+      if (isNaN(fileIdNum) || isNaN(sectionNum)) {
+        return NextResponse.json(
+          { error: 'Invalid fileId or sectionNumber format' },
+          { status: 400 }
+        );
+      }
+      
+      // Try to find a note for this section (based on name pattern or metadata if available)
+      const sectionNoteQuery = `
+        SELECT note_id, note_name FROM notes 
+        WHERE file_id = $1 
+        AND (
+          note_name LIKE $2 
+          OR note_name LIKE $3
+        )
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+      
+      const noteResult = await client.query(sectionNoteQuery, [
+        fileIdNum,
+        `%Section ${sectionNum}%`,
+        `%Sekcja ${sectionNum}%`
+      ]);
+      
+      if (noteResult.rows.length > 0) {
+        const note = noteResult.rows[0];
+        
+        // Fetch sections for this note
+        const sectionsResult = await client.query(
+          `SELECT section_id, title, description, content, expanded, order_index 
+           FROM note_section 
+           WHERE note_id = $1 
+           ORDER BY order_index ASC`,
+          [note.note_id]
+        );
+        
+        const formattedNote = {
+          id: `note_${note.note_id}`,
+          title: note.note_name,
+          sections: sectionsResult.rows.map(section => ({
+            id: section.section_id,
+            title: section.title,
+            description: section.description || '',
+            content: section.content || '',
+            expanded: section.expanded || false
+          }))
+        };
+        
+        return NextResponse.json(formattedNote);
+      } else {
+        // No note found for this section
+        return NextResponse.json(
+          { error: 'No note found for this section' },
+          { status: 404 }
+        );
+      }
+    }
+    
+    // If only fileId is provided - return note for this file
+    else if (fileId) {
+      // Existing code to fetch note by fileId
       const noteResult = await client.query(
-        `SELECT note_id, note_name FROM notes 
-         WHERE file_id = $1 AND note_name LIKE $2
-         LIMIT 1`,
-        [parseInt(fileId), `%${sectionName}%`]
+        `SELECT note_id, note_name FROM notes WHERE file_id = $1 LIMIT 1`,
+        [parseInt(fileId)]
       );
 
       if (noteResult.rows.length === 0) {
         return NextResponse.json(
-          { exists: false, message: 'Nie znaleziono notatki dla podanej sekcji' },
-          { status: 200 }  // Zwracamy 200 OK, nie 404, bo to oczekiwany stan
+          { error: 'No note found for this file' },
+          { status: 404 }
         );
       }
 
       const note = noteResult.rows[0];
       
-      // Pobierz sekcje dla tej notatki
+      // Fetch sections for this note
       const sectionsResult = await client.query(
         `SELECT section_id, title, description, content, expanded, order_index 
          FROM note_section 
@@ -151,11 +101,10 @@ export async function GET(request: Request) {
         [note.note_id]
       );
 
-      // Przekształć dane do formatu używanego przez interfejs
+      // Format the response
       const formattedNote = {
         id: `note_${note.note_id}`,
         title: note.note_name,
-        exists: true,
         sections: sectionsResult.rows.map(section => ({
           id: section.section_id,
           title: section.title,
@@ -168,15 +117,182 @@ export async function GET(request: Request) {
       return NextResponse.json(formattedNote);
     }
     
-    // Oryginalna logika dla pojedynczego pliku lub projektu
-    // ...
+    // Handle project-specific notes query
+    else if (projectId) {
+      // Existing code for fetching all notes for a project
+      const notesQuery = `
+        SELECT note_id, note_name, file_id, project_id
+        FROM notes
+        WHERE project_id = $1
+      `;
+      
+      const notesResult = await client.query(notesQuery, [parseInt(projectId)]);
+      
+      if (notesResult.rows.length === 0) {
+        return NextResponse.json([], { status: 200 }); 
+      }
+      
+      const notesWithSectionsPromises = notesResult.rows.map(async (note) => {
+        // Fetch sections for each note
+        const sectionsQuery = `
+          SELECT section_id, title, description, content, expanded, order_index 
+          FROM note_section 
+          WHERE note_id = $1 
+          ORDER BY order_index ASC
+        `;
+        
+        const sectionsResult = await client.query(sectionsQuery, [note.note_id]);
+        
+        return {
+          id: note.note_id,
+          fileName: `File ID: ${note.file_id}`,
+          fileId: note.file_id,
+          sections: sectionsResult.rows.map(section => ({
+            id: section.section_id,
+            title: section.title,
+            description: section.description || '',
+            content: section.content || '',
+            expanded: section.expanded || false
+          }))
+        };
+      });
+      
+      const allNotes = await Promise.all(notesWithSectionsPromises);
+      
+      return NextResponse.json(allNotes);
+    }
+    else {
+      return NextResponse.json(
+        { error: 'Missing required parameter: fileId, projectId, or both fileId and sectionNumber' },
+        { status: 400 }
+      );
+    }
   } catch (error) {
-    console.error("Błąd pobierania notatki:", error);
+    console.error("Error fetching notes:", error);
     return NextResponse.json(
-      { error: 'Nie udało się pobrać notatki z bazy danych' },
+      { error: 'Failed to fetch notes', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   } finally {
+    client.release();
+  }
+}
+
+// POST method to create a new note
+export async function POST(request: Request) {
+  const client = await pool.connect();
+  
+  try {
+    const { 
+      fileId, 
+      projectId, 
+      noteName, 
+      sections,
+      pdfSectionNumber,  // New field
+      sectionStartPage,  // New field
+      sectionEndPage     // New field
+    } = await request.json();
+    
+    if (!fileId || !noteName || !sections) {
+      return NextResponse.json(
+        { error: 'Missing required fields: fileId, noteName and sections are required' },
+        { status: 400 }
+      );
+    }
+
+    // Begin transaction
+    await client.query('BEGIN');
+
+    // Create new note in database with section information
+    const noteQuery = `
+      INSERT INTO notes (
+        file_id, 
+        project_id, 
+        note_name, 
+        pdf_section_number,
+        section_start_page,
+        section_end_page,
+        created_at, 
+        updated_at
+      ) 
+      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) 
+      RETURNING note_id
+    `;
+    
+    const noteParams = [
+      fileId, 
+      projectId || null, 
+      noteName,
+      pdfSectionNumber || null,
+      sectionStartPage || null,
+      sectionEndPage || null
+    ];
+    
+    const noteResult = await client.query(noteQuery, noteParams);
+    
+    const noteId = noteResult.rows[0].note_id;
+    
+    // Add note sections
+    const sectionPromises = sections.map(async (section, index) => {
+      // Handle different content formats
+      let contentValue = section.content;
+      
+      if (Array.isArray(contentValue)) {
+        contentValue = contentValue.join('\n\n');
+      } else if (typeof contentValue !== 'string' && contentValue !== null) {
+        contentValue = String(contentValue);
+      }
+      
+      const sectionResult = await client.query(
+        `INSERT INTO note_section (
+          note_id, 
+          title, 
+          description, 
+          content, 
+          order_index, 
+          expanded, 
+          created_at, 
+          updated_at
+        ) 
+        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) 
+        RETURNING section_id, title, description, content, expanded, order_index`,
+        [
+          noteId, 
+          section.title, 
+          section.description || '', 
+          contentValue || '', 
+          index, 
+          Boolean(section.expanded) || false
+        ]
+      );
+      
+      return sectionResult.rows[0];
+    });
+
+    const sectionsData = await Promise.all(sectionPromises);
+    
+    // Commit transaction
+    await client.query('COMMIT');
+
+    return NextResponse.json({
+      id: noteId,
+      sections: sectionsData,
+      success: true,
+    });
+  } catch (error) {
+    // Rollback in case of error
+    await client.query('ROLLBACK');
+    
+    console.error("Error saving note:", error);
+    return NextResponse.json(
+      { 
+        error: 'Failed to save note to database', 
+        details: error instanceof Error ? error.message : String(error) 
+      },
+      { status: 500 }
+    );
+  } finally {
+    // Always release the client
     client.release();
   }
 }

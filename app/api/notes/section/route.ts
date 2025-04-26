@@ -2,74 +2,67 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// GET endpoint to check for section-specific notes
 export async function GET(request: Request) {
+  const client = await pool.connect();
+  
   try {
     const { searchParams } = new URL(request.url);
     const fileId = searchParams.get('fileId');
     const sectionNumber = searchParams.get('sectionNumber');
-
-    // Walidacja parametrów
+    
     if (!fileId || !sectionNumber) {
       return NextResponse.json(
-        { error: 'Brakuje parametrów fileId lub sectionNumber' },
+        { error: 'Missing fileId or sectionNumber parameter' },
         { status: 400 }
       );
     }
 
-    const numericFileId = parseInt(fileId, 10);
-    const cleanSectionNumber = sectionNumber.replace(/[^0-9]/g, '');
-
-    let note;
+    // Convert parameters to numbers
+    const fileIdNum = parseInt(fileId);
+    const sectionNumberNum = parseInt(sectionNumber);
     
-    try {
-      // Próba 1: Wyszukaj przez note_metadata (nowy format)
-      note = await prisma.$queryRaw`
-        SELECT 
-          note_id as "note_id", 
-          note_name as "note_name"
-        FROM notes
-        WHERE 
-          file_id = ${numericFileId} AND
-          note_metadata->>'sectionNumber' = ${cleanSectionNumber}
-        LIMIT 1
-      `;
-    } catch (error) {
-      // Jeśli błąd związany z nieistniejącą kolumną, przejdź do metody alternatywnej
-      if (error.code === '42703') {
-        note = await prisma.notes.findFirst({
-          where: {
-            file_id: numericFileId,
-            note_name: {
-              contains: `Sekcja ${cleanSectionNumber}`,
-              mode: 'insensitive'
-            }
-          },
-          select: {
-            note_id: true
-          }
-        });
-      } else {
-        throw error;
-      }
+    if (isNaN(fileIdNum) || isNaN(sectionNumberNum)) {
+      return NextResponse.json(
+        { error: 'Invalid fileId or sectionNumber format' },
+        { status: 400 }
+      );
     }
-
+    
+    // Find note for this specific section using the pdf_section_number field
+    const query = `
+      SELECT note_id, note_name 
+      FROM notes 
+      WHERE file_id = $1 AND pdf_section_number = $2
+      LIMIT 1
+    `;
+    
+    const result = await client.query(query, [fileIdNum, sectionNumberNum]);
+    
+    // If note exists for this section, return its ID
+    if (result.rows.length > 0) {
+      return NextResponse.json({
+        exists: true,
+        noteId: result.rows[0].note_id,
+        noteName: result.rows[0].note_name
+      });
+    }
+    
+    // No note found for this section
     return NextResponse.json({
-      exists: !!note,
-      noteId: note?.note_id || null
+      exists: false,
+      message: 'No note found for this section'
     });
-
   } catch (error) {
-    console.error("Błąd pobierania notatki:", error);
+    console.error("Error fetching section note:", error);
     return NextResponse.json(
-      { 
-        error: 'Nie udało się pobrać notatki dla sekcji',
-        details: error instanceof Error ? error.message : undefined
-      },
+      { error: 'Failed to fetch section note' },
       { status: 500 }
     );
+  } finally {
+    client.release();
   }
 }
-
 export async function PATCH(request: Request) {
   try {
     const { sectionId, data } = await request.json();
