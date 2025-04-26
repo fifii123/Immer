@@ -105,7 +105,7 @@ export function useNotes({
     }
   };
 
-  // Function to fetch existing note from the database
+  // Function to fetch existing note from the database //////hustler
   const fetchExistingNote = async (fileId: number) => {
     try {
       const response = await fetch(`/api/notes?fileId=${fileId}`);
@@ -388,23 +388,26 @@ export function useNotes({
  * @param sectionStartPage Pierwsza strona sekcji
  * @param sectionEndPage Ostatnia strona sekcji
  */
-const generateSectionOutline  = async (
+const generateSectionOutline = async (
   pdfSource: string,
   sectionNumber: number,
   sectionStartPage: number,
   sectionEndPage: number
-) => {
+): Promise<number | null> => {
   setIsGeneratingNote(true);
   setGenerationProgress(0);
   
   try {
-    // Sprawdź, czy notatka już istnieje
+    console.log(`useNotes: Generowanie struktury dla sekcji ${sectionNumber}, strony ${sectionStartPage}-${sectionEndPage}`);
+    
+    // Sprawdź czy notatka już istnieje
     if (noteId) {
+      console.log(`useNotes: Znaleziono istniejącą notatkę ID=${noteId}, pobieranie...`);
       const noteExists = await fetchNoteById(noteId);
       if (noteExists) {
         setIsGeneratingNote(false);
         setNoteGenerated(true);
-        return;
+        return noteId;
       }
     }
     
@@ -436,7 +439,7 @@ const generateSectionOutline  = async (
       });
     }, 800);
     
-    // Step 3: Wywołanie API tylko do generowania struktury notatki (bez pełnej treści)
+    // Step 3: Wywołanie API do generowania struktury notatki
     const response = await fetch('/api/generate-section-outline', {
       method: 'POST',
       headers: {
@@ -450,7 +453,7 @@ const generateSectionOutline  = async (
         startPage: sectionStartPage,
         endPage: sectionEndPage,
         pdfContent: extractedText,
-        outlineOnly: true // Ważny parametr - generuje tylko strukturę bez treści
+        outlineOnly: true // Parametr określający generowanie tylko struktury
       }),
     });
     
@@ -465,9 +468,8 @@ const generateSectionOutline  = async (
     const generatedNote = await response.json();
     
     // Step 5: Zapisanie do bazy danych
-    
     const savedNote = await saveNoteToDatabase(generatedNote);
-    console.log(savedNote);
+    
     // Step 6: Aktualizacja stanu
     setNote({
       id: savedNote.id,
@@ -487,6 +489,9 @@ const generateSectionOutline  = async (
         description: "Wygenerowano podstawową strukturę notatki. Użyj narzędzi, aby rozwinąć poszczególne sekcje.",
       });
     }, 500);
+    
+    // Zwróć ID utworzonej notatki
+    return parseInt(savedNote.id.toString().replace("note_", ""));
   } catch (error) {
     console.error("Błąd generowania notatki:", error);
     setIsGeneratingNote(false);
@@ -496,9 +501,10 @@ const generateSectionOutline  = async (
       description: error instanceof Error ? error.message : "Wystąpił problem podczas analizy tej sekcji PDF. Spróbuj ponownie.",
       variant: "destructive",
     });
+    
+    return null;
   }
 };
-
   // Function to add selected text to notes
   const addTextToNotes = async (selectedText: string, pageNumber: number, surroundingContext: string) => {
     if (!selectedText || selectedText.trim().length === 0) {
@@ -666,9 +672,9 @@ const generateSectionOutline  = async (
           sectionId,
           action: 'expand',
           currentContent: section.content,
-          // Section-specific data
-          sectionStartPage,
-          sectionEndPage
+          // // Section-specific data
+          // sectionStartPage,
+          // sectionEndPage
         }),
       });
       

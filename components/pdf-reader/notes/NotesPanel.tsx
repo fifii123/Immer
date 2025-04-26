@@ -18,14 +18,16 @@ interface NotesPanelProps {
   pagesRef: React.MutableRefObject<{ [pageNumber: number]: HTMLDivElement }>;
   renderMethod: 'pdf.js' | 'iframe' | 'embed' | 'object';
   setShowTools: (show: boolean) => void;
-  // Section-specific props
-  noteId?: number | null;
+  // Zaktualizowane/nowe props
+  noteId: number | null;
+  noteIsLoading: boolean;
+  noteError: string | null;
+  onNoteCreated: (noteId: number) => void;
   sectionNumber?: number;
   sectionStartPage?: number;
   sectionEndPage?: number;
-  isLoading?: boolean;
   pdfSource?: string | null;
-  outlineOnly?: boolean; // Czy generować tylko strukturę bez treści
+  outlineOnly?: boolean;
 }
 
 export default function NotesPanel({
@@ -38,10 +40,12 @@ export default function NotesPanel({
   renderMethod,
   setShowTools,
   noteId,
+  noteIsLoading,
+  noteError,
+  onNoteCreated,
   sectionNumber = 1,
   sectionStartPage = 1,
   sectionEndPage,
-  isLoading = false,
   pdfSource,
   outlineOnly = true
 }: NotesPanelProps) {
@@ -56,7 +60,7 @@ export default function NotesPanel({
     isProcessingAction,
     sectionRefs,
     generateInitialNote,
-    generateSectionOutline, // Nowa funkcja do generowania tylko struktury
+    generateSectionOutline,
     addTextToNotes,
     toggleSection,
     expandSection,
@@ -70,43 +74,58 @@ export default function NotesPanel({
     fileId, 
     projectId, 
     fileName,
-    noteId, // Przekaż konkretne ID notatki jeśli istnieje
+    noteId, // Przekaż ID notatki jeśli istnieje
     sectionStartPage,
     sectionEndPage,
     outlineOnly
   });
 
-  // Auto-generowanie struktury notatki dla sekcji
+  // Zmodyfikowany useEffect - generuje notatkę tylko gdy nie istnieje
   useEffect(() => {
-    // Automatycznie generuj strukturę notatki, gdy wszystkie warunki są spełnione
     const autoGenerateSectionOutline = async () => {
+      // Generuj notatkę TYLKO gdy:
+      // - NoteId jest null (notatka nie istnieje)
+      // - Nie jest w trakcie ładowania 
+      // - Nie ma błędu
+      // - Nie generujemy już notatki wewnętrznie
       if (
         pdfSource && 
-        noteId && 
-        !noteGenerated && 
+        noteId === null && 
+        !noteIsLoading && 
+        !noteError &&
         !isGeneratingNote && 
-        !isLoading &&
+        !noteGenerated &&
         sectionStartPage && 
         sectionEndPage
       ) {
+        console.log(`NotesPanel: Generowanie struktury dla sekcji ${sectionNumber}`);
         try {
           if (outlineOnly) {
-            // Generuj tylko strukturę notatki bez treści
-            await generateSectionOutline(
+            // Użyj wersji funkcji, która zwraca ID utworzonej notatki
+            const createdNoteId = await generateSectionOutline(
               pdfSource, 
               sectionNumber, 
               sectionStartPage, 
               sectionEndPage
             );
+            
+            // Jeśli notatka została wygenerowana pomyślnie, powiadom rodzica
+            if (createdNoteId) {
+              onNoteCreated(createdNoteId);
+            }
           } else {
-            // Generuj pełną notatkę (dla kompatybilności wstecznej)
-            await generateInitialNote(
+            // Podobna logika dla generateInitialNote
+            const createdNoteId = await generateInitialNote(
               pdfSource, 
               sectionEndPage - sectionStartPage + 1, 
               true, 
               sectionStartPage, 
               sectionEndPage
             );
+            
+            if (createdNoteId) {
+              onNoteCreated(createdNoteId);
+            }
           }
         } catch (error) {
           console.error("Błąd auto-generowania notatki dla sekcji:", error);
@@ -115,7 +134,7 @@ export default function NotesPanel({
     };
 
     autoGenerateSectionOutline();
-  }, [pdfSource, noteId, noteGenerated, isGeneratingNote, isLoading, sectionStartPage, sectionEndPage, sectionNumber, outlineOnly]);
+  }, [pdfSource, noteId, noteIsLoading, noteError, isGeneratingNote, noteGenerated, sectionStartPage, sectionEndPage, sectionNumber, outlineOnly]);
 
   // Funkcja do dodawania zaznaczonego tekstu do notatek
   const handleAddSelectedText = async () => {
@@ -275,7 +294,7 @@ export default function NotesPanel({
       )}
       
       {/* Pusty stan */}
-      {!isGeneratingNote && !note.id && !isLoading && (
+      {!isGeneratingNote && !note.id && !noteIsLoading && (
         <div className="text-center py-8">
           <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
           <p className="text-muted-foreground mb-4">
@@ -291,7 +310,7 @@ export default function NotesPanel({
       )}
       
       {/* Stan ładowania */}
-      {isLoading && !note.id && !isGeneratingNote && (
+      {noteIsLoading && !note.id && !isGeneratingNote && (
         <div className="text-center py-8">
           <p className="text-muted-foreground">
             Ładowanie notatek dla tej sekcji...

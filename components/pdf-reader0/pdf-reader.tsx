@@ -125,7 +125,7 @@ export default function PDFReader({ fileUrl, fileName, fileId, onClose }: PDFRea
     fileUrl 
   });
   const [retryCount, setRetryCount] = useState(0);
-  const { authFetch, isLoading: apiLoading } = useUserId();
+
   
   // Detekcja urządzeń o wysokiej gęstości pikseli
   const devicePixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
@@ -1290,7 +1290,7 @@ const expandSection = async (sectionId: number) => {
       }),
     });
     
-    if (!response.ok) throw new Error('Failed to expand section');
+    if (!response.ok) throw new Error('Failed to expand section' + response);
     
     const result = await response.json();
     

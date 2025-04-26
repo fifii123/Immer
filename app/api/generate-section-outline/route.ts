@@ -1,8 +1,9 @@
-// app/api/generate-section-outline/route.ts
+// api/generate-section-outline/route.ts
+
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import pool from '@/lib/db';
 
+// Inicjalizacja klienta OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
@@ -14,84 +15,96 @@ export async function POST(request: Request) {
       fileId, 
       fileName, 
       projectId, 
+      sectionNumber, 
+      startPage, 
+      endPage, 
       pdfContent, 
-      sectionNumber = 1,
-      startPage = 1,
-      endPage = 10
+      outlineOnly 
     } = body;
     
-    if (!fileId || !fileName || !projectId) {
+    if (!fileId || !sectionNumber || !startPage || !endPage) {
       return NextResponse.json(
-        { error: 'Brakuje wymaganych pól: fileId, fileName i projectId są wymagane' },
+        { error: 'Brakuje wymaganych pól' },
         { status: 400 }
       );
     }
 
-    const contentToAnalyze = pdfContent?.trim() || `Sekcja ${sectionNumber} dokumentu, strony ${startPage}-${endPage}`;
-
-// app/api/generate-section-outline/route.ts
-const response = await openai.chat.completions.create({
-  model: "gpt-3.5-turbo",
-  messages: [
-    {
-      role: "system",
-      content: `Jesteś asystentem tworzącym struktury notatek. 
-                Przeanalizuj treść i stwórz 3-5 nagłówków w formacie JSON.
-                MUSISZ użyć formatu JSON w odpowiedzi. 
-                JSON Structure:
-                {
-                  "sections": [
-                    {
-                      "title": "Tytuł sekcji",
-                      "description": "Opis...",
-                      "content": ""
-                    }
-                  ]
-                }`
-    },
-    {
-      role: "user",
-      content: `Stwórz strukturę notatki w formacie JSON dla sekcji ${sectionNumber}...
-                Treść: ${contentToAnalyze.slice(0, 12000)}`
-    }
-  ],
-  temperature: 0.5,
-  max_tokens: 1000,
-  response_format: { type: "json_object" }
-});
-
-    let aiResponse;
-    try {
-      aiResponse = JSON.parse(response.choices[0].message.content);
-    } catch (error) {
-      console.error("Błąd parsowania odpowiedzi:", response.choices[0].message.content);
-      aiResponse = { sections: [] }; // Resetujemy odpowiedź
-    }
-    
-    // Walidacja struktury odpowiedzi
-    if (!aiResponse?.sections?.length) {
-      aiResponse = {
-        sections: [
-          { title: "Wprowadzenie", description: "Podstawowe informacje z tej sekcji dokumentu", content: "" },
-          { title: "Najważniejsze koncepcje", description: "Kluczowe pojęcia i definicje", content: "" },
-          { title: "Praktyczne zastosowania", description: "Przykłady zastosowania wiedzy", content: "" }
-        ]
-      };
+    // Sprawdź, czy mamy treść PDF do analizy
+    if (!pdfContent || pdfContent.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Brak treści PDF do analizy' },
+        { status: 400 }
+      );
     }
 
-    // Dodajemy brakującą logikę zapisu do bazy danych
+    // Wywołanie API OpenAI do wygenerowania struktury notatek
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: `Jesteś asystentem tworzącym strukturę notatek studenckich na podstawie dokumentów akademickich. Twoim zadaniem jest:
 
-
-    // BRAKUJĄCA CZĘŚĆ - zwracamy odpowiedź
-    return NextResponse.json({ 
-      success: true, 
-      sections: aiResponse.sections 
+          1. Stworzyć strukturę notatek dla sekcji dokumentu (strony ${startPage}-${endPage})
+          2. Podzielić materiał na 4-7 logicznych sekcji tematycznych
+          3. Dla każdej sekcji przygotować tytuł i krótki opis (jednozdaniowy)
+          4. ${outlineOnly ? 'Nie tworzyć pełnej treści sekcji, tylko pozostawić to pole puste lub z minimalną wskazówką.' : 'Przygotować treść każdej sekcji z definicjami, przykładami i wyjaśnieniami.'}
+          
+          Odpowiedz w formacie JSON zgodnie z tą strukturą:
+          {
+            "sections": [
+              {
+                "title": "Tytuł sekcji (krótki, konkretny)",
+                "description": "Jedno zdanie streszczające zawartość sekcji",
+                "content": ${outlineOnly ? '"Placeholder dla treści"' : '"Treść notatki zawierająca ważne pojęcia, definicje, wzory, przykłady itp."'}
+              }
+            ]
+          }`
+        },
+        {
+          role: "user",
+          content: `Stwórz strukturę notatek dla sekcji ${sectionNumber} (strony ${startPage}-${endPage}) dokumentu. ${outlineOnly ? 'Generuj tylko strukturę bez treści.' : 'Generuj pełne notatki.'} Zwróć wynik jako obiekt JSON.
+          
+          Dokument: "${fileName}"
+          
+          Treść sekcji:
+          ${pdfContent.slice(0, 15000)}`
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 2000,
+      response_format: { type: "json_object" }
     });
 
+    // Wyodrębnienie wygenerowanych sekcji z odpowiedzi AI
+    const aiResponse = JSON.parse(response.choices[0].message.content);
+    
+    // Jeśli nie wygenerowano sekcji, zapewnij fallback
+    if (!aiResponse.sections || aiResponse.sections.length === 0) {
+      return NextResponse.json(
+        { error: 'AI nie wygenerowało sensownych sekcji' },
+        { status: 500 }
+      );
+    }
+
+    // Utwórz strukturę notatki z sekcjami wygenerowanymi przez AI
+    const generatedNote = {
+      id: `note_${Date.now()}`,
+      title: `Notatka dla ${fileName} (Sekcja ${sectionNumber})`,
+      sections: aiResponse.sections.map((section, index) => ({
+        id: index + 1,
+        title: section.title,
+        description: section.description,
+        content: outlineOnly ? (section.content || "") : section.content,
+        expanded: false // Domyślny stan to zwinięty
+      }))
+    };
+
+    return NextResponse.json(generatedNote);
   } catch (error) {
-    console.error("Błąd:", error);
+    console.error("Błąd generowania struktury notatki:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Błąd serwera' },
+      { error: 'Nie udało się wygenerować struktury notatki' },
       { status: 500 }
     );
   }

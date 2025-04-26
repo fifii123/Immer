@@ -11,12 +11,24 @@ export async function POST(request: Request) {
   
   try {
     const body = await request.json();
-    const { sectionId, action, currentContent, customPrompt } = body;
+    console.log('[DEBUG] Request body:', JSON.stringify(body, null, 2));
+
+    const { 
+      sectionId, 
+      action, 
+      currentContent, 
+      customPrompt,
+      sectionTitle,
+      sectionDescription,
+      sectionStartPage,
+      sectionEndPage 
+    } = body;
     
     // Validate inputs
-    if (!sectionId || !action || !currentContent) {
+    if (!sectionId || !action) {
+      console.error('[ERROR] Validation failed - missing sectionId or action');
       return NextResponse.json(
-        { error: 'Brakuje wymaganych pól' },
+        { error: 'Brakuje wymaganych pól: sectionId lub action' },
         { status: 400 }
       );
     }
@@ -24,130 +36,183 @@ export async function POST(request: Request) {
     // Generate prompt based on action
     let prompt = '';
     let isAdditive = false;
+    let systemContent = '';
     
     if (action === 'expand') {
-      prompt = `Poszerz następującą sekcję o dodatkowe szczegóły, przykłady i wyjaśnienia. Zachowaj oryginalny styl i poziom języka. Nie używaj szablonowych zwrotów typu "Oto wyjaśnienie" lub numerowanych list "1., 2., 3.". Pisz w stylu naturalnych notatek studenckich.
+      console.log('[DEBUG] Handling expand action');
+      
+      if (!currentContent) {
+        console.log('[DEBUG] Empty content detected, using title and description');
+        
+        if (!sectionTitle || !sectionDescription) {
+          console.error('[ERROR] Missing title/description for empty content');
+          return NextResponse.json(
+            { error: 'Brakuje tytułu lub opisu sekcji dla pustej zawartości' },
+            { status: 400 }
+          );
+        }
 
-Treść sekcji:
-${currentContent}`;
-    } 
-    else if (action === 'format') {
-      prompt = `Zformatuj następującą sekcję używając składni markdown dla lepszej czytelności. Stosuj następujące elementy:
-    
-1. Użyj nagłówków ## dla głównych punktów i ### dla podpunktów
-2. Użyj list punktowanych (- ) dla wyliczania elementów
-3. Użyj **pogrubienia** dla ważnych pojęć i definicji
-4. Użyj *kursywy* dla podkreślenia istotnych informacji
-5. Używaj krótkich akapitów (max 3-4 zdania)
-6. Dodaj odstępy między akapitami
-7. Wyróżnij definicje używając > dla cytatów blokowych
-8. Użyj \`kodu\` dla wzorów, równań lub specjalnych pojęć
-    
-Przykład dobrego formatowania:
-## Główny temat
-Wprowadzający akapit o temacie. Krótkie wyjaśnienie czego dotyczy sekcja.
-    
-### Podtemat 1
-Wyjaśnienie podtematu. **Ważne pojęcie** to kluczowy element który należy zapamiętać.
-    
-> Definicja: Formalne wyjaśnienie ważnego pojęcia.
-    
-- Punkt pierwszy dotyczący tematu
-- Punkt drugi z *dodatkowym podkreśleniem*
-- Punkt trzeci zawierający \`a = b + c\`
-    
-### Podtemat 2
-Kolejne wyjaśnienie z konkretami.
-    
-Treść sekcji do sformatowania:
-${currentContent}`;
-    } 
-    else if (action === 'custom') {
-      if (!customPrompt) {
-        return NextResponse.json({ error: 'Brak polecenia niestandardowego' }, { status: 400 });
+        prompt = `Stwórz szczegółowe notatki w formie ciągłego tekstu na podstawie:
+---
+Tytuł sekcji: "${sectionTitle}"
+Opis sekcji: "${sectionDescription}"
+Zakres stron: ${sectionStartPage}-${sectionEndPage}
+
+Instrukcje:
+1. Używaj naturalnego języka notatek studenckich
+2. Rozwiń kluczowe punkty z opisu
+3. Dodaj praktyczne przykłady i wyjaśnienia
+4. Unikaj nagłówków i list punktowanych
+5. Zachowaj spójny styl z resztą dokumentu
+
+Przykład poprawnego formatu:
+"SQL to język zapytań używany do komunikacji z bazami danych. Podstawową konstrukcją jest SELECT,
+który pozwala wybierać dane z tabel. Przykładowe zapytanie: SELECT * FROM produkty WHERE cena > 100.
+Klauzula WHERE służy do filtrowania wyników..."`;
+      } else {
+        prompt = `Poszerz następującą sekcję o dodatkowe szczegóły, przykłady i wyjaśnienia:
+---
+Tytuł sekcji: "${sectionTitle}"
+Obecna treść:
+${currentContent}
+
+Instrukcje:
+1. Zachowaj oryginalny styl i poziom języka
+2. Nie używaj szablonowych zwrotów typu "Oto wyjaśnienie"
+3. Dodaj praktyczne zastosowania omawianych koncepcji
+4. Zachowaj format ciągłego tekstu bez list`;
       }
       
+      systemContent = currentContent 
+        ? "Jesteś doświadczonym studentem rozszerzającym istniejące notatki. Rozwijaj treść w naturalnym stylu, dodając praktyczne przykłady i dodatkowe wyjaśnienia."
+        : "Jesteś asystentem akademickim tworzącym nowe notatki na podstawie tytułu i opisu sekcji. Generuj zwięzły, merytoryczny tekst w stylu studenckim.";
+    } 
+    else if (action === 'format') {
+      console.log('[DEBUG] Handling format action');
+      
+      if (!currentContent) {
+        console.error('[ERROR] Cannot format empty content');
+        return NextResponse.json(
+          { error: 'Nie można formatować pustej sekcji' },
+          { status: 400 }
+        );
+      }
+
+      prompt = `Zformatuj następującą sekcję używając składni markdown:
+---
+Obecna treść:
+${currentContent}
+
+Instrukcje formatowania:
+1. Użyj nagłówków ## dla głównych tematów
+2. Wyróżnij kluczowe pojęcia pogrubieniem
+3. Dodaj listy punktowane dla wyliczeń
+4. Użyj bloków cytatów dla definicji
+5. Zachowaj oryginalną treść, tylko dodaj formatowanie`;
+
+      systemContent = "Jesteś ekspertem w formatowaniu tekstu akademickiego. Twórz czytelne notatki z użyciem markdown, zachowując całą oryginalną treść.";
+      console.log('[DEBUG] Generated format prompt:', prompt);
+    } 
+    else if (action === 'custom') {
+      console.log('[DEBUG] Handling custom action');
+      
+      if (!customPrompt) {
+        console.error('[ERROR] Missing custom prompt');
+        return NextResponse.json(
+          { error: 'Brak polecenia niestandardowego' }, 
+          { status: 400 }
+        );
+      }
+
       isAdditive = true;
       
-      // Analyze what the user is asking for to determine the right approach
-      const analysisPrompt = `Przeanalizuj polecenie użytkownika: "${customPrompt}"
+      // Analiza polecenia użytkownika
+      const analysisPrompt = `Przeanalizuj polecenie: "${customPrompt}"
       
-Jakie jest główne zagadnienie w tym poleceniu? (jedna linijka)`;
+Wyodrębnij:
+1. Główny temat (1-3 słowa)
+2. Typ operacji (dodaj informacje, popraw błąd, zmień styl)
+3. Kontekst wymagany do realizacji`;
 
+      console.log('[DEBUG] Analysis prompt:', analysisPrompt);
+      
       const analysisResponse = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
-        messages: [
-          { role: "user", content: analysisPrompt }
-        ],
+        messages: [{ role: "user", content: analysisPrompt }],
         temperature: 0.3,
         max_tokens: 100
       });
       
       const topicAnalysis = analysisResponse.choices[0].message.content;
-      
-      // Improved prompt for more natural additions
-      prompt = `Jesteś asystentem tworzącym uzupełnienia do notatek studenckich. Przeczytaj istniejące notatki, a następnie KONTYNUUJ je, dodając nową treść związaną z tematem: "${customPrompt}".
+      console.log('[DEBUG] Custom action analysis:', topicAnalysis);
 
-Zasady:
-- Nie powtarzaj istniejącej treści, tylko dodaj nową
-- Nie używaj fraz typu "Oto wyjaśnienie..." czy "Poniżej przedstawiam..."
-- Nie numeruj punktów (1, 2, 3) ani nie twórz formalnych list
-- Pisz w tym samym stylu co istniejące notatki - naturalnym, studenckim
-- Nie rozpoczynaj od nagłówków ani tytułów
-- Nie używaj podsumowań typu "Podsumowując..." ani nie kończ konkluzją
-- Po prostu pisz, jakbyś kontynuował notatkę z wykładu
+      prompt = `Dostosuj notatki zgodnie z poleceniem:
+---
+Polecenie: "${customPrompt}"
+Analiza: "${topicAnalysis}"
+---
+Obecna treść:
+${currentContent || "Brak istniejącej treści - tworzymy nową sekcję"}
 
-Temat do rozwinięcia: ${topicAnalysis || customPrompt}
+Instrukcje:
+1. Zrealizuj dokładnie polecenie użytkownika
+2. Zachowaj spójność stylu
+3. Unikaj zbędnych komentarzy
+4. Maksymalna długość: 3 akapity`;
 
-Istniejące notatki:
-${currentContent}
-
-Kontynuacja notatek (napisz bezpośrednio w tonie kontynuacji, bez wprowadzeń):`;
+      systemContent = "Jesteś asystentem dostosowującym notatki do specyficznych potrzeb użytkownika. Precyzyjnie implementuj otrzymane polecenia, zachowując akademicki charakter notatek.";
+      console.log('[DEBUG] Generated custom prompt:', prompt);
     } 
     else {
-      return NextResponse.json({ error: 'Nieznana akcja' }, { status: 400 });
+      console.error('[ERROR] Unknown action:', action);
+      return NextResponse.json(
+        { error: 'Nieznana akcja' }, 
+        { status: 400 }
+      );
     }
-    
-    // GŁÓWNA MODYFIKACJA: Dostosowanie wiadomości systemowej do akcji
-    const systemContent = action === 'format'
-      ? "Jesteś ekspertem w formatowaniu tekstu z wykorzystaniem składni markdown. Tworzysz czytelne, dobrze zorganizowane treści dla studentów, które będą wyświetlane w interfejsie notatek. Używasz nagłówków, punktów, pogrubień, kursywy i innych elementów markdown, aby tekst był przejrzysty i łatwy do nauki. Twój markdown musi być poprawny składniowo i gotowy do wyświetlenia."
-      : "Jesteś doświadczonym studentem tworzącym swoje notatki z wykładów. Piszesz w naturalnym stylu, bez formalnych struktur, nagłówków czy list numerowanych. Twoje notatki są zwięzłe, merytoryczne i przypominają prawdziwe zapiski z zajęć.";
-    
-    // Call the OpenAI API z zmodyfikowaną wiadomością systemową
+
+    // Logowanie kontekstu
+    console.log('[DEBUG] System message:', systemContent);
+    console.log('[DEBUG] Full prompt:', prompt.substring(0, 500) + (prompt.length > 500 ? '...' : ''));
+
+    // Call OpenAI API
     const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-3.5-turbo-0125",
       messages: [
-        {
-          role: "system",
-          content: systemContent
-        },
-        {
-          role: "user",
-          content: prompt
-        }
+        { role: "system", content: systemContent },
+        { role: "user", content: prompt }
       ],
-      temperature: 0.7,
+      temperature: action === 'format' ? 0.3 : 0.7,
       max_tokens: 1500,
     });
+
+    console.log('[DEBUG] OpenAI response:', JSON.stringify(response, null, 2));
     
     let enhancedContent = response.choices[0].message.content || '';
-    
-    // For custom prompts, combine original with new and ensure smooth transition
+
     if (isAdditive) {
-      // Find appropriate delimiter to use between existing and new content
       const delimiter = currentContent.trim().endsWith('.') ? '\n\n' : ' ';
       enhancedContent = `${currentContent.trim()}${delimiter}${enhancedContent.trim()}`;
+      console.log('[DEBUG] Combined content:', enhancedContent.substring(0, 200) + '...');
     }
-    
+
     return NextResponse.json({
       success: true,
       enhancedContent,
       isAdditive
     });
+
   } catch (error) {
-    console.error("Błąd ulepszania sekcji:", error);
+    console.error('[ERROR] Full error details:', error);
+    const errorMessage = error instanceof Error 
+      ? `${error.name}: ${error.message}\nStack: ${error.stack?.substring(0, 500)}` 
+      : 'Unknown error';
+    
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Wystąpił błąd podczas przetwarzania' },
+      { 
+        error: 'Wystąpił błąd podczas przetwarzania',
+        details: errorMessage 
+      },
       { status: 500 }
     );
   } finally {
