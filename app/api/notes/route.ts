@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 
+// GET endpoint to fetch notes
 export async function GET(request: Request) {
   const client = await pool.connect();
   
@@ -23,23 +24,16 @@ export async function GET(request: Request) {
         );
       }
       
-      // Try to find a note for this section (based on name pattern or metadata if available)
+      // Try to find a note for this section using the pdf_section_number field
       const sectionNoteQuery = `
-        SELECT note_id, note_name FROM notes 
-        WHERE file_id = $1 
-        AND (
-          note_name LIKE $2 
-          OR note_name LIKE $3
-        )
+        SELECT note_id, note_name, pdf_section_number, section_start_page, section_end_page 
+        FROM notes 
+        WHERE file_id = $1 AND pdf_section_number = $2
         ORDER BY created_at DESC
         LIMIT 1
       `;
       
-      const noteResult = await client.query(sectionNoteQuery, [
-        fileIdNum,
-        `%Section ${sectionNum}%`,
-        `%Sekcja ${sectionNum}%`
-      ]);
+      const noteResult = await client.query(sectionNoteQuery, [fileIdNum, sectionNum]);
       
       if (noteResult.rows.length > 0) {
         const note = noteResult.rows[0];
@@ -54,8 +48,13 @@ export async function GET(request: Request) {
         );
         
         const formattedNote = {
-          id: `note_${note.note_id}`,
+          id: note.note_id,
           title: note.note_name,
+          sectionInfo: {
+            sectionNumber: note.pdf_section_number,
+            startPage: note.section_start_page,
+            endPage: note.section_end_page
+          },
           sections: sectionsResult.rows.map(section => ({
             id: section.section_id,
             title: section.title,
@@ -68,26 +67,23 @@ export async function GET(request: Request) {
         return NextResponse.json(formattedNote);
       } else {
         // No note found for this section
-        return NextResponse.json(
-          { error: 'No note found for this section' },
-          { status: 404 }
-        );
+        return NextResponse.json({ error: 'No note found for this section' }, { status: 404 });
       }
     }
     
     // If only fileId is provided - return note for this file
     else if (fileId) {
-      // Existing code to fetch note by fileId
       const noteResult = await client.query(
-        `SELECT note_id, note_name FROM notes WHERE file_id = $1 LIMIT 1`,
+        `SELECT note_id, note_name, pdf_section_number, section_start_page, section_end_page 
+         FROM notes 
+         WHERE file_id = $1 
+         ORDER BY created_at DESC
+         LIMIT 1`,
         [parseInt(fileId)]
       );
 
       if (noteResult.rows.length === 0) {
-        return NextResponse.json(
-          { error: 'No note found for this file' },
-          { status: 404 }
-        );
+        return NextResponse.json({ error: 'No note found for this file' }, { status: 404 });
       }
 
       const note = noteResult.rows[0];
@@ -103,8 +99,13 @@ export async function GET(request: Request) {
 
       // Format the response
       const formattedNote = {
-        id: `note_${note.note_id}`,
+        id: note.note_id,
         title: note.note_name,
+        sectionInfo: {
+          sectionNumber: note.pdf_section_number,
+          startPage: note.section_start_page,
+          endPage: note.section_end_page
+        },
         sections: sectionsResult.rows.map(section => ({
           id: section.section_id,
           title: section.title,
@@ -119,11 +120,11 @@ export async function GET(request: Request) {
     
     // Handle project-specific notes query
     else if (projectId) {
-      // Existing code for fetching all notes for a project
       const notesQuery = `
-        SELECT note_id, note_name, file_id, project_id
+        SELECT note_id, note_name, file_id, project_id, pdf_section_number, section_start_page, section_end_page
         FROM notes
         WHERE project_id = $1
+        ORDER BY created_at DESC
       `;
       
       const notesResult = await client.query(notesQuery, [parseInt(projectId)]);
@@ -145,8 +146,13 @@ export async function GET(request: Request) {
         
         return {
           id: note.note_id,
-          fileName: `File ID: ${note.file_id}`,
+          title: note.note_name,
           fileId: note.file_id,
+          sectionInfo: {
+            sectionNumber: note.pdf_section_number,
+            startPage: note.section_start_page,
+            endPage: note.section_end_page
+          },
           sections: sectionsResult.rows.map(section => ({
             id: section.section_id,
             title: section.title,
@@ -188,10 +194,15 @@ export async function POST(request: Request) {
       projectId, 
       noteName, 
       sections,
-      pdfSectionNumber,  // New field
-      sectionStartPage,  // New field
-      sectionEndPage     // New field
+      pdfSectionNumber,
+      sectionStartPage,
+      sectionEndPage
     } = await request.json();
+    
+    console.log('POST /api/notes - Received data:', JSON.stringify({ 
+      fileId, projectId, noteName, sectionInfo: { pdfSectionNumber, sectionStartPage, sectionEndPage },
+      sectionCount: sections?.length 
+    }));
     
     if (!fileId || !noteName || !sections) {
       return NextResponse.json(
@@ -228,9 +239,12 @@ export async function POST(request: Request) {
       sectionEndPage || null
     ];
     
-    const noteResult = await client.query(noteQuery, noteParams);
+    console.log('Executing note insert query with params:', noteParams);
     
+    const noteResult = await client.query(noteQuery, noteParams);
     const noteId = noteResult.rows[0].note_id;
+    
+    console.log(`Created note with ID: ${noteId}`);
     
     // Add note sections
     const sectionPromises = sections.map(async (section, index) => {
@@ -243,8 +257,8 @@ export async function POST(request: Request) {
         contentValue = String(contentValue);
       }
       
-      const sectionResult = await client.query(
-        `INSERT INTO note_section (
+      const sectionQuery = `
+        INSERT INTO note_section (
           note_id, 
           title, 
           description, 
@@ -255,39 +269,69 @@ export async function POST(request: Request) {
           updated_at
         ) 
         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) 
-        RETURNING section_id, title, description, content, expanded, order_index`,
-        [
-          noteId, 
-          section.title, 
-          section.description || '', 
-          contentValue || '', 
-          index, 
-          Boolean(section.expanded) || false
-        ]
-      );
+        RETURNING section_id, title, description, content, expanded, order_index
+      `;
       
-      return sectionResult.rows[0];
+      const sectionParams = [
+        noteId, 
+        section.title, 
+        section.description || '', 
+        contentValue || '', 
+        index, 
+        Boolean(section.expanded) || false
+      ];
+      
+      try {
+        const sectionResult = await client.query(sectionQuery, sectionParams);
+        return sectionResult.rows[0];
+      } catch (sectionError) {
+        console.error(`Error creating section ${index}:`, sectionError);
+        throw sectionError;
+      }
     });
 
-    const sectionsData = await Promise.all(sectionPromises);
-    
-    // Commit transaction
-    await client.query('COMMIT');
+    try {
+      const sectionsData = await Promise.all(sectionPromises);
+      
+      // Commit transaction
+      await client.query('COMMIT');
+      
+      console.log(`Successfully created note with ${sectionsData.length} sections`);
 
-    return NextResponse.json({
-      id: noteId,
-      sections: sectionsData,
-      success: true,
-    });
+      return NextResponse.json({
+        id: noteId,
+        sections: sectionsData,
+        success: true,
+      });
+    } catch (sectionsError) {
+      // If any section failed, rollback and report error
+      console.error("Failed to create sections:", sectionsError);
+      throw sectionsError;
+    }
   } catch (error) {
     // Rollback in case of error
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error("Error during rollback:", rollbackError);
+    }
+    
+    // Log specific details about database errors
+    if (error.code) {
+      console.error(`Database error code: ${error.code}`);
+      console.error(`Constraint: ${error.constraint || 'none'}`);
+      console.error(`Detail: ${error.detail || 'none'}`);
+      console.error(`Schema: ${error.schema || 'none'}`);
+      console.error(`Table: ${error.table || 'none'}`);
+    }
     
     console.error("Error saving note:", error);
+    
     return NextResponse.json(
       { 
         error: 'Failed to save note to database', 
-        details: error instanceof Error ? error.message : String(error) 
+        details: error instanceof Error ? error.message : String(error),
+        code: error.code || 'unknown'
       },
       { status: 500 }
     );

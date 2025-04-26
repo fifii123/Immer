@@ -63,7 +63,6 @@ export function useNotes({
   const sectionRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
   const autoGenerationAttemptedRef = useRef(false);
   const { toast } = useToast();
-  const { authFetch } = useUserId();
   const fetchAttemptedRef = useRef(false);
 
   // Fetch existing note when component mounts
@@ -398,6 +397,9 @@ const saveNoteToDatabase = async (noteData: any) => {
  * @param sectionStartPage Pierwsza strona sekcji
  * @param sectionEndPage Ostatnia strona sekcji
  */
+// Update to the generateSectionOutline function in useNotes.tsx
+// This is a partial update focusing on the problematic function
+
 const generateSectionOutline = async (
   pdfSource: string,
   sectionNumber: number,
@@ -407,12 +409,16 @@ const generateSectionOutline = async (
   setIsGeneratingNote(true);
   setGenerationProgress(0);
   
+  // Add retry limitation to prevent infinite loops
+  const MAX_RETRIES = 3;
+  let retryCount = 0;
+  
   try {
-    console.log(`useNotes: Generowanie struktury dla sekcji ${sectionNumber}, strony ${sectionStartPage}-${sectionEndPage}`);
+    console.log(`useNotes: Generating structure for section ${sectionNumber}, pages ${sectionStartPage}-${sectionEndPage}`);
     
-    // Sprawdź czy notatka już istnieje
+    // Check if note already exists
     if (noteId) {
-      console.log(`useNotes: Znaleziono istniejącą notatkę ID=${noteId}, pobieranie...`);
+      console.log(`useNotes: Found existing note ID=${noteId}, retrieving...`);
       const noteExists = await fetchNoteById(noteId);
       if (noteExists) {
         setIsGeneratingNote(false);
@@ -421,7 +427,7 @@ const generateSectionOutline = async (
       }
     }
     
-    // Step 1: Ekstrakcja tekstu z sekcji PDF
+    // Step 1: Extract text from section PDF
     const extractedText = await extractPdfText(
       pdfSource, 
       sectionEndPage - sectionStartPage + 1, 
@@ -431,17 +437,17 @@ const generateSectionOutline = async (
     );
     
     if (!extractedText || extractedText.trim().length === 0) {
-      throw new Error('Nie udało się odczytać tekstu z sekcji PDF');
+      throw new Error('Failed to extract text from PDF section');
     }
     
-    // Step 2: Informacja o analizie
+    // Step 2: Analysis notification
     setGenerationProgress(40);
     toast({
-      title: `Analiza sekcji ${sectionNumber}`,
-      description: `Identyfikowanie kluczowych tematów ze stron ${sectionStartPage}-${sectionEndPage}...`,
+      title: `Analyzing section ${sectionNumber}`,
+      description: `Identifying key topics from pages ${sectionStartPage}-${sectionEndPage}...`,
     });
     
-    // Symulacja postępu
+    // Progress simulation
     const progressInterval = setInterval(() => {
       setGenerationProgress(prev => {
         const newProgress = prev + Math.floor(Math.random() * 5);
@@ -449,66 +455,133 @@ const generateSectionOutline = async (
       });
     }, 800);
     
-    // Step 3: Wywołanie API do generowania struktury notatki
-    const response = await fetch('/api/generate-section-outline', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        fileId,
-        fileName,
-        projectId,
-        sectionNumber,
-        startPage: sectionStartPage,
-        endPage: sectionEndPage,
-        pdfContent: extractedText,
-        outlineOnly: true // Parametr określający generowanie tylko struktury
-      }),
-    });
+    // Step 3: API call with retry logic
+    let apiResponse = null;
     
-    clearInterval(progressInterval);
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`Błąd generowania notatki: ${errorData.error || response.statusText}`);
+    while (retryCount < MAX_RETRIES && !apiResponse) {
+      try {
+        const response = await fetch('/api/generate-section-outline', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fileId,
+            fileName,
+            projectId,
+            sectionNumber,
+            startPage: sectionStartPage,
+            endPage: sectionEndPage,
+            pdfContent: extractedText,
+            outlineOnly: true // Parameter indicating outline-only generation
+          }),
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(`Error generating note: ${errorData.error || response.statusText}`);
+        }
+        
+        apiResponse = await response.json();
+      } catch (error) {
+        retryCount++;
+        console.error(`API call attempt ${retryCount}/${MAX_RETRIES} failed:`, error);
+        
+        if (retryCount >= MAX_RETRIES) {
+          throw new Error(`Failed after ${MAX_RETRIES} attempts: ${error.message}`);
+        }
+        
+        // Exponential backoff - wait longer between retries
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount - 1)));
+      }
     }
     
-    // Step 4: Pobieranie wygenerowanej struktury notatki
-    const generatedNote = await response.json();
+    // Clear progress interval
+    clearInterval(progressInterval);
     
-    // Step 5: Zapisanie do bazy danych
-    const savedNote = await saveNoteToDatabase(generatedNote);
+    // Validate API response
+    if (!apiResponse || !apiResponse.sections) {
+      throw new Error('Invalid response from API - missing sections');
+    }
     
-    // Step 6: Aktualizacja stanu
+    // Step 4: Save note to database with retry logic
+    let savedNote = null;
+    retryCount = 0;
+    
+    while (retryCount < MAX_RETRIES && !savedNote) {
+      try {
+        // Save to database
+        const saveResponse = await fetch('/api/notes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fileId: fileId,
+            projectId: projectId,
+            noteName: `${fileName || 'Document'} (Section ${sectionNumber})`,
+            sections: apiResponse.sections,
+            pdfSectionNumber: sectionNumber,
+            sectionStartPage: sectionStartPage,
+            sectionEndPage: sectionEndPage
+          }),
+        });
+        
+        if (!saveResponse.ok) {
+          const errorData = await saveResponse.json();
+          console.error('Database save error details:', errorData);
+          throw new Error(`Failed to save note: ${errorData.error || saveResponse.statusText}`);
+        }
+        
+        savedNote = await saveResponse.json();
+      } catch (error) {
+        retryCount++;
+        console.error(`Database save attempt ${retryCount}/${MAX_RETRIES} failed:`, error);
+        
+        if (retryCount >= MAX_RETRIES) {
+          throw new Error(`Failed after ${MAX_RETRIES} save attempts: ${error.message}`);
+        }
+        
+        // Exponential backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount - 1)));
+      }
+    }
+    
+    // Step 5: Update state with generated note
     setNote({
       id: savedNote.id,
-      sections: savedNote.sections
+      sections: savedNote.sections.map(section => ({
+        id: section.section_id,
+        title: section.title,
+        description: section.description || '',
+        content: section.content || '',
+        expanded: false
+      }))
     });
     
-    // Step 7: Postęp 100%
+    // Step 6: Complete progress
     setGenerationProgress(100);
     
-    // Step 8: Zakończenie
+    // Step 7: Finalize
     setTimeout(() => {
       setIsGeneratingNote(false);
       setNoteGenerated(true);
       
       toast({
-        title: `Struktura notatki dla sekcji ${sectionNumber} utworzona`,
-        description: "Wygenerowano podstawową strukturę notatki. Użyj narzędzi, aby rozwinąć poszczególne sekcje.",
+        title: `Section ${sectionNumber} note structure created`,
+        description: "Use the expand or format tools to develop content for each section.",
       });
     }, 500);
     
-    // Zwróć ID utworzonej notatki
-    return parseInt(savedNote.id.toString().replace("note_", ""));
+    // Return created note ID
+    return savedNote.id;
   } catch (error) {
-    console.error("Błąd generowania notatki:", error);
+    console.error("Error generating note:", error);
     setIsGeneratingNote(false);
     
     toast({
-      title: "Błąd generowania struktury notatki",
-      description: error instanceof Error ? error.message : "Wystąpił problem podczas analizy tej sekcji PDF. Spróbuj ponownie.",
+      title: "Error generating note structure",
+      description: error instanceof Error ? error.message : "Failed to analyze this PDF section. Please try again.",
       variant: "destructive",
     });
     
