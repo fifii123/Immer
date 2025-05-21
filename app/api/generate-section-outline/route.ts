@@ -2,7 +2,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-
 // Inicjalizacja klienta OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -39,8 +38,6 @@ export async function POST(request: Request) {
       );
     }
 
-
-
     // Wywołanie API OpenAI do wygenerowania struktury notatki
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
@@ -52,7 +49,10 @@ export async function POST(request: Request) {
           1. Stworzyć strukturę dla sekcji ${sectionNumber} (strony ${startPage}-${endPage})
           2. Podzielić materiał na 4-7 logicznych sekcji tematycznych
           3. Dla każdej sekcji przygotować tytuł i krótki opis (jedno zdanie)
-          4. ${outlineOnly ? 'Nie tworzyć pełnej treści sekcji, pole content ma być puste ("").' : 'Przygotować treść każdej sekcji z definicjami, przykładami i wyjaśnieniami.'}
+          4. ${outlineOnly 
+              ? 'Dodaj krótką, zwięzłą treść początkową (2-3 zdania) dla każdej sekcji, która będzie mogła być rozszerzona później.'
+              : 'Przygotować pełną treść każdej sekcji z definicjami, przykładami i wyjaśnieniami.'
+            }
           
           Odpowiedz w formacie JSON zgodnie z tą strukturą:
           {
@@ -60,14 +60,20 @@ export async function POST(request: Request) {
               {
                 "title": "Tytuł sekcji (krótki, konkretny)",
                 "description": "Jedno zdanie streszczające zawartość sekcji",
-                "content": ${outlineOnly ? '""' : '"Treść notatki zawierająca ważne pojęcia, definicje, wzory, przykłady itp."'}
+                "content": "${outlineOnly 
+                  ? 'Krótka treść początkowa (2-3 zdania) opisująca temat sekcji. Unikaj zdań w stylu "ta sekcja opisuje...".'
+                  : 'Pełna treść notatki zawierająca ważne pojęcia, definicje, wzory, przykłady itp.'
+                }"
               }
             ]
           }`
         },
         {
           role: "user",
-          content: `Stwórz strukturę notatek dla sekcji ${sectionNumber} (strony ${startPage}-${endPage}) dokumentu. ${outlineOnly ? 'Generuj tylko strukturę bez treści - pole content ma być pusty string ("").' : 'Generuj pełne notatki z treścią.'} Zwróć wynik jako obiekt JSON.
+          content: `Stwórz strukturę notatek dla sekcji ${sectionNumber} (strony ${startPage}-${endPage}) dokumentu. ${outlineOnly 
+              ? 'Generuj strukturę z krótką, zwięzłą treścią początkową (2-3 zdania) dla każdej sekcji.' 
+              : 'Generuj pełne notatki z treścią.'
+            } Zwróć wynik jako obiekt JSON.
           
           Dokument: "${fileName}"
           
@@ -96,7 +102,7 @@ export async function POST(request: Request) {
       id: index + 1,
       title: section.title || `Sekcja ${index + 1}`,
       description: section.description || `Zawartość ze stron ${startPage}-${endPage}`,
-      content: outlineOnly ? "" : (section.content || ""),  // Puste pole content dla outlineOnly
+      content: section.content || "Ta sekcja wymaga uzupełnienia treści.",
       expanded: false // Domyślnie zwinięte
     }));
 

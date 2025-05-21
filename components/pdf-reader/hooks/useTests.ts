@@ -78,7 +78,7 @@ export function useTests({ fileId, projectId, noteId }: UseTestsProps) {
   const [expandedQuestions, setExpandedQuestions] = useState<boolean[]>([]);
 
   const { toast } = useToast();
-  const { userId } = useUserId();
+  const  userId  = useUserId();
   
   // Fetch tests when component mounts
   useEffect(() => {
@@ -509,6 +509,7 @@ export function useTests({ fileId, projectId, noteId }: UseTestsProps) {
       }
       
       const result = await response.json();
+      console.log('Result from backend:', result);
       
       // Set score and feedback
       setAnswerFeedback(result.feedback);
