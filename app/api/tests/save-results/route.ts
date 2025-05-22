@@ -52,14 +52,16 @@ export async function POST(request: NextRequest) {
       // Zapisz odpowiedzi na pytania
       for (const answer of answers) {
         await client.query(
-          `INSERT INTO test_answers (result_id, question_id, user_answer, is_correct, points)
-           VALUES ($1, $2, $3, $4, $5)`,
+          `INSERT INTO test_answers (result_id, question_id, user_answer, is_correct, points, grade, feedback)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             resultId,
             answer.question_id,
             answer.user_answer,
             answer.is_correct,
-            answer.points
+            answer.points,
+            answer.grade ?? null,         
+            answer.feedback ?? null
           ]
         );
       }

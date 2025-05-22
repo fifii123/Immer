@@ -563,7 +563,9 @@ export function useTests({ fileId, projectId, noteId }: UseTestsProps) {
           question_id: index,
           user_answer: userAnswers[index],
           is_correct: userAnswers[index] === question.correctAnswer,
-          points: userAnswers[index] === question.correctAnswer ? 1 : 0
+          points: userAnswers[index] === question.correctAnswer ? 1 : 0,
+          grade: userAnswers[index] === question.correctAnswer ? 'correct' : 'incorrect',
+          feedback: null
         }));
       } else {
         // For open-ended questions use feedback
@@ -571,7 +573,9 @@ export function useTests({ fileId, projectId, noteId }: UseTestsProps) {
           question_id: index,
           user_answer: userAnswers[index],
           is_correct: fb ? fb.isCorrect : false,
-          points: fb && fb.isCorrect ? 1 : 0
+          points: fb && fb.isCorrect ? 1 : 0,
+          grade: fb?.grade ?? 'incorrect',               // 🔷 zapisz string
+          feedback: fb?.feedback ?? null     
         })) || [];
       }
       

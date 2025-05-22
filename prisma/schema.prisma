@@ -102,6 +102,8 @@ model test_answers {
   user_answer  String?
   is_correct   Boolean?
   points       Int?
+  grade        String?      @db.VarChar(20)
+  feedback     String?
   test_results test_results @relation(fields: [result_id], references: [result_id], onDelete: Cascade, onUpdate: NoAction)
 }
 

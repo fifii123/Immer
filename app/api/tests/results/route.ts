@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     
     // Pobierz odpowiedzi
     const answersQuery = `
-      SELECT question_id, user_answer, is_correct, points
+      SELECT question_id, user_answer, is_correct, points, grade, feedback
       FROM test_answers
       WHERE result_id = $1
       ORDER BY question_id
@@ -80,9 +80,10 @@ export async function GET(request: NextRequest) {
         
         return {
           isCorrect: answer.is_correct,
-          feedback: answer.is_correct 
+          grade: answer.grade, 
+          feedback: answer.feedback ?? (answer.is_correct 
             ? "Poprawna odpowiedź" 
-            : `Niepoprawna odpowiedź`,
+            : `Niepoprawna odpowiedź`),
           correctAnswer: question.correctAnswer
         };
       })
