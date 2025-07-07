@@ -70,23 +70,41 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const login = async (email: string, password: string) => {
     try {
       const response = await axios.post('/api/auth/login', { email, password });
-      // Sprawdzamy, czy odpowiedź zawiera token i dane użytkownika
+      
       if (response.data.token && response.data.user) {
-        localStorage.setItem('token', response.data.token); // Przechowujemy token w localStorage
-        setUser(response.data.user); // Ustawiamy dane użytkownika
+        localStorage.setItem('token', response.data.token);
+        setUser(response.data.user);
       } else {
-        console.error('Brak tokenu lub danych użytkownika w odpowiedzi:', response.data);
+        throw new Error('Nieprawidłowa odpowiedź serwera');
       }
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        // Zbiera więcej informacji o błędzie
-        console.error('Błąd logowania:', error.response?.data || error.message);
-        if (error.response) {
-          console.error('Status HTTP:', error.response.status);
-          console.error('Nagłówki odpowiedzi:', error.response.headers);
+      console.error('Błąd logowania:', error);
+      
+      // ✅ DODAJ TO - rzuć błąd dalej do UI!
+      if (axios.isAxiosError(error) && error.response) {
+        const status = error.response.status;
+        const data = error.response.data;
+        
+        if (status === 401) {
+          // Nieprawidłowe credentials
+          if (typeof data === 'string') {
+            throw new Error(data);
+          } else if (data?.message) {
+            throw new Error(data.message); // "Niepoprawny adres e-mail lub hasło"
+          } else {
+            throw new Error('Nieprawidłowy email lub hasło');
+          }
+        } else if (status === 400) {
+          // Błąd walidacji
+          throw new Error(data?.message || 'Błędne dane logowania');
+        } else if (status === 500) {
+          throw new Error('Błąd serwera. Spróbuj ponownie później.');
+        } else {
+          throw new Error(`Błąd logowania: ${data?.message || 'Nieznany błąd'}`);
         }
       } else {
-        console.error('Nieznany błąd logowania:', error);
+        // Network error
+        throw new Error('Błąd połączenia. Sprawdź internet i spróbuj ponownie.');
       }
     }
   };
@@ -124,17 +142,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         localStorage.setItem('token', response.data.token);
         setUser(response.data.user);
       } else {
-        console.error('Brak tokenu lub danych użytkownika w odpowiedzi:', response.data);
+        throw new Error('Brak tokenu lub danych użytkownika w odpowiedzi');
       }
     } catch (error) {
+      console.error('Błąd rejestracji:', error);
+      
+      // ✅ DODAJ TO - rzuć błąd dalej do UI!
       if (axios.isAxiosError(error)) {
-        console.error('Błąd rejestracji:', error.response?.data || error.message);
+        // Jeśli backend zwrócił konkretny błąd
+        if (error.response?.data?.message) {
+          throw new Error(error.response.data.message); // np. "Adres e-mail jest już zajęty"
+        } else {
+          throw new Error(`Registration failed: ${error.response?.status || 'Network error'}`);
+        }
       } else {
-        console.error('Nieznany błąd rejestracji:', error);
+        throw new Error('Registration failed. Please try again.');
       }
     }
   };
-  
 
 
   const value = {
