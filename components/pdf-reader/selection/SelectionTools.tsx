@@ -1,17 +1,13 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { usePreferences } from "@/context/preferences-context";
 import { 
   BookOpen, 
-  FileText, 
-  GraduationCap, 
-  Languages, 
-  Bookmark, 
-  X 
+  X,
+  Save
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
@@ -35,13 +31,36 @@ export default function SelectionTools({
   pagesRef
 }: SelectionToolsProps) {
   const { darkMode, t } = usePreferences();
+  
+  // States for expanding UI
+  const [isExplaining, setIsExplaining] = useState(false);
+  const [streamedText, setStreamedText] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamComplete, setStreamComplete] = useState(false);
+  
+  // Refs for measurements
+  const toolboxRef = useRef<HTMLDivElement>(null);
+  const [initialWidth, setInitialWidth] = useState(0);
+  
+  // Measure initial width
+  useEffect(() => {
+    if (toolboxRef.current && !isExplaining) {
+      setInitialWidth(toolboxRef.current.offsetWidth);
+    }
+  }, [isExplaining]);
 
   // Tool functions
   const explainText = async () => {
     try {
-      // Pobierz inteligentny kontekst
+      setIsExplaining(true);
+      setIsStreaming(true);
+      setStreamedText('');
+      setStreamComplete(false);
+      
+      // Pobierz kontekst
       const context = extractSmartContext();
       
+      // Start streaming
       const response = await fetch('/api/explain-text', {
         method: 'POST',
         headers: {
@@ -57,17 +76,47 @@ export default function SelectionTools({
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const result = await response.json();
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
       
-      if (result.success) {
-        console.log("Explanation:", result.explanation);
-        // Tutaj dodasz UI do wyświetlenia wyjaśnienia
-      } else {
-        console.error("Failed to generate explanation:", result.error);
+      if (!reader) {
+        throw new Error('No response body');
+      }
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            
+            if (data === '[DONE]') {
+              setIsStreaming(false);
+              setStreamComplete(true);
+              return;
+            }
+            
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) {
+                setStreamedText(prev => prev + parsed.content);
+              }
+            } catch (e) {
+              // Ignore parsing errors
+            }
+          }
+        }
       }
       
     } catch (error) {
       console.error("Error calling explain-text API:", error);
+      setIsStreaming(false);
+      setIsExplaining(false);
     }
   };
   
@@ -89,18 +138,15 @@ export default function SelectionTools({
       const selectedIndex = fullPageText.indexOf(selectedText);
       
       if (selectedIndex === -1) {
-        // Jeśli nie znaleziono dokładnego tekstu, zwróć początek strony
         return fullPageText.substring(0, 1000);
       }
       
-      // Pobierz inteligentny kontekst wokół zaznaczonego tekstu
-      const contextRadius = 400; // znaki przed i po zaznaczonym tekście
+      const contextRadius = 400;
       const startPos = Math.max(0, selectedIndex - contextRadius);
       const endPos = Math.min(fullPageText.length, selectedIndex + selectedText.length + contextRadius);
       
       let context = fullPageText.substring(startPos, endPos);
       
-      // Spróbuj znaleźć naturalne granice (końce zdań)
       if (startPos > 0) {
         const sentenceStart = context.indexOf('. ');
         if (sentenceStart > 0 && sentenceStart < 100) {
@@ -121,51 +167,99 @@ export default function SelectionTools({
     }
   };
   
-  const createTest = () => {
-    console.log("Creating test for text:", selectedText);
+  const saveToDict = () => {
+    // TODO: Implement save to dictionary
+    console.log("Saving to dictionary:", { selectedText, explanation: streamedText });
   };
   
-  const translateText = () => {
-    console.log("Translating text:", selectedText);
+  const closeExplanation = () => {
+    setIsExplaining(false);
+    setStreamedText('');
+    setIsStreaming(false);
+    setStreamComplete(false);
   };
-  
-  const bookmarkText = () => {
-    console.log("Bookmarking text:", selectedText);
-  };
+
+  // Calculate dynamic width
+  const expandedWidth = Math.max(initialWidth * 4, 320); // 4x szerokość lub minimum 320px
 
   return (
     <div 
-      className={`absolute left-1/2 transform -translate-x-1/2 bottom-24 flex items-center gap-2 p-2 rounded-lg shadow-lg z-50 ${
+      ref={toolboxRef}
+      className={`absolute left-1/2 transform -translate-x-1/2 bottom-24 z-50 transition-all duration-500 ease-in-out ${
         darkMode ? 'bg-slate-800 shadow-slate-700' : 'bg-white shadow-gray-300'
-      }`}
+      } rounded-lg shadow-lg`}
+      style={{
+        width: isExplaining ? `${expandedWidth}px` : 'auto',
+        maxWidth: '600px'
+      }}
     >
-      {/* Text explanation option */}
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" onClick={explainText}>
-              <BookOpen className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t('explainText') || 'Explain text'}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      
-      {/* Close button */}
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => setShowTools(false)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t('closeTools') || 'Close'}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      {!isExplaining ? (
+        // Normal toolbar
+        <div className="p-2 flex items-center gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={explainText}>
+                  <BookOpen className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t('explainText') || 'Explain text'}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => setShowTools(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t('closeTools') || 'Close'}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      ) : (
+        // Expanded explanation view
+        <div className="p-4">
+          {/* Streaming text area */}
+          <div 
+            className={`text-sm leading-relaxed whitespace-pre-wrap break-words mb-4 ${
+              darkMode ? 'text-white' : 'text-gray-900'
+            }`}
+          >
+            {streamedText}
+            {isStreaming && <span className="animate-pulse ml-1">|</span>}
+          </div>
+          
+          {/* Action buttons - always under last line */}
+          {streamComplete && (
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={saveToDict}
+                className="text-xs"
+              >
+                <Save className="h-3 w-3 mr-1" />
+                Zapisz
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={closeExplanation}
+                className="text-xs"
+              >
+                <X className="h-3 w-3 mr-1" />
+                Zamknij
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
