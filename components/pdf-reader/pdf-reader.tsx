@@ -488,6 +488,8 @@ export default function SectionedPDFReader({ fileUrl, fileName, fileId, onClose 
            // Przełącz na zakładkę notatek
            setActiveTab("notes");
          }}
+         pageNumber={pageNumber}
+         pagesRef={pagesRef}
        />
      )}
    </div>  
