@@ -75,11 +75,9 @@ export default function SelectionTools({
   // Delayed button appearance
   useEffect(() => {
     if (streamComplete) {
-      const timer = setTimeout(() => {
-        setShowButtons(true);
-      }, 800);
       
-      return () => clearTimeout(timer);
+        setShowButtons(true);
+
     } else {
       setShowButtons(false);
     }
