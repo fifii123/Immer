@@ -37,17 +37,53 @@ export default function SelectionTools({
   const [streamedText, setStreamedText] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamComplete, setStreamComplete] = useState(false);
+  const [showButtons, setShowButtons] = useState(false);
   
   // Refs for measurements
   const toolboxRef = useRef<HTMLDivElement>(null);
-  const [initialWidth, setInitialWidth] = useState(0);
+  const textRef = useRef<HTMLDivElement>(null);
+  const [initialWidth, setInitialWidth] = useState(120); // Domyślna szerokość toolbox
+  const [textHeight, setTextHeight] = useState(0);
   
-  // Measure initial width
+  // Measure initial width tylko raz na początku
   useEffect(() => {
-    if (toolboxRef.current && !isExplaining) {
-      setInitialWidth(toolboxRef.current.offsetWidth);
+    if (toolboxRef.current && !isExplaining && initialWidth === 120) {
+      // Zmierz tylko jeśli jeszcze nie było mierzone (initialWidth === domyślne 120)
+      const currentWidth = toolboxRef.current.offsetWidth;
+      setInitialWidth(currentWidth);
     }
-  }, [isExplaining]);
+  }, [isExplaining, initialWidth]);
+
+  // Smooth height tracking
+  useEffect(() => {
+    if (textRef.current && isExplaining) {
+      const updateHeight = () => {
+        if (textRef.current) {
+          const newHeight = textRef.current.scrollHeight;
+          setTextHeight(Math.max(newHeight, 20));
+        }
+      };
+      
+      const resizeObserver = new ResizeObserver(updateHeight);
+      resizeObserver.observe(textRef.current);
+      updateHeight();
+      
+      return () => resizeObserver.disconnect();
+    }
+  }, [isExplaining, streamedText]);
+
+  // Delayed button appearance
+  useEffect(() => {
+    if (streamComplete) {
+      const timer = setTimeout(() => {
+        setShowButtons(true);
+      }, 800);
+      
+      return () => clearTimeout(timer);
+    } else {
+      setShowButtons(false);
+    }
+  }, [streamComplete]);
 
   // Tool functions
   const explainText = async () => {
@@ -56,6 +92,7 @@ export default function SelectionTools({
       setIsStreaming(true);
       setStreamedText('');
       setStreamComplete(false);
+      setShowButtons(false);
       
       // Pobierz kontekst
       const context = extractSmartContext();
@@ -168,29 +205,30 @@ export default function SelectionTools({
   };
   
   const saveToDict = () => {
-    // TODO: Implement save to dictionary
     console.log("Saving to dictionary:", { selectedText, explanation: streamedText });
   };
   
   const closeExplanation = () => {
-    setIsExplaining(false);
-    setStreamedText('');
-    setIsStreaming(false);
-    setStreamComplete(false);
+    // Całkowicie ukryj toolbox - tak jak przycisk X
+    setShowTools(false);
   };
 
-  // Calculate dynamic width
-  const expandedWidth = Math.max(initialWidth * 4, 320); // 4x szerokość lub minimum 320px
+  // Calculate dynamic dimensions
+  const expandedWidth = Math.max(initialWidth * 4, 320);
+  const buttonHeight = showButtons ? 44 : 0;
+  const dynamicHeight = isExplaining ? Math.max(textHeight + 32 + buttonHeight, 52) : 'auto';
 
   return (
     <div 
       ref={toolboxRef}
-      className={`absolute left-1/2 transform -translate-x-1/2 bottom-24 z-50 transition-all duration-500 ease-in-out ${
+      className={`absolute left-1/2 transform -translate-x-1/2 bottom-24 z-50 ${
         darkMode ? 'bg-slate-800 shadow-slate-700' : 'bg-white shadow-gray-300'
-      } rounded-lg shadow-lg`}
+      } rounded-lg shadow-lg ${isExplaining ? '' : 'overflow-visible'}`}
       style={{
-        width: isExplaining ? `${expandedWidth}px` : 'auto',
-        maxWidth: '600px'
+        width: isExplaining ? `${expandedWidth}px` : `${initialWidth}px`,
+        height: dynamicHeight,
+        maxWidth: '600px',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
       {!isExplaining ? (
@@ -227,7 +265,8 @@ export default function SelectionTools({
         <div className="p-4">
           {/* Streaming text area */}
           <div 
-            className={`text-sm leading-relaxed whitespace-pre-wrap break-words mb-4 ${
+            ref={textRef}
+            className={`text-sm leading-relaxed whitespace-pre-wrap break-words ${
               darkMode ? 'text-white' : 'text-gray-900'
             }`}
           >
@@ -235,9 +274,16 @@ export default function SelectionTools({
             {isStreaming && <span className="animate-pulse ml-1">|</span>}
           </div>
           
-          {/* Action buttons - always under last line */}
-          {streamComplete && (
-            <div className="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+          {/* Action buttons - delayed appearance */}
+          {showButtons && (
+            <div 
+              className="flex justify-end gap-2 pt-3 mt-3 border-t border-gray-200 dark:border-gray-600"
+              style={{
+                transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out',
+                opacity: showButtons ? 1 : 0,
+                transform: showButtons ? 'translateY(-6px)' : 'translateY(0px)'
+              }}
+            >
               <Button 
                 size="sm" 
                 variant="outline" 
