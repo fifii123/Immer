@@ -67,64 +67,6 @@ export default function SelectionTools({
           <TooltipContent>{t('explainText') || 'Explain text'}</TooltipContent>
         </Tooltip>
       </TooltipProvider>
-
-      <Separator orientation="vertical" className="h-8" />
-      
-      {/* Add to notes option */}
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" onClick={onAddToNotes}>
-              <FileText className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t('addToNotes') || 'Add to notes'}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-
-      <Separator orientation="vertical" className="h-8" />
-      
-      {/* Create test option */}
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" onClick={createTest}>
-              <GraduationCap className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t('createTest') || 'Create test'}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      
-      <Separator orientation="vertical" className="h-8" />
-      
-      {/* Translate option */}
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" onClick={translateText}>
-              <Languages className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t('translate') || 'Translate'}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      
-      <Separator orientation="vertical" className="h-8" />
-      
-      {/* Bookmark option */}
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" onClick={bookmarkText}>
-              <Bookmark className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t('bookmark') || 'Bookmark'}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      
-      <Separator orientation="vertical" className="h-8" />
       
       {/* Close button */}
       <TooltipProvider>

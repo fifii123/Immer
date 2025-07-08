@@ -47,18 +47,7 @@ export default function PDFControls({
   const zoomIn = () => setScale(prev => Math.min(prev + 0.2, 3));
   const zoomOut = () => setScale(prev => Math.max(prev - 0.2, 0.5));
   
-  // Page navigation functions - constrained to section
-  const goToPrevPage = () => {
-    if (pageNumber > sectionStartPage) {
-      setPageNumber(pageNumber - 1);
-    }
-  };
 
-  const goToNextPage = () => {
-    if (pageNumber < actualEndPage) {
-      setPageNumber(pageNumber + 1);
-    }
-  };
 
   return (
     <div className={`p-4 border-t ${darkMode ? 'border-slate-700' : 'border-gray-200'}`}>
@@ -115,50 +104,7 @@ export default function PDFControls({
           )}
         </div>
         
-        <div className="flex items-center gap-3">
-          {/* Only show page navigation for PDF.js renderer */}
-          {!usingNativeRenderer && (
-            <>
-              <span className="text-sm">
-                {pageNumber} / {actualEndPage}
-              </span>
-              
-              <div className="flex items-center">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        size="icon" 
-                        onClick={goToPrevPage} 
-                        disabled={pageNumber <= sectionStartPage}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t('previousPage') || 'Previous page'}</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        size="icon" 
-                        onClick={goToNextPage} 
-                        disabled={pageNumber >= actualEndPage}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t('nextPage') || 'Next page'}</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </>
-          )}
-        </div>
+
       </div>
     </div>
   );
