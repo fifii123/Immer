@@ -69,20 +69,33 @@ export function useNotes({
   useEffect(() => {
     console.log(`useNotes: noteId changed to ${noteId}, fileId: ${fileId}`);
     
+    // Reset state when noteId changes (especially when it becomes null)
     if (noteId !== note.id) {
+      console.log(`useNotes: Resetting state - noteId: ${noteId}, current note.id: ${note.id}`);
       setNote({ id: null, sections: [] });
       setNoteGenerated(false);
+      setIsGeneratingNote(false); // Reset generation state
+      setGenerationProgress(0);   // Reset progress
+      generationAttemptedRef.current = false; // Allow new generation attempts
     }
     
     if (noteId) {
       console.log(`useNotes: Fetching note by ID: ${noteId}`);
       fetchNoteById(noteId);
     } else if (fileId) {
-      console.log(`useNotes: Fetching note for fileId: ${fileId}`);
-      fetchExistingNote(fileId);
+      console.log(`useNotes: No noteId, resetting to allow auto-generation`);
+      // When noteId is null, ensure we reset all relevant state
+      setNote({ id: null, sections: [] });
+      setNoteGenerated(false);
+      setIsGeneratingNote(false);
+      setGenerationProgress(0);
+      generationAttemptedRef.current = false;
     } else {
       setNote({ id: null, sections: [] });
       setNoteGenerated(false);
+      setIsGeneratingNote(false);
+      setGenerationProgress(0);
+      generationAttemptedRef.current = false;
     }
   }, [noteId, fileId]);
 
