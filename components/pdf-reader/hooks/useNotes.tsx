@@ -67,17 +67,24 @@ export function useNotes({
 
   // Fetch existing note when component mounts
   useEffect(() => {
-
-    if (!fetchAttemptedRef.current) {
-      fetchAttemptedRef.current = true;
-      
-      if (noteId) {
-        fetchNoteById(noteId);
-      } else if (fileId) {
-        fetchExistingNote(fileId);
-      }
+    console.log(`useNotes: noteId changed to ${noteId}, fileId: ${fileId}`);
+    
+    if (noteId !== note.id) {
+      setNote({ id: null, sections: [] });
+      setNoteGenerated(false);
     }
-  }, [fileId, noteId]);
+    
+    if (noteId) {
+      console.log(`useNotes: Fetching note by ID: ${noteId}`);
+      fetchNoteById(noteId);
+    } else if (fileId) {
+      console.log(`useNotes: Fetching note for fileId: ${fileId}`);
+      fetchExistingNote(fileId);
+    } else {
+      setNote({ id: null, sections: [] });
+      setNoteGenerated(false);
+    }
+  }, [noteId, fileId]);
 
   // Function to fetch a specific note by ID
   const fetchNoteById = async (id: number) => {
