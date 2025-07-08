@@ -44,15 +44,35 @@ export async function POST(request: Request) {
       messages: [
         {
           role: "system",
-          content: `Jesteś asystentem tworzącym strukturę notatek studenckich na podstawie dokumentów akademickich. Twoim zadaniem jest:
+          content: `Jesteś ekspertem w tworzeniu zwięzłych notatek studenckich. Twoim zadaniem jest:
 
           1. Stworzyć strukturę dla sekcji ${sectionNumber} (strony ${startPage}-${endPage})
           2. Podzielić materiał na 4-7 logicznych sekcji tematycznych
           3. Dla każdej sekcji przygotować tytuł i krótki opis (jedno zdanie)
           4. ${outlineOnly 
-              ? 'Dodaj krótką, zwięzłą treść początkową (2-3 zdania) dla każdej sekcji, która będzie mogła być rozszerzona później.'
-              : 'Przygotować pełną treść każdej sekcji z definicjami, przykładami i wyjaśnieniami.'
-            }
+              ? 'Dla każdej sekcji stworzyć zwięzłą treść w formie bullet points (3-6 punktów)' 
+              : 'Przygotować szczegółową treść każdej sekcji z definicjami, przykładami i wyjaśnieniami.'}
+          
+          WAŻNE ZASADY dla treści sekcji:
+          - NIE używaj zwrotów typu "Ta sekcja omawia...", "W tej części...", "Sekcja opisuje..."
+          - Zacznij od konkretnych informacji i definicji
+          - Używaj markdown list format (- ) dla kluczowych pojęć
+          - KAŻDY punkt listy MUSI być w NOWEJ LINII
+          - Dodawaj praktyczne przykłady i wzory gdzie to możliwe
+          - Zachowuj zwięzłość ale merytoryczność
+          
+          Przykład DOBREJ treści sekcji (zwróć uwagę na markdown format!):
+          "- Polis - niezależne miasto-państwo z własnym rządem i prawami
+          - Ewolucja władzy: monarchia → tyrania → arystokracja → oligarchia → demokracja  
+          - Sparta vs Ateny - różne modele: militarny vs kulturalny
+          - Agora - centrum życia politycznego i handlowego miasta"
+          
+          Przykład ZŁEJ treści (NIE RÓB TAK):
+          "Ta sekcja omawia różnorodność greckich miast-państw oraz ich systemy rządów..."
+          
+          Przykład ZŁEGO FORMATOWANIA (NIE RÓB TAK):
+          "- Polis - miasto-państwo - Ewolucja władzy - Sparta vs Ateny"
+          (punkty w jednej linii - ŹLE!)
           
           Odpowiedz w formacie JSON zgodnie z tą strukturą:
           {
@@ -61,8 +81,8 @@ export async function POST(request: Request) {
                 "title": "Tytuł sekcji (krótki, konkretny)",
                 "description": "Jedno zdanie streszczające zawartość sekcji",
                 "content": "${outlineOnly 
-                  ? 'Krótka treść początkowa (2-3 zdania) opisująca temat sekcji. Unikaj zdań w stylu "ta sekcja opisuje...".'
-                  : 'Pełna treść notatki zawierająca ważne pojęcia, definicje, wzory, przykłady itp.'
+                  ? 'Zwięzła treść w formie bullet points (3-6 punktów), zaczynająca od konkretnych informacji, NIE od "Ta sekcja..."'
+                  : 'Szczegółowa treść notatki zawierająca ważne pojęcia, definicje, wzory, przykłady.'
                 }"
               }
             ]
@@ -70,19 +90,32 @@ export async function POST(request: Request) {
         },
         {
           role: "user",
-          content: `Stwórz strukturę notatek dla sekcji ${sectionNumber} (strony ${startPage}-${endPage}) dokumentu. ${outlineOnly 
-              ? 'Generuj strukturę z krótką, zwięzłą treścią początkową (2-3 zdania) dla każdej sekcji.' 
-              : 'Generuj pełne notatki z treścią.'
-            } Zwróć wynik jako obiekt JSON.
+          content: `Stwórz strukturę notatek dla sekcji ${sectionNumber} (strony ${startPage}-${endPage}) dokumentu.
           
+          ${outlineOnly 
+            ? 'Generuj treść w formie zwięzłych bullet points (3-6 punktów na sekcję). Zacznij od konkretnych definicji i faktów, NIE od "Ta sekcja omawia..."\n\nKRYTYCZNE: Każdy punkt • MUSI być w osobnej linii!' 
+            : 'Generuj szczegółowe notatki z pełną treścią, definicjami i przykładami.'
+          }
+          
+          Styl wymaganej treści:
+          ✅ DOBRZE: 
+          "- SQL - język zapytań do baz danych
+          - SELECT - podstawowa komenda wyboru danych"
+          
+          ❌ ŹLE: 
+          "Ta sekcja opisuje język SQL..."
+          "- SQL - język zapytań - SELECT - komenda" (punkty w jednej linii)
+          
+          Zwróć wynik jako obiekt JSON.
+                  
           Dokument: "${fileName}"
-          
+                  
           Treść sekcji:
           ${pdfContent.slice(0, 15000)}`
         }
       ],
       temperature: 0.7,
-      max_tokens: 2000,
+      max_tokens: 2500, // Zwiększone dla lepszej jakości
       response_format: { type: "json_object" }
     });
 
@@ -98,13 +131,30 @@ export async function POST(request: Request) {
     }
 
     // Przetwarzanie sekcji, aby upewnić się, że wszystkie mają oczekiwane właściwości
-    const processedSections = aiResponse.sections.map((section, index) => ({
-      id: index + 1,
-      title: section.title || `Sekcja ${index + 1}`,
-      description: section.description || `Zawartość ze stron ${startPage}-${endPage}`,
-      content: section.content || "Ta sekcja wymaga uzupełnienia treści.",
-      expanded: false // Domyślnie zwinięte
-    }));
+    const processedSections = aiResponse.sections.map((section, index) => {
+      let content = section.content || "";
+      
+      // Post-processing: Konwertuj bullet points na markdown
+      if (content && content.includes('•')) {
+        console.log('Original content:', content);
+        
+        // Zamień • na - (markdown list format) i wymuś nowe linie
+        content = content
+          .replace(/•\s*/g, '\n- ') // Zamień • na markdown list format
+          .replace(/^\n/, '') // Usuń początkowy \n jeśli istnieje
+          .trim();
+          
+        console.log('Processed content:', content);
+      }
+      
+      return {
+        id: index + 1,
+        title: section.title || `Sekcja ${index + 1}`,
+        description: section.description || `Zawartość ze stron ${startPage}-${endPage}`,
+        content: outlineOnly ? content : content,
+        expanded: false // Domyślnie zwinięte
+      };
+    });
 
     // Tworzenie obiektu struktury notatki
     const generatedNote = {
