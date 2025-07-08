@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     // Pobierz parametry z URL
     const searchParams = request.nextUrl.searchParams;
     const fileId = searchParams.get('fileId');
+    const projectOnly = searchParams.get('projectOnly');
     
     if (!fileId) {
       return NextResponse.json({ error: 'Missing fileId parameter' }, { status: 400 });
@@ -23,29 +24,27 @@ export async function GET(request: NextRequest) {
     }
     
     const projectId = fileResult.rows[0].project_id;
-    
+    var result;
     // Pobierz testy z podziałem na te powiązane z plikiem i pozostałe z projektu
-    const result = await Pool.query(
-      `SELECT 
-         test_id, 
-         test_name, 
-         content, 
-         created_at, 
-         question_type, 
-         score_mode, 
-         save_score,
-         file_id,
-         CASE 
-           WHEN file_id = $1 THEN true
-           ELSE false
-         END AS is_file_test
-       FROM tests 
-       WHERE project_id = $2
-       ORDER BY 
-         is_file_test DESC, -- Najpierw testy dla pliku
-         created_at DESC     -- Potem pozostałe według daty (od najnowszych)`,
-      [fileId, projectId]
-    );
+    if (projectOnly === 'true') {
+      // Pobierz wszystkie testy z projektu
+       result = await Pool.query(
+        `SELECT test_id, test_name, content, created_at, question_type, score_mode, save_score, file_id,
+         CASE WHEN file_id = $1 THEN true ELSE false END AS is_file_test
+         FROM tests WHERE project_id = $2
+         ORDER BY is_file_test DESC, created_at DESC`,
+        [fileId, projectId]
+      );
+    } else {
+      // Pobierz tylko testy dla konkretnego pliku
+       result = await Pool.query(
+        `SELECT test_id, test_name, content, created_at, question_type, score_mode, save_score, file_id,
+         true AS is_file_test
+         FROM tests WHERE file_id = $1
+         ORDER BY created_at DESC`,
+        [fileId]
+      );
+    }
     
     return NextResponse.json(result.rows);
   } catch (error) {
