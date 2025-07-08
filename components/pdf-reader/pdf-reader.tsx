@@ -113,6 +113,71 @@ export default function SectionedPDFReader({ fileUrl, fileName, fileId, onClose 
    }
  }, [currentSection, pdfSource]);
 
+
+ // Get current section note data
+ const currentSectionNote = sectionNotes[currentSection] || { id: null, isLoading: true, error: null };
+
+ useEffect(() => {
+  const handleKeyDown = (event: KeyboardEvent) => {
+    const activeElement = document.activeElement;
+    const isInputFocused = activeElement && (
+      activeElement.tagName === 'INPUT' || 
+      activeElement.tagName === 'TEXTAREA' ||
+      activeElement.getAttribute('role') === 'textbox'
+    );
+    
+    if (isInputFocused) return;
+    
+    const hasOpenModal = document.querySelector('[role="dialog"]') || 
+                        document.querySelector('.modal') ||
+                        document.querySelector('[data-state="open"]');
+    
+    if (hasOpenModal) return;
+    
+    switch (event.key) {
+      case 'ArrowLeft':
+        event.preventDefault();
+        if (currentSection > 1 && !currentSectionNote.isLoading) {
+          goToPreviousSection();
+          toast({
+            title: `Sekcja ${currentSection - 1}`,
+            description: `Nawigacja strzałkami: ←`,
+            duration: 1500,
+          });
+        } else if (currentSection <= 1) {
+          toast({
+            title: "Pierwsza sekcja",
+            description: "To jest już pierwsza sekcja dokumentu",
+            duration: 1000,
+          });
+        }
+        break;
+        
+      case 'ArrowRight':
+        event.preventDefault();
+        if (currentSection < totalSections && !currentSectionNote.isLoading) {
+          goToNextSection();
+          toast({
+            title: `Sekcja ${currentSection + 1}`,
+            description: `Nawigacja strzałkami: →`,
+            duration: 1500,
+          });
+        } else if (currentSection >= totalSections) {
+          toast({
+            title: "Ostatnia sekcja",
+            description: "To jest już ostatnia sekcja dokumentu",
+            duration: 1000,
+          });
+        }
+        break;
+    }
+  };
+
+  document.addEventListener('keydown', handleKeyDown);
+  return () => document.removeEventListener('keydown', handleKeyDown);
+}, [currentSection, totalSections, currentSectionNote.isLoading, toast]);
+
+
  // Function to fetch existing section note
  const fetchSectionNote = async () => {
    // Jeśli już mamy informacje o tej sekcji i notatka jest w trakcie ładowania, nie powtarzaj
@@ -227,8 +292,6 @@ export default function SectionedPDFReader({ fileUrl, fileName, fileId, onClose 
    }
  };
 
- // Get current section note data
- const currentSectionNote = sectionNotes[currentSection] || { id: null, isLoading: true, error: null };
 
  return (
    <div className={`fixed inset-0 z-50 flex flex-col ${darkMode ? 'bg-slate-900 text-white' : 'bg-white text-black'}`}>
@@ -245,45 +308,51 @@ export default function SectionedPDFReader({ fileUrl, fileName, fileId, onClose 
        </div>
        <div className="flex items-center gap-2">
          {/* Section navigation */}
-         {numPages && totalSections > 1 && (
-           <div className="flex items-center mr-4">
-             <TooltipProvider>
-               <Tooltip>
-                 <TooltipTrigger asChild>
-                   <Button 
-                     variant="outline" 
-                     size="icon" 
-                     onClick={goToPreviousSection} 
-                     disabled={currentSection <= 1 || currentSectionNote.isLoading}
-                   >
-                     <ChevronLeft className="h-4 w-4" />
-                   </Button>
-                 </TooltipTrigger>
-                 <TooltipContent>Poprzednia sekcja</TooltipContent>
-               </Tooltip>
-             </TooltipProvider>
-             
-             <span className="mx-2 text-sm">
-               {currentSection}/{totalSections}
-             </span>
-             
-             <TooltipProvider>
-               <Tooltip>
-                 <TooltipTrigger asChild>
-                   <Button 
-                     variant="outline" 
-                     size="icon" 
-                     onClick={goToNextSection} 
-                     disabled={currentSection >= totalSections || currentSectionNote.isLoading}
-                   >
-                     <ChevronRight className="h-4 w-4" />
-                   </Button>
-                 </TooltipTrigger>
-                 <TooltipContent>Następna sekcja</TooltipContent>
-               </Tooltip>
-             </TooltipProvider>
-           </div>
-         )}
+{/* Section navigation */}
+{numPages && totalSections > 1 && (
+  <div className="flex items-center mr-4">
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex items-center">
+            <Button 
+              variant="outline" 
+              size="icon" 
+              onClick={goToPreviousSection} 
+              disabled={currentSection <= 1 || currentSectionNote.isLoading}
+              className="relative"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            
+            <span className="mx-2 text-sm font-medium">
+              {currentSection}/{totalSections}
+            </span>
+            
+            <Button 
+              variant="outline" 
+              size="icon" 
+              onClick={goToNextSection} 
+              disabled={currentSection >= totalSections || currentSectionNote.isLoading}
+              className="relative"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-center">
+          <div className="space-y-1">
+            <p className="font-medium">Nawigacja sekcjami</p>
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              <div>← → Strzałki</div>
+              <div>🖱️ Kliknij przyciski</div>
+            </div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  </div>
+)}
          <Button variant="ghost" size="icon" onClick={onClose}>
            <X className="h-5 w-5" />
          </Button>
