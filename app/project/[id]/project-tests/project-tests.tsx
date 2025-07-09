@@ -1,10 +1,29 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useRef } from 'react';
+import { useParams } from 'next/navigation';
 import { usePreferences } from "@/context/preferences-context";
 import { useProjects } from "@/context/projects-context";
-import { useParams } from "next/navigation";
-import { useUserId } from '@/hooks/useAuthApi';
+import { useProjectTests } from '@/app/project/[id]/hooks/useProjectTests';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Card } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from '@/components/ui/dropdown-menu';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -16,7 +35,6 @@ import {
   ChevronDown,
   ArrowUp,
   Home,
-  ExternalLink,
   CheckCircle,
   XCircle,
   RefreshCw,
@@ -27,50 +45,8 @@ import {
   PlayCircle,
   CheckSquare,
   FilterX
-} from 'lucide-react';
-import { Button } from "@/components/ui/button";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-  DropdownMenuCheckboxItem
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { useToast } from "@/components/ui/use-toast";
-import MarkdownContent from '@/components/MarkdownContent';
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-
-// Interfejsy typów
-interface Test {
-  test_id: number;
-  test_name: string;
-  question_type: string;
-  created_at: string;
-  content: string;
-  save_score: boolean;
-  file_id?: number;
-  fileName?: string; // Nazwa pliku powiązanego z testem
-  score?: number; // Wynik testu, jeśli został już rozwiązany
-  questionsCount?: number; // Liczba pytań w teście
-}
-
-interface Question {
-  question: string;
-  context?: string;
-  options?: string[];
-  correctAnswer: string;
-  explanation?: string;
-}
+} from "lucide-react";
+import type { MultipleChoiceQuestion } from '@/app/project/[id]/hooks/useProjectTests';
 
 interface ProjectTestsProps {
   projectId: number;
@@ -78,471 +54,82 @@ interface ProjectTestsProps {
 }
 
 const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
-  const { darkMode, t } = usePreferences();
-  const { toast } = useToast();
+  const { darkMode } = usePreferences();
   const { projects } = useProjects();
   const params = useParams();
-  const { userId } = useUserId();
-  
-  const [tests, setTests] = useState<Test[]>([]);
-  const [currentTestIndex, setCurrentTestIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [filterType, setFilterType] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'alphabetical'>('newest');
-  const [testInProgress, setTestInProgress] = useState(false);
-  const [takingTest, setTakingTest] = useState(false);
-  const [testSubmitted, setTestSubmitted] = useState(false);
-  const [isCheckingAnswers, setIsCheckingAnswers] = useState(false);
-  const [filterByFile, setFilterByFile] = useState<number | null>(null);
-  
-  // States for test-taking
-  const [currentQuestions, setCurrentQuestions] = useState<Question[]>([]);
-  const [userAnswers, setUserAnswers] = useState<string[]>([]);
-  const [answerFeedback, setAnswerFeedback] = useState<Array<{
-    isCorrect: boolean;
-    feedback: string;
-    correctAnswer?: string;
-  } | null>>([]);
-  const [testScore, setTestScore] = useState(0);
-  const [expandedQuestions, setExpandedQuestions] = useState<boolean[]>([]);
-  
-  // References
   const testContainerRef = useRef<HTMLDivElement>(null);
-  
-  // Pobierz bieżący projekt
+
+  // Get project
   const project = projects.find(
     (p) => p.project_id.toString() === params.id?.toString() || p.project_id === projectId
   );
-  
-  // Pobierz wszystkie testy dla projektu
-  useEffect(() => {
-    const fetchTests = async () => {
-        try {
-          setLoading(true);
-          
-          // Sprawdzamy, czy projekt ma jakiekolwiek pliki
-          if (!project || !project.attached_file || project.attached_file.length === 0) {
-            console.log("Brak plików w projekcie, nie można pobrać testów");
-            setLoading(false);
-            return;
-          }
-          
-          // Używamy ID pierwszego pliku w projekcie, aby pobrać wszystkie testy projektu
-          const firstFileId = project.attached_file[0].file_id;
-          console.log(`Pobieranie testów używając fileId=${firstFileId} z projektu ID=${projectId}`);
-          
-          const response = await fetch(`/api/tests?fileId=${firstFileId}&projectOnly=true`);
-          
-          if (!response.ok) {
-            throw new Error('Nie udało się pobrać testów');
-          }
-          
-          const data = await response.json();
-          console.log(`Pobrano ${data.length} testów dla projektu`);
-          
-          // Przetwarzanie testów - dodanie liczby pytań i nazw plików
-          const processedTests = data.map((test) => {
-            // Dodaj liczbę pytań
-            let questionsCount = 0;
-            try {
-              const content = JSON.parse(test.content);
-              questionsCount = content.questions?.length || 0;
-            } catch (e) {
-              console.error("Nie można sparsować zawartości testu:", e);
-            }
-            
-            // Dodaj nazwę pliku, jeśli plik istnieje
-            let fileName = "";
-            if (test.file_id && project.attached_file) {
-              const matchingFile = project.attached_file.find(
-                file => file.file_id === test.file_id
-              );
-              if (matchingFile) {
-                fileName = matchingFile.file_name;
-              }
-            }
-            
-            return {
-              ...test,
-              questionsCount,
-              fileName
-            };
-          });
-          
-          setTests(processedTests);
-          
-          // Jeśli są testy, pobierz też wyniki dla poszczególnych testów
-          if (processedTests.length > 0 && userId) {
-            await fetchTestResults(processedTests);
-          }
-        } catch (error) {
-          console.error('Błąd podczas pobierania testów:', error);
-          toast({
-            title: "Błąd",
-            description: "Nie udało się załadować testów",
-            variant: "destructive",
-          });
-        } finally {
-          setLoading(false);
-        }
-      };
-      
-    // Pobierz wyniki testów dla zalogowanego użytkownika i wszystkich testów
-    const fetchTestResults = async (testsToCheck: Test[]) => {
-      try {
-        // Dla każdego testu pobierz wyniki, jeśli istnieją
-        const updatedTests = [...testsToCheck];
-        
-        for (const test of updatedTests) {
-          // Używamy istniejącego API do pobrania wyników testu
-          const response = await fetch(`/api/tests/results?testId=${test.test_id}&userId=${userId}`);
-          
-          if (response.ok) {
-            const result = await response.json();
-            
-            // Jeśli test ma wyniki, dodaj je do obiektu testu
-            if (result.exists) {
-              const testIndex = updatedTests.findIndex(t => t.test_id === test.test_id);
-              if (testIndex !== -1) {
-                updatedTests[testIndex] = {
-                  ...updatedTests[testIndex],
-                  score: result.score
-                };
-              }
-            }
-          }
-        }
-        
-        // Aktualizuj stan testów z wynikami
-        setTests(updatedTests);
-      } catch (error) {
-        console.error('Błąd podczas pobierania wyników testów:', error);
-      }
-    };
-    
-    fetchTests();
-  }, [projectId, toast, project, userId]);
-  
-  // Filtrowanie testów
-  const filteredTests = tests.filter(test => {
-    // Filtrowanie według wyszukiwania
-    if (searchTerm && !test.test_name.toLowerCase().includes(searchTerm.toLowerCase())) {
-      return false;
-    }
 
-    if (filterByFile !== null && test.file_id !== filterByFile) {
-      return false;
-    }
-    
-    // Filtrowanie według typu
-    if (filterType) {
-      if (filterType === 'multiple_choice' && test.question_type !== 'multiple_choice') return false;
-      if (filterType === 'open_ended' && test.question_type !== 'open_ended') return false;
-      if (filterType === 'completed' && !test.score) return false;
-      if (filterType === 'not_completed' && test.score !== undefined) return false;
-    }
-    
-    return true;
-  });
-  
-  // Sortowanie testów
-  const sortedTests = [...filteredTests].sort((a, b) => {
-    if (sortBy === 'newest') {
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    } else if (sortBy === 'oldest') {
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-    } else if (sortBy === 'alphabetical') {
-      return a.test_name.localeCompare(b.test_name);
-    }
-    return 0;
-  });
+  // Use the project tests hook (używamy działającego hooka)
+  const {
+    tests,
+    loading,
+    selectedTest,
+    sidebarOpen,
+    searchTerm,
+    filterType,
+    filterByFile,
+    isTestTaking,
+    currentQuestions,
+    userAnswers,
+    testSubmitted,
+    testScore,
+    answerFeedback,
+    isCheckingAnswers,
+    expandedQuestions,
+    hasActiveFilters,
+    setSidebarOpen,
+    setSearchTerm,
+    setFilterType,
+    setFilterByFile,
+    getFilteredAndSortedTests,
+    handleSelectTest,
+    startTest,
+    handleRestartTest,
+    handleAnswerChange,
+    toggleQuestionExpand,
+    handleSubmitMultipleChoiceTest,
+    handleCheckOpenEndedAnswers,
+    resetFilters,
+    formatDate
+  } = useProjectTests({ projectId, project });
 
-  // Funkcja resetowania filtrów
-  const resetFilters = () => {
-    setFilterType(null);
-    setFilterByFile(null);
-    setSearchTerm('');
-    setSortBy('newest');
-    setCurrentTestIndex(0);
-  };
+  const sortedTests = getFilteredAndSortedTests();
 
-  // Sprawdź czy są zastosowane jakiekolwiek filtry
-  const hasActiveFilters = filterType !== null || filterByFile !== null || searchTerm !== '';
-  
-  // Przełącz test
+  // Stan dla nawigacji jak w oryginale
+  const [currentTestIndex, setCurrentTestIndex] = React.useState(0);
+
+  // Funkcja switchTest jak w oryginale
   const switchTest = (index: number) => {
-    // Resetuj stan testu
-    setTestInProgress(false);
-    setTakingTest(false);
-    setTestSubmitted(false);
-    setUserAnswers([]);
-    setAnswerFeedback([]);
-    setExpandedQuestions([]);
-    
-    // Ustaw nowy indeks
-    setCurrentTestIndex(index);
-    
-    // Przewiń na górę
-    if (testContainerRef.current) {
-      testContainerRef.current.scrollTop = 0;
+    if (index >= 0 && index < sortedTests.length) {
+      setCurrentTestIndex(index);
+      handleSelectTest(sortedTests[index]);
     }
   };
-  
-  // Rozpocznij rozwiązywanie testu
-  const startTest = () => {
-    if (!sortedTests[currentTestIndex]) return;
-    
-    try {
-      // Parsuj zawartość testu
-      const content = JSON.parse(sortedTests[currentTestIndex].content);
-      if (!content.questions || !content.questions.length) {
-        throw new Error('Brak pytań w teście');
+
+  // Ustaw currentTestIndex gdy selectedTest się zmieni
+  React.useEffect(() => {
+    if (selectedTest) {
+      const index = sortedTests.findIndex(test => test.test_id === selectedTest.test_id);
+      if (index !== -1) {
+        setCurrentTestIndex(index);
       }
-      
-      // Ustaw pytania
-      setCurrentQuestions(content.questions);
-      
-      // Zainicjuj odpowiedzi użytkownika
-      setUserAnswers(new Array(content.questions.length).fill(''));
-      
-      // Zainicjuj stan rozwijania - domyślnie wszystkie pytania rozwinięte
-      setExpandedQuestions(new Array(content.questions.length).fill(true));
-      
-      // Wyczyść feedback
-      setAnswerFeedback(new Array(content.questions.length).fill(null));
-      
-      // Ustaw stan testu
-      setTakingTest(true);
-      setTestInProgress(true);
-      setTestSubmitted(false);
-    } catch (error) {
-      console.error("Błąd rozpoczynania testu:", error);
-      toast({
-        title: "Błąd rozpoczynania testu",
-        description: "Nie można wczytać pytań. Format testu jest nieprawidłowy.",
-        variant: "destructive",
-      });
     }
-  };
-  
-  // Obsługa zmiany odpowiedzi
-  const handleAnswerChange = (index: number, value: string) => {
-    const newAnswers = [...userAnswers];
-    newAnswers[index] = value;
-    setUserAnswers(newAnswers);
-  };
-  
-  // Przełączanie rozwinięcia pytania
-  const toggleQuestionExpand = (index: number) => {
-    const newExpandedState = [...expandedQuestions];
-    newExpandedState[index] = !newExpandedState[index];
-    setExpandedQuestions(newExpandedState);
-  };
-  
-  // Sprawdzanie odpowiedzi dla testów zamkniętych
-  const handleSubmitMultipleChoiceTest = () => {
-    // Sprawdzenie, czy wszystkie odpowiedzi zostały udzielone
-    const unansweredQuestions = userAnswers.filter(answer => !answer).length;
-    
-    if (unansweredQuestions > 0) {
-      toast({
-        title: "Uzupełnij wszystkie odpowiedzi",
-        description: `Nie odpowiedziano na ${unansweredQuestions} ${
-          unansweredQuestions === 1 ? 'pytanie' : unansweredQuestions < 5 ? 'pytania' : 'pytań'
-        }.`,
-        variant: "warning",
-      });
-      return;
+  }, [selectedTest, sortedTests]);
+
+  // Automatycznie wybierz pierwszy test
+  React.useEffect(() => {
+    if (sortedTests.length > 0 && !selectedTest) {
+      handleSelectTest(sortedTests[0]);
     }
-    
-    // Obliczanie wyniku
-    let correctCount = 0;
-    const feedback = [];
-    
-    for (let i = 0; i < currentQuestions.length; i++) {
-      const isCorrect = userAnswers[i] === currentQuestions[i].correctAnswer;
-      if (isCorrect) {
-        correctCount++;
-      }
-      
-      feedback.push({
-        isCorrect,
-        feedback: isCorrect 
-          ? "Poprawna odpowiedź" 
-          : `Niepoprawna odpowiedź. Prawidłowa odpowiedź: ${currentQuestions[i].correctAnswer}`,
-        correctAnswer: currentQuestions[i].correctAnswer
-      });
-    }
-    
-    const score = Math.round((correctCount / currentQuestions.length) * 100);
-    
-    // Ustaw stany interfejsu
-    setTestScore(score);
-    setAnswerFeedback(feedback);
-    setTestSubmitted(true);
-    
-    // Zapisz wyniki w bazie danych
-    saveTestResults(score, feedback);
-    
-    // Toast z wynikiem
-    toast({
-      title: "Test zakończony",
-      description: `Twój wynik: ${score}%.`,
-      variant: score >= 70 ? "default" : "warning",
-    });
-  };
-  
-  // Sprawdzanie odpowiedzi dla testów otwartych
-  const handleCheckOpenEndedAnswers = async () => {
-    if (!userId) {
-      console.warn("User ID not available. Cannot check answers.");
-      return;
-    }
-    
-    // Sprawdzenie, czy wszystkie odpowiedzi zostały wprowadzone
-    const unansweredQuestions = userAnswers.filter(answer => !answer.trim()).length;
-    
-    if (unansweredQuestions > 0) {
-      toast({
-        title: "Uzupełnij wszystkie odpowiedzi",
-        description: `Nie odpowiedziano na ${unansweredQuestions} ${
-          unansweredQuestions === 1 ? 'pytanie' : unansweredQuestions < 5 ? 'pytania' : 'pytań'
-        }.`,
-        variant: "warning",
-      });
-      return;
-    }
-    
-    // Włącz stan ładowania
-    setIsCheckingAnswers(true);
-    
-    try {
-      // Pokaż toast informujący o sprawdzaniu odpowiedzi
-      toast({
-        title: "Sprawdzanie odpowiedzi",
-        description: "Trwa analizowanie odpowiedzi przez AI. Może to potrwać do 30 sekund.",
-      });
-      
-      // Używamy istniejącego API do sprawdzania odpowiedzi
-      const response = await fetch('/api/tests/check-answers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          testId: sortedTests[currentTestIndex].test_id,
-          userId,
-          questions: currentQuestions,
-          answers: userAnswers
-        }),
-      });
-      
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Nie udało się sprawdzić odpowiedzi');
-      }
-      
-      const result = await response.json();
-      
-      // Ustawienie oceny i informacji zwrotnej
-      setAnswerFeedback(result.feedback);
-      setTestScore(result.score);
-      setTestSubmitted(true);
-      
-      // Zapisz wyniki w bazie danych
-      saveTestResults(result.score, result.feedback);
-      
-      // Pokaż toast z wynikiem
-      toast({
-        title: "Sprawdzanie zakończone",
-        description: `Twój wynik: ${result.score}%. ${
-          result.score >= 70 
-            ? 'Dobra robota!' 
-            : 'Przejrzyj informację zwrotną, aby dowiedzieć się więcej.'
-        }`,
-        variant: result.score >= 70 ? "default" : "warning",
-      });
-    } catch (error) {
-      console.error("Błąd sprawdzania odpowiedzi:", error);
-      toast({
-        title: "Błąd sprawdzania odpowiedzi",
-        description: error instanceof Error ? error.message : "Wystąpił problem ze sprawdzaniem odpowiedzi.",
-        variant: "destructive",
-      });
-    } finally {
-      // Zawsze wyłącz stan ładowania po zakończeniu
-      setIsCheckingAnswers(false);
-    }
-  };
-  
-  // Zapisywanie wyników testu
-  const saveTestResults = async (score: number, feedback = null) => {
-    try {
-      if (!userId) {
-        console.warn("User ID not available. Cannot save test results.");
-        return;
-      }
-      
-      const currentTest = sortedTests[currentTestIndex];
-      
-      // Przygotowanie odpowiedzi do zapisu
-      let answers;
-      
-      if (currentTest.question_type === 'multiple_choice') {
-        answers = currentQuestions.map((question, index) => ({
-          question_id: index,
-          user_answer: userAnswers[index],
-          is_correct: userAnswers[index] === question.correctAnswer,
-          points: userAnswers[index] === question.correctAnswer ? 1 : 0
-        }));
-      } else {
-        // Dla pytań otwartych wykorzystujemy informację zwrotną
-        answers = feedback.map((fb, index) => ({
-          question_id: index,
-          user_answer: userAnswers[index],
-          is_correct: fb ? fb.isCorrect : false,
-          points: fb && fb.isCorrect ? 1 : 0
-        }));
-      }
-      
-      // Używamy istniejącego API do zapisu wyników
-      const response = await fetch('/api/tests/save-results', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          testId: currentTest.test_id,
-          userId,
-          score,
-          answers
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Nie udało się zapisać wyników testu');
-      }
-      
-      // Aktualizuj lokalny stan wyników
-      const updatedTest = { ...currentTest, score };
-      setTests(prevTests => prevTests.map(test => 
-        test.test_id === updatedTest.test_id ? updatedTest : test
-      ));
-      
-    } catch (error) {
-      console.error("Błąd zapisywania wyników testu:", error);
-      toast({
-        title: "Błąd zapisywania wyników",
-        description: "Nie udało się zapisać wyników testu w bazie danych.",
-        variant: "destructive",
-      });
-    }
-  };
-  
-  // Obsługa klawiatury
-  useEffect(() => {
+  }, [sortedTests, selectedTest, handleSelectTest]);
+
+  // Obsługa klawiatury jak w oryginale
+  React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight' && currentTestIndex < sortedTests.length - 1) {
         switchTest(currentTestIndex + 1);
@@ -556,9 +143,12 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentTestIndex, sortedTests.length, onClose]);
-  
-  // Formatowanie daty
-  const formatDate = (dateString: string) => {
+
+  // Bieżący test
+  const currentTest = sortedTests[currentTestIndex];
+
+  // Formatowanie daty z oryginału
+  const formatDateOriginal = (dateString: string) => {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('pl-PL', {
       day: '2-digit',
@@ -568,9 +158,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
       minute: '2-digit'
     }).format(date);
   };
-  
 
-  
   // Jeśli trwa ładowanie
   if (loading) {
     return (
@@ -595,10 +183,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
     );
   }
   
-  // Bieżący test
-  const currentTest = sortedTests[currentTestIndex];
-  
-  // Jeśli nie ma testów po załadowaniu (faktyczny brak testów w bazie danych)
+  // Jeśli nie ma testów po załadowaniu
   if (!loading && tests.length === 0) {
     return (
       <div className={`fixed inset-0 z-50 flex flex-col ${darkMode ? 'bg-slate-900 text-white' : 'bg-white text-black'}`}>
@@ -625,7 +210,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
       </div>
     );
   }
-  
+
   return (
     <div className={`fixed inset-0 z-50 flex flex-col ${darkMode ? 'bg-slate-900 text-white' : 'bg-white text-black'}`}>
       {/* Nagłówek */}
@@ -662,7 +247,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
         </div>
         
         <div className="flex items-center gap-2">
-          {/* Przycisk resetowania filtrów - pokazuj tylko gdy są aktywne filtry */}
+          {/* Przycisk resetowania filtrów */}
           {hasActiveFilters && (
             <Button variant="outline" size="sm" className="gap-2" onClick={resetFilters}>
               <FilterX className="h-4 w-4" />
@@ -679,6 +264,33 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Wybór testu</DropdownMenuLabel>
+              {sortedTests.length > 0 && (
+                <>
+                  {sortedTests.map((test, index) => (
+                    <DropdownMenuItem
+                      key={test.test_id}
+                      onClick={() => switchTest(index)}
+                      className={`flex items-center justify-between ${currentTestIndex === index ? 'bg-muted' : ''}`}
+                    >
+                      <div className="flex flex-col gap-1 mr-2">
+                        <span className="text-sm">{test.test_name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {test.fileName || 'Bez pliku'}
+                        </span>
+                      </div>
+                      
+                      {test.score !== undefined && (
+                        <Badge variant={test.score >= 70 ? "success" : "warning"} className="text-xs">
+                          {test.score}%
+                        </Badge>
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              
               <DropdownMenuLabel>Typ testu</DropdownMenuLabel>
               <DropdownMenuCheckboxItem 
                 checked={filterType === 'multiple_choice'}
@@ -692,8 +304,6 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
               >
                 Pytania otwarte
               </DropdownMenuCheckboxItem>
-              
-
 
               <DropdownMenuSeparator />
               <DropdownMenuLabel>Status</DropdownMenuLabel>
@@ -711,59 +321,44 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
               </DropdownMenuCheckboxItem>
               
               <DropdownMenuSeparator />
-              
-              <DropdownMenuLabel>Sortowanie</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => setSortBy('newest')}>
-                {sortBy === 'newest' && "✓ "}Od najnowszych
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSortBy('oldest')}>
-                {sortBy === 'oldest' && "✓ "}Od najstarszych
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSortBy('alphabetical')}>
-                {sortBy === 'alphabetical' && "✓ "}Alfabetycznie
-              </DropdownMenuItem>
-              
-              <DropdownMenuSeparator />
-              
               <DropdownMenuItem onClick={resetFilters}>
                 Resetuj filtry
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           
-          {/* Dropdown do wyboru testu - pokazuj tylko gdy są testy do wyświetlenia */}
-      {/* Dropdown do wyboru pliku źródłowego */}
-{project?.attached_file && project.attached_file.length > 0 && (
-  <DropdownMenu>
-    <DropdownMenuTrigger asChild>
-      <Button variant="outline" size="sm" className="gap-2">
-        <FileText className="h-4 w-4" />
-        {filterByFile 
-          ? project.attached_file.find(f => f.file_id === filterByFile)?.file_name || 'Wybierz plik'
-          : 'Wszystkie pliki'
-        }
-      </Button>
-    </DropdownMenuTrigger>
-    <DropdownMenuContent align="end">
-      <DropdownMenuItem
-        onClick={() => setFilterByFile(null)}
-        className={`flex items-center ${filterByFile === null ? 'bg-muted' : ''}`}
-      >
-        Wszystkie pliki
-      </DropdownMenuItem>
-      <DropdownMenuSeparator />
-      {project.attached_file.map((file) => (
-        <DropdownMenuItem
-          key={file.file_id}
-          onClick={() => setFilterByFile(file.file_id)}
-          className={`flex items-center ${filterByFile === file.file_id ? 'bg-muted' : ''}`}
-        >
-          {file.file_name}
-        </DropdownMenuItem>
-      ))}
-    </DropdownMenuContent>
-  </DropdownMenu>
-)}
+          {/* Dropdown do wyboru pliku źródłowego */}
+          {project?.attached_file && project.attached_file.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <FileText className="h-4 w-4" />
+                  {filterByFile 
+                    ? project.attached_file.find((f: any) => f.file_id === filterByFile)?.file_name || 'Wybierz plik'
+                    : 'Wszystkie pliki'
+                  }
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => setFilterByFile(null)}
+                  className={`flex items-center ${filterByFile === null ? 'bg-muted' : ''}`}
+                >
+                  Wszystkie pliki
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {project.attached_file.map((file: any) => (
+                  <DropdownMenuItem
+                    key={file.file_id}
+                    onClick={() => setFilterByFile(file.file_id)}
+                    className={`flex items-center ${filterByFile === file.file_id ? 'bg-muted' : ''}`}
+                  >
+                    {file.file_name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
       
@@ -845,7 +440,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                       <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          <span>{formatDate(test.created_at)}</span>
+                          <span>{formatDateOriginal(test.created_at)}</span>
                         </div>
                         {test.fileName && (
                           <div className="flex items-center gap-1">
@@ -909,7 +504,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                 </Button>
               </div>
             </div>
-          ) : (
+          ) : currentTest && (
             // Normalny widok testu
             <div className="max-w-4xl mx-auto p-6">
               {/* Nawigacja */}
@@ -948,7 +543,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                 <div className="flex items-center gap-3 mt-4 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Clock className="h-4 w-4" />
-                    <span>Utworzono: {formatDate(currentTest.created_at)}</span>
+                    <span>Utworzono: {formatDateOriginal(currentTest.created_at)}</span>
                   </div>
                   {currentTest.fileName && (
                     <div className="flex items-center gap-1">
@@ -962,18 +557,16 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
               </div>
               
               {/* Tryb podglądu testu */}
-              {!takingTest && (
+              {!isTestTaking && (
                 <div className="mb-8">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-semibold">Informacje o teście</h2>
                     <Button 
                       onClick={startTest} 
                       className="gap-2"
-                      disabled={testInProgress && testSubmitted}
                     >
                       <PlayCircle className="h-4 w-4" />
-                      {testInProgress && testSubmitted ? 'Test już rozwiązany' : 
-                       currentTest.score !== undefined ? 'Rozwiąż ponownie' : 'Rozpocznij test'}
+                      {currentTest.score !== undefined ? 'Rozwiąż ponownie' : 'Rozpocznij test'}
                     </Button>
                   </div>
                   
@@ -1015,7 +608,6 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                             <Progress 
                               value={currentTest.score} 
                               className="h-2"
-                              color={currentTest.score >= 70 ? 'bg-green-500' : 'bg-amber-500'}
                             />
                           </div>
                         )}
@@ -1036,11 +628,9 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                       <Button 
                         onClick={startTest} 
                         className="w-full gap-2"
-                        disabled={testInProgress && testSubmitted}
                       >
                         <PlayCircle className="h-4 w-4" />
-                        {testInProgress && testSubmitted ? 'Test już rozwiązany' : 
-                         currentTest.score !== undefined ? 'Rozwiąż ponownie' : 'Rozpocznij test'}
+                        {currentTest.score !== undefined ? 'Rozwiąż ponownie' : 'Rozpocznij test'}
                       </Button>
                     </Card>
                   </div>
@@ -1048,7 +638,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
               )}
               
               {/* Tryb rozwiązywania testu */}
-              {takingTest && (
+              {isTestTaking && (
                 <div>
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-semibold">
@@ -1059,18 +649,12 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                       <div className="flex items-center gap-2">
                         <Button 
                           variant="outline" 
-                          onClick={() => setTakingTest(false)}
+                          onClick={() => startTest()}
                         >
                           Wróć do podglądu
                         </Button>
                         <Button 
-                          onClick={() => {
-                            setTestInProgress(false);
-                            setTestSubmitted(false);
-                            setUserAnswers([]);
-                            setAnswerFeedback([]);
-                            startTest();
-                          }}
+                          onClick={handleRestartTest}
                         >
                           <RefreshCw className="h-4 w-4 mr-2" />
                           Rozwiąż ponownie
@@ -1112,7 +696,6 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                         <Progress 
                           value={testScore} 
                           className="h-2 mt-2"
-                          color={testScore >= 70 ? 'bg-green-500' : 'bg-amber-500'}
                         />
                         <p className="text-sm text-muted-foreground mt-2">
                           {testScore >= 70 
@@ -1172,7 +755,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                                   onValueChange={(value) => handleAnswerChange(index, value)}
                                   disabled={testSubmitted}
                                 >
-                                  {question.options.map((option, optionIndex) => (
+                                  {question.options.map((option: string, optionIndex: number) => (
                                     <div 
                                       key={optionIndex} 
                                       className={`flex items-center space-x-2 p-2 rounded-md ${
