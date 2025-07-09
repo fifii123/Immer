@@ -29,10 +29,10 @@ export interface OpenEndedQuestion {
 }
 
 export interface AnswerFeedback {
-  isCorrect: boolean;
+  grade: 'correct' | 'partial' | 'incorrect';
   feedback: string;
   correctAnswer?: string;
-  grade?: string;
+  isCorrect?: boolean; // backwards compatibility
 }
 
 export interface Test {
@@ -78,6 +78,9 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
   const [answerFeedback, setAnswerFeedback] = useState<(AnswerFeedback | null)[]>([]);
   const [isCheckingAnswers, setIsCheckingAnswers] = useState(false);
   const [expandedQuestions, setExpandedQuestions] = useState<boolean[]>([]);
+  
+  // New state for viewing results
+  const [isViewingResults, setIsViewingResults] = useState(false);
 
   // Fetch tests from project
   useEffect(() => {
@@ -258,9 +261,10 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
     setAnswerFeedback([]);
     setExpandedQuestions([]);
     setCurrentQuestions([]);
+    setIsViewingResults(false);
   };
 
-  // Start test
+  // Start test (fresh)
   const startTest = () => {
     if (!selectedTest) return;
     
@@ -270,12 +274,14 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
         throw new Error('No questions in test');
       }
       
+      // Reset states for fresh test start
       setCurrentQuestions(content.questions);
       setUserAnswers(new Array(content.questions.length).fill(''));
       setExpandedQuestions(new Array(content.questions.length).fill(true));
       setAnswerFeedback(new Array(content.questions.length).fill(null));
       setIsTestTaking(true);
       setTestSubmitted(false);
+      setIsViewingResults(false);
     } catch (error) {
       console.error("Error starting test:", error);
       toast({
@@ -286,13 +292,13 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
     }
   };
 
-  // Restart test
-  const handleRestartTest = () => {
+  // Start fresh test (reset previous results)
+  const startFreshTest = () => {
     if (!selectedTest) return;
     
     resetTestStates();
     
-    // Remove score from list
+    // Remove score from current test
     setTests(prevTests => 
       prevTests.map(test => 
         test.test_id === selectedTest.test_id 
@@ -302,6 +308,79 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
     );
     
     startTest();
+  };
+
+  // View saved results
+  const viewResults = async () => {
+    if (!selectedTest || !userId) return;
+    
+    try {
+      const response = await fetch(`/api/tests/results?testId=${selectedTest.test_id}&userId=${userId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch results');
+      }
+      
+      const results = await response.json();
+      if (!results.exists) {
+        toast({
+          title: "No results found",
+          description: "No saved results found for this test.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Parse test content to get questions
+      let testContent;
+      try {
+        testContent = JSON.parse(selectedTest.content);
+      } catch (e) {
+        console.error("Cannot parse test content:", e);
+        toast({
+          title: "Error",
+          description: "Cannot load test content.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Set up results viewing state
+      setCurrentQuestions(testContent.questions);
+      setUserAnswers(results.answers.map((answer: any) => answer.user_answer || ''));
+      
+      // Map feedback to include isCorrect for backward compatibility
+      const mappedFeedback = results.feedback?.map((fb: any) => ({
+        ...fb,
+        isCorrect: fb.grade === 'correct' || fb.isCorrect === true
+      })) || [];
+      
+      setAnswerFeedback(mappedFeedback);
+      setExpandedQuestions(new Array(testContent.questions.length).fill(false));
+      setTestScore(results.score);
+      setIsTestTaking(true);
+      setTestSubmitted(true);
+      setIsViewingResults(true);
+      
+    } catch (error) {
+      console.error("Error fetching results:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load test results.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Go back to overview
+  const backToOverview = () => {
+    setIsTestTaking(false);
+    setTestSubmitted(false);
+    setIsViewingResults(false);
+  };
+
+  // Restart test
+  const handleRestartTest = () => {
+    startFreshTest();
   };
 
   // Handle answer change
@@ -326,7 +405,7 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
       toast({
         title: "Complete all answers",
         description: `${unansweredQuestions} question${unansweredQuestions === 1 ? '' : 's'} not answered.`,
-        variant: "warning",
+        variant: "destructive",
       });
       return;
     }
@@ -341,6 +420,7 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
       if (isCorrect) correctCount++;
       
       feedback.push({
+        grade: isCorrect ? 'correct' : 'incorrect',
         isCorrect,
         feedback: isCorrect 
           ? "Correct answer" 
@@ -354,6 +434,7 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
     setTestScore(score);
     setAnswerFeedback(feedback);
     setTestSubmitted(true);
+    setIsViewingResults(true);
 
     // Save results
     await saveTestResults(score, feedback);
@@ -370,7 +451,7 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
     toast({
       title: "Test completed",
       description: `Your score: ${score}%`,
-      variant: score >= 70 ? "default" : "warning",
+      variant: score >= 70 ? "default" : "destructive",
     });
   };
 
@@ -387,7 +468,7 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
       toast({
         title: "Complete all answers",
         description: `${unansweredQuestions} question${unansweredQuestions === 1 ? '' : 's'} not answered.`,
-        variant: "warning",
+        variant: "destructive",
       });
       return;
     }
@@ -420,12 +501,19 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
       
       const result = await response.json();
       
-      setAnswerFeedback(result.feedback);
+      // Map feedback to include isCorrect for backward compatibility
+      const mappedFeedback = result.feedback.map((fb: any) => ({
+        ...fb,
+        isCorrect: fb.grade === 'correct'
+      }));
+      
+      setAnswerFeedback(mappedFeedback);
       setTestScore(result.score);
       setTestSubmitted(true);
+      setIsViewingResults(true);
 
       // Save results
-      await saveTestResults(result.score, result.feedback);
+      await saveTestResults(result.score, mappedFeedback);
 
       // Update test in list
       setTests(prevTests => 
@@ -441,7 +529,7 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
         description: `Your score: ${result.score}%. ${
           result.score >= 70 ? 'Good job!' : 'Review the feedback to learn more.'
         }`,
-        variant: result.score >= 70 ? "default" : "warning",
+        variant: result.score >= 70 ? "default" : "destructive",
       });
     } catch (error) {
       console.error("Error checking answers:", error);
@@ -480,10 +568,10 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
         answers = feedback?.map((fb, index) => ({
           question_id: index,
           user_answer: userAnswers[index],
-          is_correct: fb ? fb.isCorrect : false,
-          points: fb && fb.isCorrect ? 1 : 0,
-          grade: fb?.grade ?? 'incorrect',
-          feedback: fb?.feedback ?? null     
+          is_correct: fb.grade === 'correct',
+          points: fb.grade === 'correct' ? 1 : fb.grade === 'partial' ? 0.5 : 0,
+          grade: fb.grade,
+          feedback: fb.feedback
         })) || [];
       }
       
@@ -557,6 +645,7 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
     isCheckingAnswers,
     expandedQuestions,
     hasActiveFilters,
+    isViewingResults,
 
     // Setters
     setSidebarOpen,
@@ -569,6 +658,9 @@ export function useProjectTests({ projectId, project }: UseProjectTestsProps) {
     getFilteredAndSortedTests,
     handleSelectTest,
     startTest,
+    startFreshTest,
+    viewResults,
+    backToOverview,
     handleRestartTest,
     handleAnswerChange,
     toggleQuestionExpand,

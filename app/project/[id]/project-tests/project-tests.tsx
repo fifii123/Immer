@@ -44,7 +44,9 @@ import {
   Clock,
   PlayCircle,
   CheckSquare,
-  FilterX
+  FilterX,
+  Eye,
+  Edit
 } from "lucide-react";
 import type { MultipleChoiceQuestion } from '@/app/project/[id]/hooks/useProjectTests';
 
@@ -64,7 +66,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
     (p) => p.project_id.toString() === params.id?.toString() || p.project_id === projectId
   );
 
-  // Use the project tests hook (używamy działającego hooka)
+  // Use the project tests hook
   const {
     tests,
     loading,
@@ -83,6 +85,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
     isCheckingAnswers,
     expandedQuestions,
     hasActiveFilters,
+    isViewingResults,
     setSidebarOpen,
     setSearchTerm,
     setFilterType,
@@ -90,6 +93,9 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
     getFilteredAndSortedTests,
     handleSelectTest,
     startTest,
+    startFreshTest,
+    viewResults,
+    backToOverview,
     handleRestartTest,
     handleAnswerChange,
     toggleQuestionExpand,
@@ -266,29 +272,29 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-  <DropdownMenuLabel>Sortowanie</DropdownMenuLabel>
-  <DropdownMenuCheckboxItem 
-    checked={sortBy === 'newest'}
-    onCheckedChange={() => setSortBy('newest')}
-  >
-    Najnowsze
-  </DropdownMenuCheckboxItem>
-  <DropdownMenuCheckboxItem 
-    checked={sortBy === 'oldest'}
-    onCheckedChange={() => setSortBy('oldest')}
-  >
-    Najstarsze
-  </DropdownMenuCheckboxItem>
-  <DropdownMenuCheckboxItem 
-    checked={sortBy === 'alphabetical'}
-    onCheckedChange={() => setSortBy('alphabetical')}
-  >
-    Alfabetycznie
-  </DropdownMenuCheckboxItem>
-  
-  <DropdownMenuSeparator />
-  
-  <DropdownMenuLabel>Typ testu</DropdownMenuLabel>
+              <DropdownMenuLabel>Sortowanie</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem 
+                checked={sortBy === 'newest'}
+                onCheckedChange={() => setSortBy('newest')}
+              >
+                Najnowsze
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem 
+                checked={sortBy === 'oldest'}
+                onCheckedChange={() => setSortBy('oldest')}
+              >
+                Najstarsze
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem 
+                checked={sortBy === 'alphabetical'}
+                onCheckedChange={() => setSortBy('alphabetical')}
+              >
+                Alfabetycznie
+              </DropdownMenuCheckboxItem>
+              
+              <DropdownMenuSeparator />
+              
+              <DropdownMenuLabel>Typ testu</DropdownMenuLabel>
               <DropdownMenuCheckboxItem 
                 checked={filterType === 'multiple_choice'}
                 onCheckedChange={() => setFilterType(filterType === 'multiple_choice' ? null : 'multiple_choice')}
@@ -361,15 +367,15 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
       
       {/* Główna zawartość */}
       <div className="flex-1 flex overflow-hidden">
-{/* Lewy panel - lista testów */}
-<div 
-  className={`transition-all duration-300 ease-in-out overflow-hidden ${
-    sidebarOpen ? 'w-80' : 'w-0'
-  } border-r flex flex-col ${
-    darkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'
-  }`}
->
-  <div className="w-80 h-full overflow-auto">
+        {/* Lewy panel - lista testów */}
+        <div 
+          className={`transition-all duration-300 ease-in-out overflow-hidden ${
+            sidebarOpen ? 'w-80' : 'w-0'
+          } border-r flex flex-col ${
+            darkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'
+          }`}
+        >
+          <div className="w-80 h-full overflow-auto">
             <div className="p-3">
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -483,8 +489,8 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                 </div>
               </div>
             )}
-            </div>
           </div>
+        </div>
         
         {/* Główny panel - szczegóły testu */}
         <div className="flex-1 overflow-auto" ref={testContainerRef}>
@@ -560,7 +566,6 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                 <div className="mb-8">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-semibold">Informacje o teście</h2>
-          
                   </div>
                   
                   <div className="grid md:grid-cols-2 gap-6">
@@ -610,7 +615,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                     <Card className="p-4">
                       <h3 className="text-lg font-medium mb-2 flex items-center gap-2">
                         <GraduationCap className="h-5 w-5 text-indigo-500" />
-                        Informacje o treści
+                        Akcje
                       </h3>
                       <p className="text-sm text-muted-foreground mb-4">
                         {currentTest.question_type === 'multiple_choice' 
@@ -618,13 +623,35 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                           : 'Ten test zawiera pytania otwarte. Twoje odpowiedzi będą analizowane przez AI i porównywane z wzorcowymi odpowiedziami.'}
                       </p>
                       
-                      <Button 
-                        onClick={startTest} 
-                        className="w-full gap-2"
-                      >
-                        <PlayCircle className="h-4 w-4" />
-                        {currentTest.score !== undefined ? 'Rozwiąż ponownie' : 'Rozpocznij test'}
-                      </Button>
+                      <div className="space-y-2">
+                        {currentTest.score !== undefined && (
+                          <Button 
+                            onClick={viewResults} 
+                            variant="outline"
+                            className="w-full gap-2"
+                          >
+                            <Eye className="h-4 w-4" />
+                            Podgląd wyników
+                          </Button>
+                        )}
+                        
+                        <Button 
+                          onClick={currentTest.score !== undefined ? startFreshTest : startTest} 
+                          className="w-full gap-2"
+                        >
+                          {currentTest.score !== undefined ? (
+                            <>
+                              <Edit className="h-4 w-4" />
+                              Rozwiąż ponownie
+                            </>
+                          ) : (
+                            <>
+                              <PlayCircle className="h-4 w-4" />
+                              Rozpocznij test
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </Card>
                   </div>
                 </div>
@@ -635,23 +662,26 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                 <div>
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-semibold">
-                      {testSubmitted ? 'Wyniki testu' : 'Rozwiązywanie testu'}
+                      {isViewingResults ? 'Podgląd wyników' : testSubmitted ? 'Wyniki testu' : 'Rozwiązywanie testu'}
                     </h2>
                     
                     {testSubmitted ? (
                       <div className="flex items-center gap-2">
                         <Button 
                           variant="outline" 
-                          onClick={() => startTest()}
+                          onClick={backToOverview}
                         >
+                          <ArrowLeft className="h-4 w-4 mr-2" />
                           Wróć do podglądu
                         </Button>
-                        <Button 
-                          onClick={handleRestartTest}
-                        >
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          Rozwiąż ponownie
-                        </Button>
+                        {!isViewingResults && (
+                          <Button 
+                            onClick={startFreshTest}
+                          >
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Rozwiąż ponownie
+                          </Button>
+                        )}
                       </div>
                     ) : (
                       <Button 
@@ -716,10 +746,20 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                           <div className="flex items-center">
                             {testSubmitted && answerFeedback[index] && (
                               <Badge 
-                                variant={answerFeedback[index].isCorrect ? 'success' : 'destructive'} 
+                                variant={
+                                  answerFeedback[index].grade === 'correct' 
+                                    ? 'success' 
+                                    : answerFeedback[index].grade === 'partial' 
+                                      ? 'warning' 
+                                      : 'destructive'
+                                } 
                                 className="mr-2"
                               >
-                                {answerFeedback[index].isCorrect ? 'Poprawna' : 'Błędna'}
+                                {answerFeedback[index].grade === 'correct' 
+                                  ? 'Poprawna' 
+                                  : answerFeedback[index].grade === 'partial' 
+                                    ? 'Częściowo poprawna' 
+                                    : 'Błędna'}
                               </Badge>
                             )}
                             <ChevronDown className={`h-5 w-5 transition-transform ${
@@ -741,20 +781,20 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                             </div>
                             
                             {/* Pytania zamknięte */}
-                            {currentTest.question_type === 'multiple_choice' && question.options && (
+                            {currentTest.question_type === 'multiple_choice' && (question as MultipleChoiceQuestion).options && (
                               <div className="space-y-2">
                                 <RadioGroup 
                                   value={userAnswers[index] || ''} 
                                   onValueChange={(value) => handleAnswerChange(index, value)}
-                                  disabled={testSubmitted}
+                                  disabled={testSubmitted || isViewingResults}
                                 >
-                                  {question.options.map((option: string, optionIndex: number) => (
+                                  {(question as MultipleChoiceQuestion).options.map((option: string, optionIndex: number) => (
                                     <div 
                                       key={optionIndex} 
                                       className={`flex items-center space-x-2 p-2 rounded-md ${
-                                        testSubmitted && option === question.correctAnswer
+                                        testSubmitted && option === (question as MultipleChoiceQuestion).correctAnswer
                                           ? 'bg-green-50 dark:bg-green-900/20' 
-                                          : testSubmitted && userAnswers[index] === option && option !== question.correctAnswer
+                                          : testSubmitted && userAnswers[index] === option && option !== (question as MultipleChoiceQuestion).correctAnswer
                                             ? 'bg-red-50 dark:bg-red-900/20'
                                             : ''
                                       }`}
@@ -763,20 +803,20 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                                       <Label htmlFor={`q${index}-opt${optionIndex}`} className="flex-1 cursor-pointer">
                                         {option}
                                       </Label>
-                                      {testSubmitted && option === question.correctAnswer && (
+                                      {testSubmitted && option === (question as MultipleChoiceQuestion).correctAnswer && (
                                         <CheckCircle className="h-4 w-4 text-green-500" />
                                       )}
-                                      {testSubmitted && userAnswers[index] === option && option !== question.correctAnswer && (
+                                      {testSubmitted && userAnswers[index] === option && option !== (question as MultipleChoiceQuestion).correctAnswer && (
                                         <XCircle className="h-4 w-4 text-red-500" />
                                       )}
                                     </div>
                                   ))}
                                 </RadioGroup>
                                 
-                                {testSubmitted && question.explanation && (
+                                {testSubmitted && (question as MultipleChoiceQuestion).explanation && (
                                   <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
                                     <p className="font-medium">Wyjaśnienie:</p>
-                                    <p className="text-sm">{question.explanation}</p>
+                                    <p className="text-sm">{(question as MultipleChoiceQuestion).explanation}</p>
                                   </div>
                                 )}
                               </div>
@@ -789,23 +829,33 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                                   placeholder="Twoja odpowiedź..."
                                   value={userAnswers[index] || ''}
                                   onChange={(e) => handleAnswerChange(index, e.target.value)}
-                                  disabled={testSubmitted}
+                                  disabled={testSubmitted || isViewingResults}
                                   rows={4}
                                 />
                                 
                                 {testSubmitted && answerFeedback[index] && (
                                   <div className={`p-3 rounded-md ${
-                                    answerFeedback[index].isCorrect 
+                                    answerFeedback[index].grade === 'correct' 
                                       ? 'bg-green-50 dark:bg-green-900/20' 
-                                      : 'bg-amber-50 dark:bg-amber-900/20'
+                                      : answerFeedback[index].grade === 'partial' 
+                                        ? 'bg-amber-50 dark:bg-amber-900/20'
+                                        : 'bg-red-50 dark:bg-red-900/20'
                                   }`}>
                                     <p className="font-medium mb-1">
-                                      {answerFeedback[index].isCorrect ? 'Odpowiedź poprawna' : 'Odpowiedź częściowo poprawna'}
+                                      {answerFeedback[index].grade === 'correct' 
+                                        ? 'Odpowiedź poprawna' 
+                                        : answerFeedback[index].grade === 'partial' 
+                                          ? 'Odpowiedź częściowo poprawna' 
+                                          : 'Odpowiedź niepoprawna'}
                                     </p>
                                     <p className="text-sm">{answerFeedback[index].feedback}</p>
                                     
-                                    {!answerFeedback[index].isCorrect && answerFeedback[index].correctAnswer && (
-                                      <div className="mt-2 pt-2 border-t border-amber-200 dark:border-amber-800">
+                                    {answerFeedback[index].grade !== 'correct' && answerFeedback[index].correctAnswer && (
+                                      <div className={`mt-2 pt-2 border-t ${
+                                        answerFeedback[index].grade === 'partial' 
+                                          ? 'border-amber-200 dark:border-amber-800' 
+                                          : 'border-red-200 dark:border-red-800'
+                                      }`}>
                                         <p className="font-medium">Przykładowa poprawna odpowiedź:</p>
                                         <p className="text-sm">{answerFeedback[index].correctAnswer}</p>
                                       </div>
