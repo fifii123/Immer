@@ -76,6 +76,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
     isTestTaking,
     currentQuestions,
     userAnswers,
+    sortBy,
     testSubmitted,
     testScore,
     answerFeedback,
@@ -95,6 +96,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
     handleSubmitMultipleChoiceTest,
     handleCheckOpenEndedAnswers,
     resetFilters,
+    setSortBy,
     formatDate
   } = useProjectTests({ projectId, project });
 
@@ -264,34 +266,29 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Wybór testu</DropdownMenuLabel>
-              {sortedTests.length > 0 && (
-                <>
-                  {sortedTests.map((test, index) => (
-                    <DropdownMenuItem
-                      key={test.test_id}
-                      onClick={() => switchTest(index)}
-                      className={`flex items-center justify-between ${currentTestIndex === index ? 'bg-muted' : ''}`}
-                    >
-                      <div className="flex flex-col gap-1 mr-2">
-                        <span className="text-sm">{test.test_name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {test.fileName || 'Bez pliku'}
-                        </span>
-                      </div>
-                      
-                      {test.score !== undefined && (
-                        <Badge variant={test.score >= 70 ? "success" : "warning"} className="text-xs">
-                          {test.score}%
-                        </Badge>
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                  <DropdownMenuSeparator />
-                </>
-              )}
-              
-              <DropdownMenuLabel>Typ testu</DropdownMenuLabel>
+  <DropdownMenuLabel>Sortowanie</DropdownMenuLabel>
+  <DropdownMenuCheckboxItem 
+    checked={sortBy === 'newest'}
+    onCheckedChange={() => setSortBy('newest')}
+  >
+    Najnowsze
+  </DropdownMenuCheckboxItem>
+  <DropdownMenuCheckboxItem 
+    checked={sortBy === 'oldest'}
+    onCheckedChange={() => setSortBy('oldest')}
+  >
+    Najstarsze
+  </DropdownMenuCheckboxItem>
+  <DropdownMenuCheckboxItem 
+    checked={sortBy === 'alphabetical'}
+    onCheckedChange={() => setSortBy('alphabetical')}
+  >
+    Alfabetycznie
+  </DropdownMenuCheckboxItem>
+  
+  <DropdownMenuSeparator />
+  
+  <DropdownMenuLabel>Typ testu</DropdownMenuLabel>
               <DropdownMenuCheckboxItem 
                 checked={filterType === 'multiple_choice'}
                 onCheckedChange={() => setFilterType(filterType === 'multiple_choice' ? null : 'multiple_choice')}
@@ -364,13 +361,15 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
       
       {/* Główna zawartość */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Lewy panel - lista testów */}
-        {sidebarOpen && (
-          <div 
-            className={`w-80 border-r flex flex-col ${
-              darkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'
-            }`}
-          >
+{/* Lewy panel - lista testów */}
+<div 
+  className={`transition-all duration-300 ease-in-out overflow-hidden ${
+    sidebarOpen ? 'w-80' : 'w-0'
+  } border-r flex flex-col ${
+    darkMode ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'
+  }`}
+>
+  <div className="w-80 h-full overflow-auto">
             <div className="p-3">
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -484,8 +483,8 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                 </div>
               </div>
             )}
+            </div>
           </div>
-        )}
         
         {/* Główny panel - szczegóły testu */}
         <div className="flex-1 overflow-auto" ref={testContainerRef}>
@@ -561,13 +560,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                 <div className="mb-8">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-semibold">Informacje o teście</h2>
-                    <Button 
-                      onClick={startTest} 
-                      className="gap-2"
-                    >
-                      <PlayCircle className="h-4 w-4" />
-                      {currentTest.score !== undefined ? 'Rozwiąż ponownie' : 'Rozpocznij test'}
-                    </Button>
+          
                   </div>
                   
                   <div className="grid md:grid-cols-2 gap-6">
