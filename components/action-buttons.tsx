@@ -23,15 +23,16 @@ export default function ActionButtons() {
         <span className="text-sm font-normal">{t("newProject")}</span>
       </Button>
       <Button
-        variant="outline"
-        size="lg"
-        className={`h-24 w-24 flex-col gap-2 text-white ${
-          darkMode ? "bg-blue-700 hover:bg-blue-800 border-slate-700" : "bg-blue-600 hover:bg-blue-700"
-        }`}
-      >
-        <FileText className="h-6 w-6" />
-        <span className="text-sm font-normal">{t("resources")}</span>
-      </Button>
+  variant="outline"
+  size="lg"
+  className={`h-24 w-24 flex-col gap-2 text-white ${
+    darkMode ? "bg-blue-700 hover:bg-blue-800 border-slate-700" : "bg-blue-600 hover:bg-blue-700"
+  }`}
+  onClick={() => router.push("/quick-study")}
+>
+  <FileText className="h-6 w-6" />
+  <span className="text-sm font-normal">{t("resources")}</span>
+</Button>
     </div>
   )
 }
