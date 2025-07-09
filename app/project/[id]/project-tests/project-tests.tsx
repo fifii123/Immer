@@ -693,17 +693,7 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
                 Pytania otwarte
               </DropdownMenuCheckboxItem>
               
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel>Plik źródłowy</DropdownMenuLabel>
-              {project?.attached_file?.map((file) => (
-                <DropdownMenuCheckboxItem 
-                  key={file.file_id}
-                  checked={filterByFile === file.file_id}
-                  onCheckedChange={() => setFilterByFile(filterByFile === file.file_id ? null : file.file_id)}
-                >
-                  {file.file_name}
-                </DropdownMenuCheckboxItem>
-              ))}
+
 
               <DropdownMenuSeparator />
               <DropdownMenuLabel>Status</DropdownMenuLabel>
@@ -742,38 +732,38 @@ const ProjectTests: React.FC<ProjectTestsProps> = ({ projectId, onClose }) => {
           </DropdownMenu>
           
           {/* Dropdown do wyboru testu - pokazuj tylko gdy są testy do wyświetlenia */}
-          {sortedTests.length > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  {currentTest.test_name}
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="max-h-[50vh] overflow-y-auto">
-                {sortedTests.map((test, index) => (
-                  <DropdownMenuItem 
-                    key={test.test_id} 
-                    onClick={() => switchTest(index)}
-                    className={`flex items-center justify-between ${currentTestIndex === index ? 'bg-muted' : ''}`}
-                  >
-                    <div className="flex flex-col gap-1 mr-2">
-                      <span>{test.test_name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {test.fileName || 'Bez pliku'} · {formatDate(test.created_at)}
-                      </span>
-                    </div>
-                    
-                    {test.score !== undefined && (
-                      <Badge variant={test.score >= 70 ? "success" : "warning"}>
-                        {test.score}%
-                      </Badge>
-                    )}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+      {/* Dropdown do wyboru pliku źródłowego */}
+{project?.attached_file && project.attached_file.length > 0 && (
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button variant="outline" size="sm" className="gap-2">
+        <FileText className="h-4 w-4" />
+        {filterByFile 
+          ? project.attached_file.find(f => f.file_id === filterByFile)?.file_name || 'Wybierz plik'
+          : 'Wszystkie pliki'
+        }
+      </Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end">
+      <DropdownMenuItem
+        onClick={() => setFilterByFile(null)}
+        className={`flex items-center ${filterByFile === null ? 'bg-muted' : ''}`}
+      >
+        Wszystkie pliki
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      {project.attached_file.map((file) => (
+        <DropdownMenuItem
+          key={file.file_id}
+          onClick={() => setFilterByFile(file.file_id)}
+          className={`flex items-center ${filterByFile === file.file_id ? 'bg-muted' : ''}`}
+        >
+          {file.file_name}
+        </DropdownMenuItem>
+      ))}
+    </DropdownMenuContent>
+  </DropdownMenu>
+)}
         </div>
       </div>
       
