@@ -1,3 +1,5 @@
+// Upload files and extract text
+
 export const runtime = 'nodejs'
 import { NextRequest } from 'next/server'
 

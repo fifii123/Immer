@@ -33,6 +33,7 @@ export default function QuickStudyPage() {
     curtainVisible,
     playgroundContent,
     outputs,
+    currentOutput,
     isGenerating,
     uploadInProgress,
     fetchingSources,
@@ -175,6 +176,7 @@ export default function QuickStudyPage() {
             playgroundContent={playgroundContent}
             selectedSource={selectedSource}
             isGenerating={isGenerating}
+            currentOutput={currentOutput} 
             onShowCurtain={handleShowCurtain}
             onTileClick={handleTileClick}
             onChatClick={handleChatClick}

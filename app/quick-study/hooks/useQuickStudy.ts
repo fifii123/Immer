@@ -26,6 +26,7 @@ interface Output {
   sourceId: string;
   createdAt: Date;
   count?: number;
+  content?: string;
 }
 
 interface Session {
@@ -50,6 +51,7 @@ export function useQuickStudy() {
   const [curtainVisible, setCurtainVisible] = useState(true)
   const [playgroundContent, setPlaygroundContent] = useState<PlaygroundContent>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [currentOutput, setCurrentOutput] = useState<Output | null>(null)
   
   // Loading states
   const [uploadInProgress, setUploadInProgress] = useState(false)
@@ -295,64 +297,66 @@ export function useQuickStudy() {
     }
   }, [playgroundContent])
 
-  // Handler - generate content
-  const handleTileClick = useCallback(async (type: string) => {
-    if (!sessionId) {
-      setError('No active session')
-      return
-    }
-    
-    if (!selectedSource || selectedSource.status !== 'ready') {
-      setError('Please select a ready source first')
-      return
-    }
-    
-    setCurtainVisible(false)
-    setPlaygroundContent(type as PlaygroundContent)
-    setIsGenerating(true)
-    setError(null)
-    
-    try {
-      const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          sourceId: selectedSource.id,
-          type: type,
-          settings: {} // Additional generation settings
-        })
+// Handler - generate content (tile click)
+const handleTileClick = useCallback(async (type: string) => {
+  if (!sessionId) {
+    setError('No active session')
+    return
+  }
+  
+  if (!selectedSource || selectedSource.status !== 'ready') {
+    setError('Please select a ready source first')
+    return
+  }
+  
+  setCurtainVisible(false)
+  setPlaygroundContent(type as PlaygroundContent)
+  setCurrentOutput(null) // Clear current output
+  setIsGenerating(true)
+  setError(null)
+  
+  try {
+    const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate/${type}`, { // Change URL
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        sourceId: selectedSource.id,
+        settings: {} // Additional generation settings
       })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Generation failed')
-      }
-      
-      const newOutput: Output = await response.json()
-      setOutputs(prev => [...prev, newOutput])
-      
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Generation failed')
-      setCurtainVisible(true) // Show curtain again on error
-      setPlaygroundContent(null)
-    } finally {
-      setIsGenerating(false)
-    }
-  }, [sessionId, selectedSource])
-
-  // Handler - view existing output
-  const handleOutputClick = useCallback((output: Output) => {
-    if (output.status !== 'ready') {
-      setError('Content is still generating')
-      return
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.message || 'Generation failed')
     }
     
-    setCurtainVisible(false)
-    setPlaygroundContent(output.type)
-    setError(null)
-  }, [])
+    const newOutput: Output = await response.json()
+    setOutputs(prev => [...prev, newOutput])
+    setCurrentOutput(newOutput) // Add this line
+    
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Generation failed')
+    setCurtainVisible(true) // Show curtain again on error
+    setPlaygroundContent(null)
+  } finally {
+    setIsGenerating(false)
+  }
+}, [sessionId, selectedSource])
+
+// Handler - view existing output
+const handleOutputClick = useCallback((output: Output) => {
+  if (output.status !== 'ready') {
+    setError('Content is still generating')
+    return
+  }
+  
+  setCurtainVisible(false)
+  setPlaygroundContent(output.type)
+  setCurrentOutput(output) // Add this line
+  setError(null)
+}, [])
 
   // Handler - show curtain
   const handleShowCurtain = useCallback(() => {
@@ -416,6 +420,7 @@ export function useQuickStudy() {
     curtainVisible,
     playgroundContent,
     outputs,
+    currentOutput,
     isGenerating,
     uploadInProgress,
     fetchingSources,

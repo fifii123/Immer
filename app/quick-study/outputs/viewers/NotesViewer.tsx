@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { usePreferences } from "@/context/preferences-context"
-import { FileCheck, Copy, Download } from "lucide-react"
+import { PenTool, Copy, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/components/ui/use-toast"
@@ -16,12 +16,12 @@ interface Output {
   createdAt: Date;
 }
 
-interface SummaryViewerProps {
+interface NotesViewerProps {
   output: Output | null;
   selectedSource: any;
 }
 
-export default function SummaryViewer({ output, selectedSource }: SummaryViewerProps) {
+export default function NotesViewer({ output, selectedSource }: NotesViewerProps) {
   const { darkMode } = usePreferences()
   const { toast } = useToast()
 
@@ -32,7 +32,7 @@ export default function SummaryViewer({ output, selectedSource }: SummaryViewerP
       await navigator.clipboard.writeText(output.content)
       toast({
         title: "Copied!",
-        description: "Summary copied to clipboard",
+        description: "Notes copied to clipboard",
       })
     } catch (error) {
       toast({
@@ -46,15 +46,64 @@ export default function SummaryViewer({ output, selectedSource }: SummaryViewerP
   const handleDownload = () => {
     if (!output?.content) return
     
-    const blob = new Blob([output.content], { type: 'text/plain' })
+    const blob = new Blob([output.content], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${output.title}.txt`
+    a.download = `${output.title}.md`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+  }
+
+  // Render markdown-like content
+  const renderMarkdownContent = (content: string) => {
+    return content.split('\n').map((line, index) => {
+      // Headers
+      if (line.startsWith('## ')) {
+        return (
+          <h3 key={index} className={`text-lg font-semibold mt-6 mb-3 ${
+            darkMode ? 'text-foreground' : 'text-slate-900'
+          }`}>
+            {line.replace('## ', '')}
+          </h3>
+        )
+      }
+      
+      // Bold text
+      if (line.includes('**')) {
+        const parts = line.split('**')
+        return (
+          <p key={index} className="mb-2 leading-relaxed">
+            {parts.map((part, i) => 
+              i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+            )}
+          </p>
+        )
+      }
+      
+      // Bullet points
+      if (line.startsWith('• ') || line.startsWith('- ')) {
+        return (
+          <li key={index} className="mb-1 ml-4">
+            {line.replace(/^[•-] /, '')}
+          </li>
+        )
+      }
+      
+      // Empty lines
+      if (line.trim() === '') {
+        return <br key={index} />
+      }
+      
+      // Regular paragraphs
+      return (
+        <p key={index} className="mb-2 leading-relaxed">
+          {line}
+        </p>
+      )
+    })
   }
 
   if (!output || !output.content) {
@@ -64,13 +113,13 @@ export default function SummaryViewer({ output, selectedSource }: SummaryViewerP
           <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
             darkMode ? 'bg-muted' : 'bg-slate-100'
           }`}>
-            <FileCheck className="h-8 w-8 text-muted-foreground" />
+            <PenTool className="h-8 w-8 text-muted-foreground" />
           </div>
           <h3 className={`text-lg font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-            No summary content
+            No notes content
           </h3>
           <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-            The summary content is not available
+            The notes content is not available
           </p>
         </div>
       </div>
@@ -78,21 +127,21 @@ export default function SummaryViewer({ output, selectedSource }: SummaryViewerP
   }
 
   return (
-    <article className="h-full flex flex-col p-4 md:p-8">
+    <article className="h-full flex flex-col p-8">
       {/* Header */}
       <header className="text-center mb-8">
         <div className="inline-flex items-center gap-3 mb-4">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
             darkMode ? 'bg-primary/10' : 'bg-primary/5'
           }`}>
-            <FileCheck className="h-5 w-5 text-primary" />
+            <PenTool className="h-5 w-5 text-primary" />
           </div>
           <div className="text-left">
             <h2 className={`text-2xl font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
               {output.title}
             </h2>
             <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-              {selectedSource ? `Summary of ${selectedSource.name}` : 'Document Summary'}
+              {selectedSource ? `Study notes from ${selectedSource.name}` : 'Study Notes'}
             </p>
           </div>
         </div>
@@ -119,21 +168,17 @@ export default function SummaryViewer({ output, selectedSource }: SummaryViewerP
       </header>
       
       {/* Content */}
-    <div className="flex-1 max-w-4xl mx-auto w-full pb-8"> {/* Dodaj bottom padding */}
-      <ScrollArea className="h-full">
-        <div className={`prose prose-sm max-w-none ${
-          darkMode ? 'prose-invert' : ''
-        }`}>
+      <div className="flex-1 max-w-4xl mx-auto w-full">
+        <ScrollArea className="h-full">
           <div className={`p-6 rounded-xl ${
             darkMode ? 'bg-muted/50' : 'bg-slate-50'
           }`}>
-            <div className="whitespace-pre-wrap leading-relaxed">
-              {output.content}
+            <div className={`text-sm ${darkMode ? 'text-foreground' : 'text-slate-800'}`}>
+              {renderMarkdownContent(output.content)}
             </div>
           </div>
-        </div>
-      </ScrollArea>
-    </div>
-  </article>
+        </ScrollArea>
+      </div>
+    </article>
   )
 }
