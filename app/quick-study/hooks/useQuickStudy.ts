@@ -306,19 +306,36 @@ const handleTileClick = useCallback(async (type: string) => {
   
   setCurtainVisible(false)
   setPlaygroundContent(type as PlaygroundContent)
-  setCurrentOutput(null) // Clear current output
+  setCurrentOutput(null)
   setIsGenerating(true)
   setError(null)
   
   try {
-    const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate/${type}`, { // Change URL
+    // Prepare settings based on content type
+    let settings = {}
+    
+    if (type === 'quiz') {
+      settings = {
+        questionCount: 10,
+        difficulty: 'mixed',
+        timeLimit: 20 // minutes
+      }
+    } else if (type === 'flashcards') {
+      settings = {
+        cardCount: 20,
+        difficulty: 'mixed',
+        includeCategories: true
+      }
+    }
+    
+    const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate/${type}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         sourceId: selectedSource.id,
-        settings: {} // Additional generation settings
+        settings: settings
       })
     })
     
@@ -329,11 +346,11 @@ const handleTileClick = useCallback(async (type: string) => {
     
     const newOutput: Output = await response.json()
     setOutputs(prev => [...prev, newOutput])
-    setCurrentOutput(newOutput) // Add this line
+    setCurrentOutput(newOutput)
     
   } catch (err) {
     setError(err instanceof Error ? err.message : 'Generation failed')
-    setCurtainVisible(true) // Show curtain again on error
+    setCurtainVisible(true)
     setPlaygroundContent(null)
   } finally {
     setIsGenerating(false)

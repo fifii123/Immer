@@ -27,10 +27,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Source, PlaygroundContent } from '../hooks/useQuickStudy'
 
+
+
 // Import viewers
 import SummaryViewer from '../outputs/viewers/SummaryViewer'
 import NotesViewer from '../outputs/viewers/NotesViewer'
 import ChatViewer from '../outputs/viewers/ChatViewer'
+import QuizViewer from '../outputs/viewers/QuizViewer'
+import FlashcardViewer from '../outputs/viewers/FlashcardViewer'
 
 interface PlaygroundAreaProps {
   curtainVisible: boolean
@@ -168,154 +172,47 @@ export default function PlaygroundArea({
       )
     }
     // Route to appropriate viewer based on content type
-    switch (playgroundContent) {
-      case 'summary':
-        return <SummaryViewer output={currentOutput} selectedSource={selectedSource} />
-        
-      case 'notes':
-        return <NotesViewer output={currentOutput} selectedSource={selectedSource} />
-        
-      case 'chat':
-        return <ChatViewer selectedSource={selectedSource} />
-        
-      // TODO: Add more viewers later
-      case 'flashcards':
-        return (
-          <div className="h-full flex items-center justify-center bg-gradient-to-br from-background via-card/30 to-background">
-            <div className="text-center max-w-md">
-              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-6 shadow-2xl shadow-indigo-500/25">
-                <Zap className="h-10 w-10 text-white" />
-              </div>
-              <h2 className="text-2xl font-bold mb-3 text-foreground">
-                Interactive Flashcards
-              </h2>
-              <p className="text-lg text-muted-foreground mb-6">
-                Coming soon - this feature will be implemented next
-              </p>
-              
-              <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-200">
-                <p className="text-sm text-amber-700 font-medium">
-                  🚧 Under development
-                </p>
-              </div>
-            </div>
+// Route to appropriate viewer based on content type
+switch (playgroundContent) {
+  case 'summary':
+    return <SummaryViewer output={currentOutput} selectedSource={selectedSource} />
+    
+  case 'notes':
+    return <NotesViewer output={currentOutput} selectedSource={selectedSource} />
+    
+  case 'chat':
+    return <ChatViewer selectedSource={selectedSource} />
+    
+  case 'quiz':
+    return <QuizViewer output={currentOutput} selectedSource={selectedSource} />
+    
+  case 'flashcards':
+    return <FlashcardViewer output={currentOutput} selectedSource={selectedSource} />
+    
+  case 'concepts':
+  case 'mindmap':
+    return (
+      <div className="h-full flex items-center justify-center bg-gradient-to-br from-background via-card/30 to-background">
+        <div className="text-center max-w-md">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-6 shadow-2xl shadow-indigo-500/25">
+            <Sparkles className="h-10 w-10 text-white" />
           </div>
-        )
-
-        case 'quiz':
-          case 'concepts':
-          case 'mindmap':
-            return (
-              <div className="h-full flex items-center justify-center bg-gradient-to-br from-background via-card/30 to-background">
-                <div className="text-center max-w-md">
-                  <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-6 shadow-2xl shadow-indigo-500/25">
-                    <Sparkles className="h-10 w-10 text-white" />
-                  </div>
-                  <h2 className="text-2xl font-bold mb-3 text-foreground">
-                    {playgroundContent} viewer coming soon
-                  </h2>
-                  <p className="text-lg text-muted-foreground mb-6">
-                    This content type will be implemented next
-                  </p>
-                  
-                  <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-200">
-                    <p className="text-sm text-amber-700 font-medium">
-                      🚧 Under development
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )
-      
-      default:
-        // Empty state - no content selected
-        if (!selectedSource) {
-          return (
-            <div className="h-full flex items-center justify-center bg-gradient-to-br from-background via-card/30 to-background p-8">
-              <div className="text-center max-w-lg">
-                <div className="inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-8 shadow-2xl shadow-indigo-500/25">
-                  <Upload className="h-12 w-12 text-white" />
-                </div>
-                <h2 className="text-3xl font-bold mb-4 text-foreground">
-                  Upload your first source
-                </h2>
-                <p className="text-xl leading-relaxed mb-8 text-muted-foreground">
-                  Upload documents, videos, or audio files to start generating personalized study materials
-                </p>
-                
-                {/* Feature highlights */}
-                <div className="flex flex-wrap gap-2 justify-center mb-8">
-                  {['PDF support', 'AI-powered', 'Instant generation', 'Multiple formats'].map((feature) => (
-                    <span key={feature} className="px-3 py-1 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-full border border-indigo-100">
-                      {feature}
-                    </span>
-                  ))}
-                </div>
-                
-                <Button 
-                  size="lg"
-                  className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30 transition-all"
-                  onClick={() => document.getElementById('file-upload')?.click()}
-                >
-                  <Upload className="mr-3 h-5 w-5" />
-                  Choose Files
-                </Button>
-              </div>
-            </div>
-          )
-        }
-
-        // Default empty state with source selected
-        return (
-          <div className="h-full flex items-center justify-center bg-gradient-to-br from-background via-card/30 to-background p-8">
-            <div className="text-center max-w-2xl">
-              <div className="inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-8 shadow-2xl shadow-indigo-500/25">
-                <Sparkles className="h-12 w-12 text-white" />
-              </div>
-              <h2 className="text-3xl font-bold mb-4 text-foreground">
-                Ready to transform your learning
-              </h2>
-              <p className="text-xl leading-relaxed mb-8 text-muted-foreground">
-                Choose a study method to generate personalized content from{' '}
-                <span className="font-semibold text-indigo-600">"{selectedSource.name}"</span>
-              </p>
-              
-              {/* Source info card */}
-              <div className="inline-flex items-center gap-3 px-4 py-3 rounded-xl bg-card border border-border shadow-sm mb-8">
-                {getSourceIcon(selectedSource.type, (selectedSource as any).subtype)}
-                <span className="font-medium text-foreground">{selectedSource.name}</span>
-                <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 border border-green-200">
-                  Ready
-                </span>
-              </div>
-              
-              <div className="space-y-4">
-                <Button 
-                  size="lg"
-                  onClick={onShowCurtain}
-                  className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30 transition-all"
-                >
-                  <Sparkles className="mr-3 h-5 w-5" />
-                  Choose Study Method
-                </Button>
-                
-                <div className="flex items-center gap-4 justify-center">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={onChatClick}
-                    disabled={!selectedSource || selectedSource.status !== 'ready'}
-                    className="hover:bg-accent border-border shadow-sm"
-                  >
-                    <MessageCircle className="mr-2 h-4 w-4" />
-                    Chat with AI
-                  </Button>
-                </div>
-              </div>
-            </div>
+          <h2 className="text-2xl font-bold mb-3 text-foreground">
+            {playgroundContent} viewer coming soon
+          </h2>
+          <p className="text-lg text-muted-foreground mb-6">
+            This content type will be implemented next
+          </p>
+          
+          <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-200">
+            <p className="text-sm text-amber-700 font-medium">
+              🚧 Under development
+            </p>
           </div>
-        )
-    }
+        </div>
+      </div>
+    )
+}
   }
 
   return (
