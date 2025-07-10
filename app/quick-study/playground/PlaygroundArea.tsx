@@ -20,7 +20,9 @@ import {
   FileText,
   Youtube,
   Image,
-  Mic
+  Mic,
+  File,
+  Globe
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -75,13 +77,28 @@ const tiles = [
   }
 ]
 
-const getSourceIcon = (type: string) => {
+const getSourceIcon = (type: string, subtype?: string) => {
   switch (type) {
-    case 'pdf': return <FileText className="h-4 w-4" />
-    case 'youtube': return <Youtube className="h-4 w-4" />
-    case 'image': return <Image className="h-4 w-4" />
-    case 'audio': return <Mic className="h-4 w-4" />
-    default: return <FileText className="h-4 w-4" />
+    case 'pdf':
+      return <FileText className="h-4 w-4 text-red-500" />
+    case 'youtube':
+      return <Youtube className="h-4 w-4 text-red-600" />
+    case 'image':
+      return <Image className="h-4 w-4 text-blue-500" />
+    case 'audio':
+      return <Mic className="h-4 w-4 text-purple-500" />
+    case 'docx':
+      return <File className="h-4 w-4 text-blue-600" />
+    case 'text':
+      return subtype === 'pasted' 
+        ? <FileText className="h-4 w-4 text-green-500" />
+        : <FileText className="h-4 w-4 text-slate-500" />
+    case 'url':
+      return subtype === 'youtube'
+        ? <Youtube className="h-4 w-4 text-red-600" />
+        : <Globe className="h-4 w-4 text-blue-500" />
+    default:
+      return <FileText className="h-4 w-4 text-slate-500" />
   }
 }
 
@@ -366,7 +383,7 @@ export default function PlaygroundArea({
               <div className="flex items-center justify-center gap-2 text-sm">
                 <span className={darkMode ? 'text-muted-foreground' : 'text-slate-600'}>From:</span>
                 <div className="flex items-center gap-2">
-                  {getSourceIcon(selectedSource.type)}
+                  {getSourceIcon(selectedSource.type, (selectedSource as any).subtype)}
                   <span className={`font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
                     {selectedSource.name}
                   </span>

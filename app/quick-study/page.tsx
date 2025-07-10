@@ -7,7 +7,9 @@ import { useToast } from "@/components/ui/use-toast"
 import { 
   ArrowLeft, 
   Upload,
-  Sparkles
+  Sparkles,
+  RefreshCw,
+  Loader2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -22,8 +24,10 @@ export default function QuickStudyPage() {
   const { darkMode } = usePreferences()
   const { toast } = useToast()
   
-  // Główny hook z całą logiką
+  // Główny hook z session management
   const {
+    sessionId,
+    initializing,
     sources,
     selectedSource,
     curtainVisible,
@@ -39,7 +43,10 @@ export default function QuickStudyPage() {
     handleShowCurtain,
     handleChatClick,
     handleFileUpload,
-    fetchSources,
+    handleTextSubmit,
+    handleUrlSubmit,
+    handleStartNewSession,
+    refreshSession,
     clearError
   } = useQuickStudy()
 
@@ -55,25 +62,26 @@ export default function QuickStudyPage() {
     }
   }, [error, toast, clearError])
 
-  // Success notifications for uploads
-  React.useEffect(() => {
-    if (!uploadInProgress && sources.length > 0) {
-      // Check if there's a newly uploaded source (one that was just processed)
-      const hasProcessingSources = sources.some(s => s.status === 'processing')
-      if (!hasProcessingSources) {
-        // All sources are ready, show success if we just finished uploading
-        const recentSources = sources.filter(s => 
-          s.id.startsWith('upload-') && s.status === 'ready'
-        )
-        if (recentSources.length > 0) {
-          toast({
-            title: "Upload successful",
-            description: `${recentSources.length} file(s) uploaded and processed successfully`
-          })
-        }
-      }
-    }
-  }, [sources, uploadInProgress, toast])
+  // Show loading screen while initializing session
+  if (initializing) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center ${darkMode ? 'bg-background' : 'bg-slate-50'}`}>
+        <div className="text-center">
+          <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-4 ${
+            darkMode ? 'bg-primary/10' : 'bg-primary/5'
+          }`}>
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+          <h2 className={`text-xl font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+            Initializing Quick Study
+          </h2>
+          <p className={`${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+            Setting up your study session...
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={`min-h-screen ${darkMode ? 'bg-background' : 'bg-slate-50'}`}>
@@ -101,26 +109,50 @@ export default function QuickStudyPage() {
                 <h1 className={`text-lg font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
                   Quick Study
                 </h1>
+                {sessionId && (
+                  <p className={`text-xs ${darkMode ? 'text-muted-foreground' : 'text-slate-500'}`}>
+                    Session: {sessionId.slice(0, 8)}...
+                  </p>
+                )}
               </div>
             </div>
           </div>
           
           <div className="flex items-center gap-2">
             <Button 
+              variant="ghost" 
+              size="sm"
+              className="hover:bg-accent"
+              onClick={refreshSession}
+              disabled={fetchingSources}
+            >
+              <RefreshCw className={`h-4 w-4 ${fetchingSources ? 'animate-spin' : ''}`} />
+            </Button>
+            
+            <Button 
               variant="outline" 
               size="sm"
               className="hover:bg-accent"
               onClick={() => document.getElementById('file-upload')?.click()}
-              disabled={uploadInProgress}
+              disabled={uploadInProgress || !sessionId}
             >
               <Upload className="h-4 w-4 mr-2" />
               {uploadInProgress ? 'Uploading...' : 'Upload'}
+            </Button>
+            
+            <Button 
+              variant="ghost" 
+              size="sm"
+              className="hover:bg-accent"
+              onClick={handleStartNewSession}
+            >
+              New Session
             </Button>
           </div>
         </nav>
       </header>
 
-      {/* Main Content - dokładnie jak w oryginalnym */}
+      {/* Main Content */}
       <main className="h-[calc(100vh-3.5rem)] p-4">
         <div className="h-full grid grid-cols-[280px_1fr_320px] gap-4">
           
@@ -131,8 +163,10 @@ export default function QuickStudyPage() {
             onSourceSelect={handleSourceSelect}
             uploadInProgress={uploadInProgress}
             onFileUpload={handleFileUpload}
+            onTextSubmit={handleTextSubmit}
+            onUrlSubmit={handleUrlSubmit}
             fetchingSources={fetchingSources}
-            onRefresh={fetchSources}
+            onRefresh={refreshSession}
           />
           
           {/* Middle Panel - Playground + Sliding Curtain */}

@@ -24,10 +24,20 @@ interface Output {
   count?: number;
 }
 
+interface Session {
+  id: string;
+  sources: Source[];
+  outputs: Output[];
+  createdAt: string;
+}
+
 type PlaygroundContent = 'flashcards' | 'quiz' | 'notes' | 'summary' | 'concepts' | 'mindmap' | 'chat' | null;
 
 export function useQuickStudy() {
-  // Core state - puste na początku, gotowe na backend
+  // Session management
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  
+  // Core state
   const [sources, setSources] = useState<Source[]>([])
   const [selectedSource, setSelectedSource] = useState<Source | null>(null)
   const [outputs, setOutputs] = useState<Output[]>([])
@@ -41,72 +51,114 @@ export function useQuickStudy() {
   const [uploadInProgress, setUploadInProgress] = useState(false)
   const [fetchingSources, setFetchingSources] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [initializing, setInitializing] = useState(true)
 
-  // Load sources on mount
+  // Initialize session on mount
   useEffect(() => {
-    fetchSources()
+    initializeSession()
   }, [])
 
-  // Fetch sources from backend
-  const fetchSources = useCallback(async () => {
-    setFetchingSources(true)
+  // Initialize session - try to restore or create new
+  const initializeSession = useCallback(async () => {
+    setInitializing(true)
     setError(null)
     
     try {
-      const response = await fetch('/api/quick-study/sources', {
+      // Try to restore existing session from localStorage
+      const storedSessionId = localStorage.getItem('quickStudySessionId')
+      
+      if (storedSessionId) {
+        // Try to restore session
+        const restored = await restoreSession(storedSessionId)
+        if (restored) {
+          return // Successfully restored
+        }
+      }
+      
+      // Create new session if restore failed or no stored session
+      await createNewSession()
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to initialize session')
+    } finally {
+      setInitializing(false)
+    }
+  }, [])
+
+  // Create new session
+  const createNewSession = useCallback(async () => {
+    try {
+      const response = await fetch('/api/quick-study/sessions', {
+        method: 'POST',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
+          'Content-Type': 'application/json'
         }
       })
       
       if (!response.ok) {
-        throw new Error('Failed to fetch sources')
+        throw new Error('Failed to create session')
       }
       
-      const sources = await response.json()
-      setSources(sources)
+      const { sessionId: newSessionId } = await response.json()
       
-      // Auto-select first source if none selected
-      if (sources.length > 0 && !selectedSource) {
-        setSelectedSource(sources[0])
-      }
-
-      // Fetch outputs for the selected source
-      if (sources.length > 0) {
-        await fetchOutputs(selectedSource?.id || sources[0].id)
-      }
+      setSessionId(newSessionId)
+      localStorage.setItem('quickStudySessionId', newSessionId)
       
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch sources')
-      // Set empty arrays on error
+      // Reset state for new session
       setSources([])
       setOutputs([])
-    } finally {
-      setFetchingSources(false)
-    }
-  }, [selectedSource])
-
-  // Fetch outputs for a specific source
-  const fetchOutputs = useCallback(async (sourceId: string) => {
-    try {
-      const response = await fetch(`/api/quick-study/outputs?sourceId=${sourceId}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
-      })
+      setSelectedSource(null)
+      setCurtainVisible(true)
+      setPlaygroundContent(null)
       
-      if (response.ok) {
-        const outputs = await response.json()
-        setOutputs(outputs)
-      }
     } catch (err) {
-      console.error('Failed to fetch outputs:', err)
-      // Don't show error to user for outputs fetch failure
+      throw new Error(err instanceof Error ? err.message : 'Failed to create session')
+    }
+  }, [])
+
+  // Restore existing session
+  const restoreSession = useCallback(async (sessionId: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/quick-study/sessions/${sessionId}`)
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          // Session expired/not found, create new one
+          localStorage.removeItem('quickStudySessionId')
+          return false
+        }
+        throw new Error('Failed to restore session')
+      }
+      
+      const session: Session = await response.json()
+      
+      // Restore state from session
+      setSessionId(session.id)
+      setSources(session.sources)
+      setOutputs(session.outputs)
+      
+      // Auto-select first ready source
+      const readySources = session.sources.filter(s => s.status === 'ready')
+      if (readySources.length > 0) {
+        setSelectedSource(readySources[0])
+      }
+      
+      return true
+      
+    } catch (err) {
+      console.error('Failed to restore session:', err)
+      localStorage.removeItem('quickStudySessionId')
+      return false
     }
   }, [])
 
   // Handler - file upload
   const handleFileUpload = useCallback(async (files: File[]) => {
+    if (!sessionId) {
+      setError('No active session')
+      return
+    }
+    
     setUploadInProgress(true)
     setError(null)
     
@@ -114,12 +166,9 @@ export function useQuickStudy() {
       const formData = new FormData()
       files.forEach(file => formData.append('files', file))
       
-      const response = await fetch('/api/quick-study/upload', {
+      const response = await fetch(`/api/quick-study/sessions/${sessionId}/upload`, {
         method: 'POST',
-        body: formData,
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
+        body: formData
       })
       
       if (!response.ok) {
@@ -127,7 +176,7 @@ export function useQuickStudy() {
         throw new Error(errorData.message || 'Upload failed')
       }
       
-      const newSources = await response.json()
+      const newSources: Source[] = await response.json()
       setSources(prev => [...prev, ...newSources])
       
       // Auto-select first uploaded source if none selected
@@ -140,7 +189,95 @@ export function useQuickStudy() {
     } finally {
       setUploadInProgress(false)
     }
-  }, [selectedSource])
+  }, [sessionId, selectedSource])
+
+  // Handler - text submission
+  const handleTextSubmit = useCallback(async (text: string, title?: string) => {
+    if (!sessionId) {
+      setError('No active session')
+      return
+    }
+    
+    setUploadInProgress(true)
+    setError(null)
+    
+    try {
+      const response = await fetch(`/api/quick-study/sessions/${sessionId}/add-content`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          type: 'text',
+          content: text,
+          title: title
+        })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Failed to add text')
+      }
+      
+      const newSource: Source = await response.json()
+      setSources(prev => [...prev, newSource])
+      
+      // Auto-select if none selected
+      if (!selectedSource) {
+        setSelectedSource(newSource)
+      }
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add text')
+      throw err // Re-throw for modal handling
+    } finally {
+      setUploadInProgress(false)
+    }
+  }, [sessionId, selectedSource])
+
+  // Handler - URL submission
+  const handleUrlSubmit = useCallback(async (url: string, title?: string) => {
+    if (!sessionId) {
+      setError('No active session')
+      return
+    }
+    
+    setUploadInProgress(true)
+    setError(null)
+    
+    try {
+      const response = await fetch(`/api/quick-study/sessions/${sessionId}/add-content`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          type: 'url',
+          content: url,
+          title: title
+        })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Failed to add URL')
+      }
+      
+      const newSource: Source = await response.json()
+      setSources(prev => [...prev, newSource])
+      
+      // Auto-select if none selected
+      if (!selectedSource) {
+        setSelectedSource(newSource)
+      }
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add URL')
+      throw err // Re-throw for modal handling
+    } finally {
+      setUploadInProgress(false)
+    }
+  }, [sessionId, selectedSource])
 
   // Handler - source selection
   const handleSourceSelect = useCallback((source: Source) => {
@@ -152,13 +289,15 @@ export function useQuickStudy() {
       setCurtainVisible(true)
       setPlaygroundContent(null)
     }
-
-    // Fetch outputs for the selected source
-    fetchOutputs(source.id)
-  }, [playgroundContent, fetchOutputs])
+  }, [playgroundContent])
 
   // Handler - generate content
   const handleTileClick = useCallback(async (type: string) => {
+    if (!sessionId) {
+      setError('No active session')
+      return
+    }
+    
     if (!selectedSource || selectedSource.status !== 'ready') {
       setError('Please select a ready source first')
       return
@@ -170,11 +309,10 @@ export function useQuickStudy() {
     setError(null)
     
     try {
-      const response = await fetch('/api/quick-study/generate', {
+      const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem("token")}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           sourceId: selectedSource.id,
@@ -188,7 +326,7 @@ export function useQuickStudy() {
         throw new Error(errorData.message || 'Generation failed')
       }
       
-      const newOutput = await response.json()
+      const newOutput: Output = await response.json()
       setOutputs(prev => [...prev, newOutput])
       
     } catch (err) {
@@ -198,7 +336,7 @@ export function useQuickStudy() {
     } finally {
       setIsGenerating(false)
     }
-  }, [selectedSource])
+  }, [sessionId, selectedSource])
 
   // Handler - view existing output
   const handleOutputClick = useCallback((output: Output) => {
@@ -231,73 +369,44 @@ export function useQuickStudy() {
     setError(null)
   }, [selectedSource])
 
-  // Handler - delete source
-  const handleDeleteSource = useCallback(async (sourceId: string) => {
+  // Handler - start new session (clear everything)
+  const handleStartNewSession = useCallback(async () => {
     try {
-      const response = await fetch(`/api/quick-study/sources/${sourceId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to delete source')
-      }
-      
-      // Remove from state
-      setSources(prev => prev.filter(s => s.id !== sourceId))
-      setOutputs(prev => prev.filter(o => o.sourceId !== sourceId))
-      
-      // Clear selection if deleted source was selected
-      if (selectedSource?.id === sourceId) {
-        setSelectedSource(null)
-        setCurtainVisible(true)
-        setPlaygroundContent(null)
-      }
-      
+      await createNewSession()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete source')
+      setError(err instanceof Error ? err.message : 'Failed to start new session')
     }
-  }, [selectedSource])
-
-  // Handler - delete output
-  const handleDeleteOutput = useCallback(async (outputId: string) => {
-    try {
-      const response = await fetch(`/api/quick-study/outputs/${outputId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to delete output')
-      }
-      
-      // Remove from state
-      setOutputs(prev => prev.filter(o => o.id !== outputId))
-      
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete output')
-    }
-  }, [])
+  }, [createNewSession])
 
   // Clear error
   const clearError = useCallback(() => {
     setError(null)
   }, [])
 
-  // Refresh data
-  const refreshData = useCallback(async () => {
-    await fetchSources()
-    if (selectedSource) {
-      await fetchOutputs(selectedSource.id)
+  // Refresh session data
+  const refreshSession = useCallback(async () => {
+    if (!sessionId) return
+    
+    setFetchingSources(true)
+    try {
+      const restored = await restoreSession(sessionId)
+      if (!restored) {
+        // Session expired, create new one
+        await createNewSession()
+      }
+    } catch (err) {
+      setError('Failed to refresh session')
+    } finally {
+      setFetchingSources(false)
     }
-  }, [fetchSources, selectedSource, fetchOutputs])
+  }, [sessionId, restoreSession, createNewSession])
 
   return {
-    // State
+    // Session state
+    sessionId,
+    initializing,
+    
+    // Core state
     sources,
     selectedSource,
     curtainVisible,
@@ -315,11 +424,10 @@ export function useQuickStudy() {
     handleShowCurtain,
     handleChatClick,
     handleFileUpload,
-    handleDeleteSource,
-    handleDeleteOutput,
-    fetchSources,
-    fetchOutputs,
-    refreshData,
+    handleTextSubmit,
+    handleUrlSubmit,
+    handleStartNewSession,
+    refreshSession,
     clearError
   }
 }
@@ -329,32 +437,21 @@ function getFileType(file: File): Source['type'] {
   const mimeType = file.type.toLowerCase()
   const fileName = file.name.toLowerCase()
   
-  // Check by MIME type first
   if (mimeType.includes('pdf')) return 'pdf'
   if (mimeType.includes('text')) return 'text'
   if (mimeType.includes('word') || mimeType.includes('document')) return 'docx'
   if (mimeType.includes('image')) return 'image'
   if (mimeType.includes('audio')) return 'audio'
-  if (mimeType.includes('video')) return 'youtube' // Treat video files as youtube type
+  if (mimeType.includes('video')) return 'youtube'
   
-  // Check by file extension as fallback
   if (fileName.endsWith('.pdf')) return 'pdf'
   if (fileName.endsWith('.txt') || fileName.endsWith('.md')) return 'text'
   if (fileName.endsWith('.doc') || fileName.endsWith('.docx')) return 'docx'
-  if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png') || fileName.endsWith('.gif')) return 'image'
-  if (fileName.endsWith('.mp3') || fileName.endsWith('.wav') || fileName.endsWith('.m4a')) return 'audio'
-  if (fileName.endsWith('.mp4') || fileName.endsWith('.avi') || fileName.endsWith('.mov')) return 'youtube'
+  if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png')) return 'image'
+  if (fileName.endsWith('.mp3') || fileName.endsWith('.wav')) return 'audio'
+  if (fileName.endsWith('.mp4') || fileName.endsWith('.mov')) return 'youtube'
   
-  // Default fallback
   return 'text'
 }
 
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 Bytes'
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-export type { Source, Output, PlaygroundContent }
+export type { Source, Output, PlaygroundContent, Session }
