@@ -168,7 +168,6 @@ export default function QuickStudyPage() {
   curtainVisible={curtainVisible}
   playgroundContent={playgroundContent}
   selectedSource={selectedSource}
-  sources={sources}
   isGenerating={isGenerating}
   currentOutput={currentOutput} 
   onShowCurtain={handleShowCurtain}

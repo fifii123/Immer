@@ -145,7 +145,7 @@ export default function PlaygroundArea({
               <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto bg-gradient-to-br from-indigo-500 to-purple-600 shadow-2xl shadow-indigo-500/25">
                 <Loader2 className="h-10 w-10 text-white animate-spin" />
               </div>
-              <div className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full animate-pulse shadow-lg" />
+              {/* <div className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full animate-pulse shadow-lg" /> */}
             </div>
             
             <h3 className="text-2xl font-bold mb-4 text-foreground">
@@ -365,46 +365,55 @@ export default function PlaygroundArea({
       )}
     </header>
     
-    {/* Study Method Tiles */}
-    <div className="grid grid-cols-2 gap-3 mb-4">
-      {tiles.map((tile) => (
-        <button
-          key={tile.id}
-          className={`group relative p-4 rounded-xl text-left transition-all duration-200 hover:shadow-md bg-background hover:bg-accent/50 border-border border ${!selectedSource || selectedSource.status !== 'ready' ? 'opacity-50 cursor-not-allowed' : ''}`}
-          onClick={() => selectedSource?.status === 'ready' && onTileClick(tile.id)}
-          disabled={!selectedSource || selectedSource.status !== 'ready'}
-        >
-          <div className="flex flex-col gap-2">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/10">
-              {tile.icon}
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-foreground">
-                {tile.title}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {tile.desc}
-              </div>
-            </div>
-          </div>
-        </button>
-      ))}
-    </div>
-    
-    {/* Ask Questions Button */}
-    <Card 
-      className={`w-full cursor-pointer transition-all duration-200 rounded-xl hover:bg-accent/50 ${!selectedSource || selectedSource.status !== 'ready' ? 'opacity-50 cursor-not-allowed' : ''}`}
-      onClick={() => selectedSource?.status === 'ready' && onChatClick()}
+{/* Study Method Tiles */}
+<div className="grid grid-cols-2 gap-3 mb-4">
+  {tiles.map((tile) => (
+    <button
+      key={tile.id}
+      className={`group relative overflow-hidden p-4 rounded-xl text-left transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${
+        !selectedSource || selectedSource.status !== 'ready' ? 'opacity-50 cursor-not-allowed' : ''
+      }`}
+      onClick={() => selectedSource?.status === 'ready' && onTileClick(tile.id)}
+      disabled={!selectedSource || selectedSource.status !== 'ready'}
     >
-      <CardContent className="p-4 text-center">
-        <div className="flex items-center justify-center gap-3">
-          <MessageCircle className="h-5 w-5 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">
-            Ask Questions
-          </span>
+      <div className="absolute inset-0 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-850 opacity-90"></div>
+      <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+      <div className="relative flex flex-col gap-2">
+        <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center group-hover:shadow-md transition-shadow">
+          <div className="text-indigo-600 dark:text-indigo-400">
+            {tile.icon}
+          </div>
         </div>
-      </CardContent>
-    </Card>
+        <div>
+          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+            {tile.title}
+          </div>
+          <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            {tile.desc}
+          </div>
+        </div>
+      </div>
+    </button>
+  ))}
+</div>
+    
+{/* Ask Questions Button */}
+<button
+  className={`group relative overflow-hidden rounded-xl p-4 text-center transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] w-full ${
+    !selectedSource || selectedSource.status !== 'ready' ? 'opacity-50 cursor-not-allowed' : ''
+  }`}
+  onClick={() => selectedSource?.status === 'ready' && onChatClick()}
+  disabled={!selectedSource || selectedSource.status !== 'ready'}
+>
+  <div className="absolute inset-0 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-850 opacity-90"></div>
+  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+  <div className="relative flex items-center justify-center gap-3">
+    <MessageCircle className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+    <span className="text-sm font-medium text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+      Ask Questions
+    </span>
+  </div>
+</button>
   </div>
   
   {/* Collapsed handle - simplified */}
