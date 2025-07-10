@@ -3,249 +3,366 @@
 import React from 'react'
 import { usePreferences } from "@/context/preferences-context"
 import { 
-  Target, 
-  Sparkles, 
+  ChevronLeft,
+  ChevronRight,
+  Zap,
+  Target,
+  PenTool,
+  FileCheck,
+  Key,
+  Brain,
   MessageCircle,
   Loader2,
-  ArrowRight
+  Sparkles,
+  Bot,
+  Send,
+  LayoutGrid,
+  FileText,
+  Youtube,
+  Image,
+  Mic
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-
-// Import ChatViewer - już gotowy!
-import ChatViewer from '../outputs/viewers/ChatViewer'
-// Pozostałe viewery będą dodane jutro w folderze outputs/viewers/
-
-// Types
-interface Output {
-  id: string
-  type: 'flashcards' | 'quiz' | 'notes' | 'summary' | 'concepts' | 'mindmap'
-  title: string
-  content: any
-}
-
-interface Source {
-  id: string
-  name: string
-  type: string
-  status: string
-}
-
-type PlaygroundContent = Output['type'] | 'chat' | null
+import { Card, CardContent } from "@/components/ui/card"
+import { Source, PlaygroundContent } from '../hooks/useQuickStudy'
 
 interface PlaygroundAreaProps {
-  content: PlaygroundContent
-  currentOutput: Output | null
-  isGenerating: boolean
   curtainVisible: boolean
+  playgroundContent: PlaygroundContent
   selectedSource: Source | null
-  onShowOutputs: () => void
+  isGenerating: boolean
+  onShowCurtain: () => void
+  onTileClick: (type: string) => void
   onChatClick: () => void
 }
 
+const tiles = [
+  { 
+    id: 'flashcards', 
+    icon: <Zap className="h-5 w-5" />, 
+    title: 'Flashcards', 
+    desc: 'Spaced repetition cards'
+  },
+  { 
+    id: 'quiz', 
+    icon: <Target className="h-5 w-5" />, 
+    title: 'Interactive Quiz', 
+    desc: 'Adaptive testing'
+  },
+  { 
+    id: 'notes', 
+    icon: <PenTool className="h-5 w-5" />, 
+    title: 'Smart Notes', 
+    desc: 'Structured summaries'
+  },
+  { 
+    id: 'summary', 
+    icon: <FileCheck className="h-5 w-5" />, 
+    title: 'Key Summary', 
+    desc: 'Essential points'
+  },
+  { 
+    id: 'concepts', 
+    icon: <Key className="h-5 w-5" />, 
+    title: 'Concepts Map', 
+    desc: 'Key definitions'
+  },
+  { 
+    id: 'mindmap', 
+    icon: <Brain className="h-5 w-5" />, 
+    title: 'Visual Map', 
+    desc: 'Connected ideas'
+  }
+]
+
+const getSourceIcon = (type: string) => {
+  switch (type) {
+    case 'pdf': return <FileText className="h-4 w-4" />
+    case 'youtube': return <Youtube className="h-4 w-4" />
+    case 'image': return <Image className="h-4 w-4" />
+    case 'audio': return <Mic className="h-4 w-4" />
+    default: return <FileText className="h-4 w-4" />
+  }
+}
+
 export default function PlaygroundArea({
-  content,
-  currentOutput,
-  isGenerating,
   curtainVisible,
+  playgroundContent,
   selectedSource,
-  onShowOutputs,
+  isGenerating,
+  onShowCurtain,
+  onTileClick,
   onChatClick
 }: PlaygroundAreaProps) {
   const { darkMode } = usePreferences()
-
-  // Router dla różnych typów content - podobnie jak w PDF Reader switchy między tabami
-  const renderContent = () => {
-    if (isGenerating) {
-      return renderGeneratingState()
-    }
-
-    if (!content) {
-      return renderEmptyState()
-    }
-
-    // Switch między różnymi viewerami - ChatViewer już gotowy!
-    switch (content) {
-      case 'flashcards':
-        return renderPlaceholderViewer('Flashcards', 'Interactive spaced repetition cards')
-        // return <FlashcardsViewer output={currentOutput} />
-      case 'quiz':
-        return renderPlaceholderViewer('Quiz', 'Interactive quiz questions')
-        // return <QuizViewer output={currentOutput} />
-      case 'notes':
-        return renderPlaceholderViewer('Notes', 'Structured smart notes')
-        // return <NotesViewer output={currentOutput} />
-      case 'summary':
-        return renderPlaceholderViewer('Summary', 'Key points summary')
-        // return <SummaryViewer output={currentOutput} />
-      case 'concepts':
-        return renderPlaceholderViewer('Concepts', 'Key definitions and terms')
-        // return <ConceptsViewer output={currentOutput} />
-      case 'mindmap':
-        return renderPlaceholderViewer('Mindmap', 'Visual concept mapping')
-        // return <MindmapViewer output={currentOutput} />
-      case 'chat':
-        return <ChatViewer selectedSource={selectedSource} />
-      default:
-        return renderEmptyState()
-    }
-  }
 
   return (
     <section className={`relative h-full overflow-hidden rounded-2xl ${
       darkMode ? 'bg-card border-border' : 'bg-white border-slate-200'
     } border`}>
       
-      {/* Toggle buttons - podobnie jak w PDF Reader toggle dla paneli */}
-      {!curtainVisible && (
-        <div className="absolute top-4 right-4 z-10 flex gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="hover:bg-accent"
-            onClick={onShowOutputs}
+      {/* Playground Content */}
+      <div className={`absolute inset-0 ${!curtainVisible && playgroundContent === 'chat' ? 'pr-12' : ''}`}>
+        {playgroundContent === 'flashcards' && (
+          <article className="h-full flex flex-col p-8">
+            <header className="text-center mb-8">
+              <div className="inline-flex items-center gap-3 mb-4">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                  darkMode ? 'bg-primary/10' : 'bg-primary/5'
+                }`}>
+                  <Zap className="h-5 w-5 text-primary" />
+                </div>
+                <div className="text-left">
+                  <h2 className={`text-2xl font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                    Interactive Flashcards
+                  </h2>
+                  <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+                    Spaced repetition for optimal retention
+                  </p>
+                </div>
+              </div>
+            </header>
+            
+            {isGenerating ? (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                  <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-primary" />
+                  <h3 className={`text-lg font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                    Analyzing content
+                  </h3>
+                  <p className={`${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+                    Creating flashcards from {selectedSource?.name}...
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <ul className="w-full max-w-2xl space-y-4">
+                  {[
+                    { front: "What is the primary goal of machine learning?", difficulty: "Easy" },
+                    { front: "Explain the difference between supervised and unsupervised learning", difficulty: "Medium" },
+                    { front: "How does gradient descent optimization work?", difficulty: "Hard" }
+                  ].map((card, index) => (
+                    <li key={index}>
+                      <Card 
+                        className={`group cursor-pointer transition-all duration-300 hover:shadow-lg rounded-xl ${
+                          darkMode 
+                            ? 'bg-card hover:bg-accent/50' 
+                            : 'bg-white hover:bg-slate-50'
+                        }`}
+                      >
+                        <CardContent className="p-6">
+                          <div className="flex items-start justify-between mb-4">
+                            <span className={`text-xs font-medium px-3 py-1 rounded-full ${
+                              card.difficulty === 'Easy' 
+                                ? darkMode ? 'bg-green-500/10 text-green-400' : 'bg-green-50 text-green-700'
+                                : card.difficulty === 'Medium' 
+                                  ? darkMode ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-50 text-amber-700'
+                                  : darkMode ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-700'
+                            }`}>
+                              {card.difficulty}
+                            </span>
+                            <span className={`text-xs ${darkMode ? 'text-muted-foreground' : 'text-slate-500'}`}>
+                              Card {index + 1} of 24
+                            </span>
+                          </div>
+                          <p className={`text-lg leading-relaxed ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                            {card.front}
+                          </p>
+                          <div className={`text-sm mt-4 flex items-center gap-2 ${
+                            darkMode ? 'text-muted-foreground' : 'text-slate-500'
+                          }`}>
+                            <ChevronRight className="h-4 w-4" />
+                            Click to reveal answer
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </article>
+        )}
+        
+        {playgroundContent === 'chat' && (
+          <article className="h-full flex flex-col p-8">
+            <header className="text-center mb-8">
+              <div className="inline-flex items-center gap-3 mb-4">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                  darkMode ? 'bg-primary/10' : 'bg-primary/5'
+                }`}>
+                  <Bot className="h-5 w-5 text-primary" />
+                </div>
+                <div className="text-left">
+                  <h2 className={`text-2xl font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                    AI Study Assistant
+                  </h2>
+                  <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+                    Ask questions about your materials
+                  </p>
+                </div>
+              </div>
+            </header>
+            
+            <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full">
+              <div className="flex-1 flex items-center justify-center pb-4">
+                <Card className={`w-full rounded-xl ${
+                  darkMode ? 'bg-background' : 'bg-slate-50'
+                }`}>
+                  <CardContent className="p-6">
+                    <div className="text-center">
+                      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
+                        darkMode ? 'bg-primary/10' : 'bg-primary/5'
+                      }`}>
+                        <Bot className="h-8 w-8 text-primary" />
+                      </div>
+                      <h3 className={`text-lg font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                        Ready to help you learn
+                      </h3>
+                      <p className={`${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+                        Ask any question about your study materials
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              
+              <form className="flex gap-3 mt-auto">
+                <div className="flex-1 relative">
+                  <input 
+                    type="text"
+                    className={`w-full p-4 pr-12 rounded-xl border focus:outline-none focus:ring-2 focus:ring-primary transition-all ${
+                      darkMode 
+                        ? 'bg-background border-border text-foreground placeholder-muted-foreground' 
+                        : 'bg-white border-slate-200 placeholder-slate-500'
+                    }`}
+                    placeholder="Ask anything about machine learning..."
+                  />
+                  <Button 
+                    size="icon" 
+                    className="absolute right-2 top-2 h-8 w-8 rounded-lg"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </article>
+        )}
+        
+        {!playgroundContent && (
+          <div className="h-full flex items-center justify-center p-8">
+            <div className="text-center max-w-md">
+              <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 ${
+                darkMode ? 'bg-primary/10' : 'bg-primary/5'
+              }`}>
+                <Sparkles className="h-10 w-10 text-primary" />
+              </div>
+              <h2 className={`text-2xl font-semibold mb-3 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                Ready to transform your learning
+              </h2>
+              <p className={`text-lg leading-relaxed ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+                Select a source and choose how you'd like to study it
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Sliding Curtain - dokładnie jak w oryginalnym */}
+      <div className={`absolute top-0 bottom-0 transition-all duration-500 ease-out overflow-hidden z-10 ${
+        curtainVisible ? 'left-0 right-0' : 'left-[calc(100%-48px)] right-0'
+      } ${darkMode ? 'bg-card border-border' : 'bg-white border-slate-200'} border-l`}>
+        
+        {/* Full curtain content */}
+        <div className={`h-full transition-all duration-300 ${
+          curtainVisible ? 'opacity-100 p-6' : 'opacity-0 p-0 overflow-hidden'
+        }`}>
+          <header className="text-center mb-6">
+            <h3 className={`text-xl font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+              Choose your study method
+            </h3>
+            {selectedSource && (
+              <div className="flex items-center justify-center gap-2 text-sm">
+                <span className={darkMode ? 'text-muted-foreground' : 'text-slate-600'}>From:</span>
+                <div className="flex items-center gap-2">
+                  {getSourceIcon(selectedSource.type)}
+                  <span className={`font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                    {selectedSource.name}
+                  </span>
+                </div>
+              </div>
+            )}
+          </header>
+          
+          {/* Study Method Tiles */}
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            {tiles.map((tile) => (
+              <button
+                key={tile.id}
+                className={`group relative p-4 rounded-xl text-left transition-all duration-200 hover:shadow-md ${
+                  darkMode 
+                    ? 'bg-background hover:bg-accent/50 border-border' 
+                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                } border`}
+                onClick={() => onTileClick(tile.id)}
+              >
+                <div className="flex flex-col gap-2">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    darkMode ? 'bg-primary/10' : 'bg-primary/5'
+                  }`}>
+                    {tile.icon}
+                  </div>
+                  <div>
+                    <div className={`text-sm font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                      {tile.title}
+                    </div>
+                    <div className={`text-xs ${darkMode ? 'text-muted-foreground' : 'text-slate-500'}`}>
+                      {tile.desc}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+          
+          {/* Ask Questions Button */}
+          <Card 
+            className={`w-full cursor-pointer transition-all duration-200 rounded-xl ${
+              darkMode 
+                ? 'hover:bg-accent/50' 
+                : 'hover:bg-slate-50'
+            }`}
+            onClick={onChatClick}
           >
-            <Target className="h-4 w-4" />
-          </Button>
-          {selectedSource && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="hover:bg-accent"
-              onClick={onChatClick}
-            >
-              <MessageCircle className="h-4 w-4" />
-            </Button>
-          )}
+            <CardContent className="p-4 text-center">
+              <div className="flex items-center justify-center gap-3">
+                <MessageCircle className={`h-5 w-5 ${darkMode ? 'text-muted-foreground' : 'text-slate-400'}`} />
+                <span className={`text-sm font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                  Ask Questions
+                </span>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      )}
-      
-      {/* Content area */}
-      <div className="h-full">
-        {renderContent()}
+        
+        {/* Collapsed handle */}
+        {!curtainVisible && (
+          <div className="absolute left-2 top-1/2 transform -translate-y-1/2">
+            <button
+              className={`w-8 h-16 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                darkMode 
+                  ? 'bg-background text-muted-foreground hover:bg-accent hover:text-foreground' 
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+              }`}
+              onClick={onShowCurtain}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
     </section>
   )
-
-  function renderGeneratingState() {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="relative">
-            <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-6 ${
-              darkMode ? 'bg-primary/10' : 'bg-primary/5'
-            }`}>
-              <Loader2 className="h-8 w-8 text-primary animate-spin" />
-            </div>
-            <div className="absolute -top-1 -right-1 w-6 h-6 bg-primary rounded-full animate-pulse" />
-          </div>
-          
-          <h3 className={`text-xl font-semibold mb-3 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-            Generating content...
-          </h3>
-          <p className={`text-base leading-relaxed mb-4 ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-            AI is analyzing your content and creating personalized study materials
-          </p>
-          
-          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <div className="flex space-x-1">
-              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-            </div>
-            <span>This might take a moment</span>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  function renderEmptyState() {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className={`w-20 h-20 rounded-xl flex items-center justify-center mx-auto mb-6 ${
-            darkMode ? 'bg-primary/10' : 'bg-primary/5'
-          }`}>
-            <Sparkles className="h-10 w-10 text-primary" />
-          </div>
-          <h2 className={`text-2xl font-semibold mb-3 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-            Ready to transform your learning
-          </h2>
-          <p className={`text-lg leading-relaxed mb-6 ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-            {selectedSource 
-              ? "Choose a study method to generate personalized content"
-              : "Upload a source and select how you'd like to study it"
-            }
-          </p>
-          
-          {selectedSource ? (
-            <div className="space-y-3">
-              <Button 
-                onClick={onShowOutputs}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                Choose Study Method
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-              <div className="flex items-center gap-4 justify-center">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={onChatClick}
-                >
-                  <MessageCircle className="mr-2 h-4 w-4" />
-                  Chat with AI
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button 
-              variant="outline"
-              onClick={() => document.getElementById('file-upload')?.click()}
-            >
-              Upload Your First Source
-            </Button>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  // TODO: Jutro - usunąć gdy będziesz miał prawdziwe viewery
-  function renderPlaceholderViewer(title: string, description: string) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-6 ${
-            darkMode ? 'bg-primary/10' : 'bg-primary/5'
-          }`}>
-            <Target className="h-8 w-8 text-primary" />
-          </div>
-          <h2 className={`text-2xl font-semibold mb-3 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-            {title} Viewer
-          </h2>
-          <p className={`text-lg leading-relaxed mb-6 ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-            {description}
-          </p>
-          
-          {currentOutput && (
-            <div className="space-y-2">
-              <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-                Content: {currentOutput.title}
-              </p>
-              <p className={`text-xs ${darkMode ? 'text-muted-foreground' : 'text-slate-500'}`}>
-                TODO: Implement {content} viewer component
-              </p>
-            </div>
-          )}
-          
-          <div className="mt-6 space-y-2">
-            <Button variant="outline" onClick={onShowOutputs}>
-              Back to Methods
-            </Button>
-          </div>
-        </div>
-      </div>
-    )
-  }
 }

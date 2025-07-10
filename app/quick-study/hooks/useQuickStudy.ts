@@ -1,343 +1,216 @@
 "use client"
 
-import { useState, useCallback, useEffect } from 'react'
-import { useToast } from '@/components/ui/use-toast'
+import { useState, useCallback } from 'react'
 
-// Types - podobnie jak w PDF Reader
+// Types
 interface Source {
-  id: string
-  name: string
-  type: 'pdf' | 'youtube' | 'text' | 'docx' | 'image' | 'audio'
-  status: 'processing' | 'ready' | 'error'
-  size?: string
-  duration?: string
-  pages?: number
-  content?: string
+  id: string;
+  name: string;
+  type: 'pdf' | 'youtube' | 'text' | 'docx' | 'image' | 'audio';
+  status: 'ready' | 'processing' | 'error';
+  size?: string;
+  duration?: string;
+  pages?: number;
 }
 
 interface Output {
-  id: string
-  type: 'flashcards' | 'quiz' | 'notes' | 'summary' | 'concepts' | 'mindmap'
-  title: string
-  preview: string
-  status: 'generating' | 'ready' | 'error'
-  sourceId: string
-  createdAt: string
-  content: any
-  count?: number
+  id: string;
+  type: 'flashcards' | 'quiz' | 'notes' | 'summary' | 'concepts' | 'mindmap';
+  title: string;
+  preview: string;
+  status: 'ready' | 'generating' | 'error';
+  sourceId: string;
+  createdAt: Date;
+  count?: number;
 }
 
-type PlaygroundContent = Output['type'] | 'chat' | null
+type PlaygroundContent = 'flashcards' | 'quiz' | 'notes' | 'summary' | 'concepts' | 'mindmap' | 'chat' | null;
 
 export function useQuickStudy() {
-  const { toast } = useToast()
+  // State management - dokładnie jak w oryginalnym page.tsx
+  const [sources, setSources] = useState<Source[]>([
+    { 
+      id: '1', 
+      name: 'Machine Learning Fundamentals', 
+      type: 'pdf', 
+      status: 'ready',
+      size: '2.4 MB',
+      pages: 42
+    },
+    { 
+      id: '2', 
+      name: 'Neural Networks Explained', 
+      type: 'youtube', 
+      status: 'ready',
+      duration: '25 min'
+    },
+    { 
+      id: '3', 
+      name: 'Deep Learning Research Notes', 
+      type: 'text', 
+      status: 'processing',
+      size: '156 KB'
+    },
+    { 
+      id: '4', 
+      name: 'Computer Vision Basics', 
+      type: 'pdf', 
+      status: 'ready',
+      size: '1.8 MB',
+      pages: 28
+    },
+    { 
+      id: '5', 
+      name: 'AI Ethics Lecture', 
+      type: 'youtube', 
+      status: 'ready',
+      duration: '45 min'
+    }
+  ])
   
-  // Core state - podobnie jak w useNotes
-  const [sources, setSources] = useState<Source[]>([])
-  const [selectedSource, setSelectedSource] = useState<Source | null>(null)
-  const [outputs, setOutputs] = useState<Output[]>([])
-  
-  // UI state
+  const [selectedSource, setSelectedSource] = useState<Source | null>(sources[0])
   const [curtainVisible, setCurtainVisible] = useState(true)
   const [playgroundContent, setPlaygroundContent] = useState<PlaygroundContent>(null)
-  const [currentOutput, setCurrentOutput] = useState<Output | null>(null)
-  
-  // Loading states
-  const [uploadInProgress, setUploadInProgress] = useState(false)
+  const [outputs, setOutputs] = useState<Output[]>([
+    {
+      id: '1',
+      type: 'flashcards',
+      title: 'ML Fundamentals Cards',
+      preview: '24 cards covering key concepts',
+      status: 'ready',
+      sourceId: '1',
+      createdAt: new Date(),
+      count: 24
+    },
+    {
+      id: '2',
+      type: 'quiz',
+      title: 'Neural Networks Quiz',
+      preview: '12 questions on deep learning',
+      status: 'ready',
+      sourceId: '2',
+      createdAt: new Date(),
+      count: 12
+    },
+    {
+      id: '3',
+      type: 'notes',
+      title: 'AI Research Summary',
+      preview: '5 sections with key insights',
+      status: 'ready',
+      sourceId: '3',
+      createdAt: new Date(),
+      count: 5
+    },
+    {
+      id: '4',
+      type: 'summary',
+      title: 'Core Concepts Overview',
+      preview: 'Essential points extracted',
+      status: 'ready',
+      sourceId: '1',
+      createdAt: new Date(),
+      count: 1
+    },
+    {
+      id: '5',
+      type: 'concepts',
+      title: 'Key Definitions Map',
+      preview: '18 important terms defined',
+      status: 'ready',
+      sourceId: '2',
+      createdAt: new Date(),
+      count: 18
+    },
+    {
+      id: '6',
+      type: 'mindmap',
+      title: 'Learning Pathways',
+      preview: 'Visual connection map',
+      status: 'generating',
+      sourceId: '3',
+      createdAt: new Date(),
+      count: 1
+    },
+    {
+      id: '7',
+      type: 'flashcards',
+      title: 'Computer Vision Cards',
+      preview: '16 cards on image processing',
+      status: 'ready',
+      sourceId: '4',
+      createdAt: new Date(),
+      count: 16
+    }
+  ])
   const [isGenerating, setIsGenerating] = useState(false)
 
-  // Fetch user's sources on mount
-  useEffect(() => {
-    fetchSources()
-  }, [])
-
-  // API call - fetch sources
-  const fetchSources = useCallback(async () => {
-    try {
-      const response = await fetch('/api/quick-study/sources', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
-      })
-      
-      if (response.ok) {
-        const sources = await response.json()
-        setSources(sources)
-      }
-    } catch (error) {
-      console.error('Error fetching sources:', error)
-    }
-  }, [])
-
-  // Handler - source selection
+  // Handlers - dokładnie jak w oryginalnym page.tsx
   const handleSourceSelect = useCallback((source: Source) => {
     setSelectedSource(source)
-    setCurtainVisible(true) // Show outputs panel when source selected
-    setPlaygroundContent(null) // Clear playground
   }, [])
 
-  // Handler - file upload
-  const handleFileUpload = useCallback(async (files: File[]) => {
-    setUploadInProgress(true)
-    
-    try {
-      const formData = new FormData()
-      files.forEach(file => formData.append('files', file))
-      
-      // TODO: Jutro - uncomment this API call
-      /*
-      const response = await fetch('/api/quick-study/upload', {
-        method: 'POST',
-        body: formData,
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
-      })
-      
-      if (!response.ok) {
-        throw new Error('Upload failed')
-      }
-      
-      const newSources = await response.json()
-      */
-      
-      // MOCK na dzisiaj - usunąć jutro
-      await new Promise(resolve => setTimeout(resolve, 2000)) // Simulate upload
-      
-      const newSources: Source[] = files.map((file, index) => ({
-        id: `temp-${Date.now()}-${index}`,
-        name: file.name,
-        type: getFileType(file),
-        status: 'ready',
-        size: formatFileSize(file.size),
-        content: null
-      }))
-      
-      setSources(prev => [...prev, ...newSources])
-      
-      // Auto-select first uploaded source
-      if (newSources.length > 0 && !selectedSource) {
-        setSelectedSource(newSources[0])
-      }
-      
-      toast({
-        title: "Files uploaded",
-        description: `${files.length} file(s) uploaded successfully`
-      })
-      
-    } catch (error) {
-      toast({
-        title: "Upload failed",
-        description: "Please try again",
-        variant: "destructive"
-      })
-    } finally {
-      setUploadInProgress(false)
-    }
-  }, [selectedSource, toast])
-
-  // Handler - method selection (generate new content)
-  const handleMethodSelect = useCallback(async (method: string) => {
-    if (!selectedSource) return
-    
-    setIsGenerating(true)
+  const handleTileClick = useCallback((type: string) => {
     setCurtainVisible(false)
-    setPlaygroundContent(method as PlaygroundContent)
+    setPlaygroundContent(type as PlaygroundContent)
+    setIsGenerating(true)
     
-    try {
-      // TODO: Jutro - uncomment this API call
-      /*
-      const response = await fetch('/api/quick-study/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
-        body: JSON.stringify({
-          sourceId: selectedSource.id,
-          method: method
-        })
-      })
-      
-      if (!response.ok) {
-        throw new Error('Generation failed')
+    setTimeout(() => {
+      setIsGenerating(false)
+      const counts = {
+        flashcards: Math.floor(Math.random() * 20) + 15,
+        quiz: Math.floor(Math.random() * 10) + 8,
+        notes: Math.floor(Math.random() * 5) + 3,
+        summary: 1,
+        concepts: Math.floor(Math.random() * 15) + 10,
+        mindmap: 1
       }
-      
-      const newOutput = await response.json()
-      */
-      
-      // MOCK na dzisiaj - usunąć jutro
-      await new Promise(resolve => setTimeout(resolve, 3000)) // Simulate AI processing
       
       const newOutput: Output = {
-        id: `output-${Date.now()}`,
-        type: method as any,
-        title: `${method.charAt(0).toUpperCase() + method.slice(1)} from ${selectedSource.name}`,
-        preview: `Generated ${method} content`,
+        id: Date.now().toString(),
+        type: type as any,
+        title: `${type.charAt(0).toUpperCase() + type.slice(1)} from ${selectedSource?.name}`,
+        preview: `${counts[type as keyof typeof counts]} ${type === 'summary' || type === 'mindmap' ? 'section' : 'items'} generated`,
         status: 'ready',
-        sourceId: selectedSource.id,
-        createdAt: new Date().toISOString(),
-        content: generateMockContent(method),
-        count: getContentCount(method)
+        sourceId: selectedSource?.id || '1',
+        createdAt: new Date(),
+        count: counts[type as keyof typeof counts]
       }
-      
       setOutputs(prev => [...prev, newOutput])
-      setCurrentOutput(newOutput)
-      
-      toast({
-        title: "Content generated",
-        description: `${method} created successfully`
-      })
-      
-    } catch (error) {
-      toast({
-        title: "Generation failed",
-        description: "Please try again",
-        variant: "destructive"
-      })
-    } finally {
-      setIsGenerating(false)
-    }
-  }, [selectedSource, toast])
+    }, 3000)
+  }, [selectedSource])
 
-  // Handler - show outputs panel
-  const handleShowOutputs = useCallback(() => {
-    setCurtainVisible(true)
-    setPlaygroundContent(null)
-    setCurrentOutput(null)
-  }, [])
-
-  // Handler - chat click
-  const handleChatClick = useCallback(() => {
-    setCurtainVisible(false)
-    setPlaygroundContent('chat')
-    setCurrentOutput(null)
-  }, [])
-
-  // Handler - output click (view existing output)
   const handleOutputClick = useCallback((output: Output) => {
     setCurtainVisible(false)
     setPlaygroundContent(output.type)
-    setCurrentOutput(output)
+  }, [])
+
+  const handleShowCurtain = useCallback(() => {
+    setCurtainVisible(true)
+    setPlaygroundContent(null)
+  }, [])
+
+  const handleChatClick = useCallback(() => {
+    setCurtainVisible(false)
+    setPlaygroundContent('chat')
   }, [])
 
   return {
     // State
     sources,
     selectedSource,
-    outputs,
-    playgroundContent,
-    currentOutput,
     curtainVisible,
+    playgroundContent,
+    outputs,
     isGenerating,
-    uploadInProgress,
     
     // Handlers
     handleSourceSelect,
-    handleFileUpload,
-    handleMethodSelect,
-    handleShowOutputs,
-    handleChatClick,
+    handleTileClick,
     handleOutputClick,
-    
-    // Utils
-    fetchSources
+    handleShowCurtain,
+    handleChatClick
   }
 }
 
-// Helper functions - TODO: move to utils file later
-function getFileType(file: File): Source['type'] {
-  if (file.type.includes('pdf')) return 'pdf'
-  if (file.type.includes('text')) return 'text'
-  if (file.type.includes('word')) return 'docx'
-  if (file.type.includes('image')) return 'image'
-  if (file.type.includes('audio')) return 'audio'
-  return 'text'
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 Bytes'
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-// TODO: Jutro - usunąć mock functions
-function generateMockContent(method: string) {
-  const mockContents = {
-    flashcards: [
-      { front: "What is machine learning?", back: "A subset of AI that learns from data" },
-      { front: "Define neural network", back: "Computing system inspired by biological neural networks" },
-      { front: "What is supervised learning?", back: "Learning with labeled training data" }
-    ],
-    quiz: [
-      { 
-        question: "What is the main goal of machine learning?", 
-        options: ["To replace humans", "To learn patterns from data", "To create robots", "To store data"], 
-        correct: 1,
-        explanation: "Machine learning aims to identify patterns in data to make predictions or decisions."
-      },
-      { 
-        question: "Which of these is a supervised learning algorithm?", 
-        options: ["K-means", "Linear Regression", "PCA", "DBSCAN"], 
-        correct: 1,
-        explanation: "Linear regression uses labeled data to learn the relationship between input and output."
-      }
-    ],
-    notes: {
-      sections: [
-        { 
-          title: "Introduction to Machine Learning", 
-          content: "Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed."
-        },
-        { 
-          title: "Types of Machine Learning", 
-          content: "There are three main types: supervised learning (with labeled data), unsupervised learning (without labels), and reinforcement learning (learning through rewards)."
-        },
-        { 
-          title: "Key Algorithms", 
-          content: "Popular algorithms include linear regression, decision trees, neural networks, and support vector machines."
-        }
-      ]
-    },
-    summary: "Machine learning enables computers to learn from data without explicit programming. Main types include supervised, unsupervised, and reinforcement learning. Key applications span from image recognition to natural language processing.",
-    concepts: [
-      { term: "Algorithm", definition: "A set of rules or instructions for solving a problem" },
-      { term: "Training Data", definition: "Dataset used to teach the machine learning model" },
-      { term: "Feature", definition: "Individual measurable properties of observed phenomena" },
-      { term: "Model", definition: "Mathematical representation of a real-world process" }
-    ],
-    mindmap: {
-      central: "Machine Learning",
-      branches: [
-        { 
-          name: "Supervised Learning", 
-          children: ["Classification", "Regression", "Decision Trees", "Neural Networks"] 
-        },
-        { 
-          name: "Unsupervised Learning", 
-          children: ["Clustering", "Dimensionality Reduction", "Association Rules"] 
-        },
-        { 
-          name: "Reinforcement Learning", 
-          children: ["Q-Learning", "Policy Gradient", "Actor-Critic"] 
-        }
-      ]
-    }
-  }
-  
-  return mockContents[method as keyof typeof mockContents] || {}
-}
-
-function getContentCount(method: string): number {
-  const counts = {
-    flashcards: 15,
-    quiz: 10,
-    notes: 3,
-    summary: 1,
-    concepts: 12,
-    mindmap: 1
-  }
-  return counts[method as keyof typeof counts] || 1
-}
+export type { Source, Output, PlaygroundContent }
