@@ -38,7 +38,7 @@ export function useQuickStudy() {
   const [outputs, setOutputs] = useState<Output[]>([])
   
   // UI state
-  const [methodsOverlayVisible, setMethodsOverlayVisible] = useState(false)
+  const [curtainVisible, setCurtainVisible] = useState(true)
   const [playgroundContent, setPlaygroundContent] = useState<PlaygroundContent>(null)
   const [currentOutput, setCurrentOutput] = useState<Output | null>(null)
   
@@ -72,7 +72,7 @@ export function useQuickStudy() {
   // Handler - source selection
   const handleSourceSelect = useCallback((source: Source) => {
     setSelectedSource(source)
-    setMethodsOverlayVisible(true) // Show methods overlay when source selected
+    setCurtainVisible(true) // Show outputs panel when source selected
     setPlaygroundContent(null) // Clear playground
   }, [])
 
@@ -141,7 +141,7 @@ export function useQuickStudy() {
     if (!selectedSource) return
     
     setIsGenerating(true)
-    setMethodsOverlayVisible(false) // Hide overlay
+    setCurtainVisible(false)
     setPlaygroundContent(method as PlaygroundContent)
     
     try {
@@ -200,28 +200,23 @@ export function useQuickStudy() {
     }
   }, [selectedSource, toast])
 
-  // Handler - show methods overlay
-  const handleShowMethodsOverlay = useCallback(() => {
-    setMethodsOverlayVisible(true)
+  // Handler - show outputs panel
+  const handleShowOutputs = useCallback(() => {
+    setCurtainVisible(true)
     setPlaygroundContent(null)
     setCurrentOutput(null)
   }, [])
 
-  // Handler - hide methods overlay
-  const handleHideMethodsOverlay = useCallback(() => {
-    setMethodsOverlayVisible(false)
-  }, [])
-
   // Handler - chat click
   const handleChatClick = useCallback(() => {
-    setMethodsOverlayVisible(false)
+    setCurtainVisible(false)
     setPlaygroundContent('chat')
     setCurrentOutput(null)
   }, [])
 
   // Handler - output click (view existing output)
   const handleOutputClick = useCallback((output: Output) => {
-    setMethodsOverlayVisible(false)
+    setCurtainVisible(false)
     setPlaygroundContent(output.type)
     setCurrentOutput(output)
   }, [])
@@ -233,7 +228,7 @@ export function useQuickStudy() {
     outputs,
     playgroundContent,
     currentOutput,
-    methodsOverlayVisible,
+    curtainVisible,
     isGenerating,
     uploadInProgress,
     
@@ -241,8 +236,7 @@ export function useQuickStudy() {
     handleSourceSelect,
     handleFileUpload,
     handleMethodSelect,
-    handleShowMethodsOverlay,
-    handleHideMethodsOverlay,
+    handleShowOutputs,
     handleChatClick,
     handleOutputClick,
     
