@@ -1,19 +1,19 @@
 "use client"
 
 import React, { useState, useRef, useEffect } from 'react'
-import { usePreferences } from "@/context/preferences-context"
 import { 
-  Bot, 
+  Sparkles, 
   Send, 
   User,
   Loader2,
-  RefreshCw,
-  MessageCircle
+  Command,
+  ArrowRight,
+  Zap,
+  FileText,
+  Brain,
+  Lightbulb,
+  BookOpen
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { useToast } from "@/components/ui/use-toast"
 
 interface Message {
   id: string
@@ -30,47 +30,28 @@ interface Source {
 }
 
 interface ChatViewerProps {
-  selectedSource: Source | null
+  selectedSource?: Source | null
 }
 
-export default function ChatViewer({ selectedSource }: ChatViewerProps) {
-  const { darkMode } = usePreferences()
-  const { toast } = useToast()
-  
-  // State
+export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample Document', type: 'pdf', status: 'ready' } }: ChatViewerProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isTyping, setIsTyping] = useState(false)
   
-  // Refs
-  const scrollAreaRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
+  const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return
-    
-    if (!selectedSource) {
-      toast({
-        title: "No source selected",
-        description: "Please select a source to chat about",
-        variant: "destructive"
-      })
-      return
-    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -79,310 +60,285 @@ export default function ChatViewer({ selectedSource }: ChatViewerProps) {
       timestamp: new Date()
     }
 
-    // Add user message
     setMessages(prev => [...prev, userMessage])
     setInputValue('')
     setIsLoading(true)
+    setIsTyping(true)
 
-    try {
-      // TODO: Jutro - uncomment this API call
-      /*
-      const response = await fetch('/api/quick-study/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
-        body: JSON.stringify({
-          message: userMessage.content,
-          sourceId: selectedSource.id,
-          messages: messages // Send conversation history
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error('Chat request failed')
-      }
-
-      const data = await response.json()
-      */
-
-      // MOCK response na dzisiaj - usunąć jutro
-      await new Promise(resolve => setTimeout(resolve, 1500)) // Simulate API delay
-      
-      const mockResponse = generateMockResponse(userMessage.content, selectedSource)
-      
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: mockResponse,
-        timestamp: new Date()
-      }
-
-      setMessages(prev => [...prev, assistantMessage])
-
-    } catch (error) {
-      console.error('Chat error:', error)
-      toast({
-        title: "Chat error",
-        description: "Failed to get response. Please try again.",
-        variant: "destructive"
-      })
-    } finally {
-      setIsLoading(false)
-      inputRef.current?.focus()
+    // Simulate AI response
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    
+    const mockResponse = generateMockResponse(userMessage.content, selectedSource!)
+    
+    // Simulate typing effect
+    const assistantMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      role: 'assistant',
+      content: mockResponse,
+      timestamp: new Date()
     }
+
+    setMessages(prev => [...prev, assistantMessage])
+    setIsTyping(false)
+    setIsLoading(false)
+    inputRef.current?.focus()
   }
 
-  const clearChat = () => {
-    setMessages([])
-    inputRef.current?.focus()
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSendMessage()
+    }
   }
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
 
+  const handleSuggestionClick = (question: string) => {
+    setInputValue(question)
+    inputRef.current?.focus()
+  }
+
   return (
-    <article className="h-full flex flex-col p-8">
-      {/* Header - podobny do Twojego current code */}
-      <header className="text-center mb-8">
-        <div className="inline-flex items-center gap-3 mb-4">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-            darkMode ? 'bg-primary/10' : 'bg-primary/5'
-          }`}>
-            <Bot className="h-5 w-5 text-primary" />
-          </div>
-          <div className="text-left">
-            <h2 className={`text-2xl font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-              AI Study Assistant
-            </h2>
-            <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-              {selectedSource 
-                ? `Ask questions about ${selectedSource.name}`
-                : "Ask questions about your materials"
-              }
-            </p>
+    <div className="h-screen flex flex-col bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900">
+      {/* Header */}
+      <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
+        <div className="max-w-4xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+           
+            
+            {messages.length > 0 && (
+              <button
+                onClick={() => setMessages([])}
+                className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+              >
+                New conversation
+              </button>
+            )}
           </div>
         </div>
-        
-        {/* Clear chat button */}
-        {messages.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={clearChat}
-            className="mb-4"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Clear Chat
-          </Button>
-        )}
-      </header>
-      
-      <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full">
-        {/* Messages Area */}
-        <div className="flex-1 mb-4">
+      </div>
+
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-6">
           {messages.length === 0 ? (
-            // Welcome state - podobny do Twojego current code
-            <div className="h-full flex items-center justify-center">
-              <Card className={`w-full rounded-xl ${
-                darkMode ? 'bg-background' : 'bg-slate-50'
-              }`}>
-                <CardContent className="p-6">
-                  <div className="text-center">
-                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
-                      darkMode ? 'bg-primary/10' : 'bg-primary/5'
-                    }`}>
-                      <Bot className="h-8 w-8 text-primary" />
-                    </div>
-                    <h3 className={`text-lg font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-                      Ready to help you learn
-                    </h3>
-                    <p className={darkMode ? 'text-muted-foreground' : 'text-slate-600'}>
-                      {selectedSource 
-                        ? `Ask any question about "${selectedSource.name}"`
-                        : "Ask any question about your study materials"
-                      }
-                    </p>
-                    
-                    {/* Suggested questions */}
-                    {selectedSource && (
-                      <div className="mt-6 space-y-2">
-                        <p className={`text-sm font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-                          Suggested questions:
-                        </p>
-                        <div className="space-y-2">
-                          {getSuggestedQuestions(selectedSource).map((question, index) => (
-                            <button
-                              key={index}
-                              className={`w-full p-2 text-sm rounded-lg text-left transition-colors ${
-                                darkMode 
-                                  ? 'hover:bg-accent border border-border' 
-                                  : 'hover:bg-white border border-slate-200'
-                              }`}
-                              onClick={() => setInputValue(question)}
-                            >
-                              {question}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+            // Welcome State
+            <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
+              <div className="w-full max-w-2xl">
+                <div className="text-center mb-12">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-6 shadow-2xl shadow-indigo-500/25">
+                    <Brain className="h-8 w-8 text-white" />
                   </div>
-                </CardContent>
-              </Card>
+                  <h2 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-3">
+                    Ask anything about your document
+                  </h2>
+                  <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto">
+                    I'll help you understand complex topics, summarize key points, and answer your questions intelligently.
+                  </p>
+                </div>
+
+                {/* Feature Pills */}
+                <div className="flex flex-wrap gap-2 justify-center mb-8">
+                  {['Instant answers', 'Deep analysis', 'Smart summaries', 'Study companion'].map((feature) => (
+                    <span key={feature} className="px-3 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 rounded-full">
+                      {feature}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Suggested Questions */}
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 text-center mb-4">
+                    Try asking
+                  </p>
+                  <div className="grid gap-3">
+                    {getSuggestedQuestions(selectedSource!).map((question, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleSuggestionClick(question.text)}
+                        className="group relative overflow-hidden rounded-xl p-4 text-left transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-850 opacity-90"></div>
+                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <div className="relative flex items-center gap-3">
+                          <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center group-hover:shadow-md transition-shadow">
+                            <question.icon className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                              {question.text}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                              {question.description}
+                            </p>
+                          </div>
+                          <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
-            // Messages list
-            <ScrollArea className="h-full" ref={scrollAreaRef}>
-              <div className="space-y-4 pr-4">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex gap-3 ${
-                      message.role === 'user' ? 'justify-end' : 'justify-start'
-                    }`}
-                  >
-                    {message.role === 'assistant' && (
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        darkMode ? 'bg-primary/10' : 'bg-primary/5'
-                      }`}>
-                        <Bot className="h-4 w-4 text-primary" />
+            // Messages List
+            <div className="py-8 space-y-6">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex gap-4 ${
+                    message.role === 'user' ? 'justify-end' : 'justify-start'
+                  }`}
+                >
+                  {message.role === 'assistant' && (
+                    <div className="flex-shrink-0 mt-1">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md">
+                        <Sparkles className="h-4 w-4 text-white" />
                       </div>
-                    )}
-                    
-                    <div className={`max-w-[80%] ${
-                      message.role === 'user' ? 'order-1' : ''
-                    }`}>
-                      <div className={`px-4 py-3 rounded-2xl ${
+                    </div>
+                  )}
+                  
+                  <div className={`max-w-[80%] ${message.role === 'user' ? 'order-1' : ''}`}>
+                    <div
+                      className={`rounded-2xl px-5 py-3 ${
                         message.role === 'user'
-                          ? 'bg-primary text-primary-foreground'
-                          : darkMode 
-                            ? 'bg-muted'
-                            : 'bg-slate-100'
-                      }`}>
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                          {message.content}
-                        </p>
-                      </div>
-                      <p className={`text-xs mt-1 ${
-                        message.role === 'user' ? 'text-right' : 'text-left'
-                      } ${darkMode ? 'text-muted-foreground' : 'text-slate-500'}`}>
-                        {formatTime(message.timestamp)}
+                          ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-lg shadow-indigo-500/25'
+                          : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm'
+                      }`}
+                    >
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                        {message.content}
                       </p>
                     </div>
+                    <p className={`text-xs mt-2 ${
+                      message.role === 'user' ? 'text-right' : 'text-left'
+                    } text-slate-400 dark:text-slate-500`}>
+                      {formatTime(message.timestamp)}
+                    </p>
+                  </div>
 
-                    {message.role === 'user' && (
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        darkMode ? 'bg-muted' : 'bg-slate-200'
-                      }`}>
-                        <User className="h-4 w-4" />
-                      </div>
-                    )}
-                  </div>
-                ))}
-                
-                {/* Loading indicator */}
-                {isLoading && (
-                  <div className="flex gap-3 justify-start">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      darkMode ? 'bg-primary/10' : 'bg-primary/5'
-                    }`}>
-                      <Bot className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className={`px-4 py-3 rounded-2xl ${
-                      darkMode ? 'bg-muted' : 'bg-slate-100'
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="text-sm">Thinking...</span>
+                  {message.role === 'user' && (
+                    <div className="flex-shrink-0 mt-1">
+                      <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                        <User className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                       </div>
                     </div>
+                  )}
+                </div>
+              ))}
+              
+              {/* Typing Indicator */}
+              {isTyping && (
+                <div className="flex gap-4 justify-start">
+                  <div className="flex-shrink-0 mt-1">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md">
+                      <Sparkles className="h-4 w-4 text-white" />
+                    </div>
                   </div>
-                )}
-              </div>
-            </ScrollArea>
+                  <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3 shadow-sm">
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div ref={messagesEndRef} />
+            </div>
           )}
         </div>
-        
-        {/* Input Form - podobny do Twojego current code */}
-        <form onSubmit={handleSendMessage} className="flex gap-3">
-          <div className="flex-1 relative">
-            <input 
-              ref={inputRef}
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              disabled={isLoading}
-              className={`w-full p-4 pr-12 rounded-xl border focus:outline-none focus:ring-2 focus:ring-primary transition-all ${
-                darkMode 
-                  ? 'bg-background border-border text-foreground placeholder-muted-foreground' 
-                  : 'bg-white border-slate-200 placeholder-slate-500'
-              } ${isLoading ? 'opacity-50' : ''}`}
-              placeholder={selectedSource 
-                ? `Ask anything about ${selectedSource.name}...`
-                : "Ask anything about your materials..."
-              }
-            />
-            <Button 
-              type="submit"
-              size="icon" 
-              className="absolute right-2 top-2 h-8 w-8 rounded-lg"
-              disabled={!inputValue.trim() || isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-        </form>
       </div>
-    </article>
+
+      {/* Input Area */}
+      <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
+        <div className="max-w-4xl mx-auto px-6 py-4">
+          <div className="relative">
+            <div className="relative">
+              <textarea
+                ref={inputRef}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isLoading}
+                rows={1}
+                className="w-full resize-none rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-6 py-4 pr-14 text-sm placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 dark:focus:ring-indigo-400/10 transition-all"
+                placeholder="Ask me anything..."
+                style={{ minHeight: '56px', maxHeight: '200px' }}
+                onInput={(e) => {
+                  const target = e.target as HTMLTextAreaElement
+                  target.style.height = 'auto'
+                  target.style.height = target.scrollHeight + 'px'
+                }}
+              />
+              
+              <div className="absolute right-2 bottom-2 flex items-center gap-2">
+                {inputValue && (
+                  <span className="text-xs text-slate-400 mr-2">
+                    {inputValue.length}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSendMessage}
+                  disabled={!inputValue.trim() || isLoading}
+                  className="rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 p-2.5 text-white shadow-lg shadow-indigo-500/25 transition-all hover:shadow-xl hover:shadow-indigo-500/30 disabled:opacity-50 disabled:shadow-none"
+                >
+                  {isLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between mt-2">
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                <kbd className="px-1.5 py-0.5 text-xs font-medium bg-slate-100 dark:bg-slate-800 rounded">Enter</kbd> to send, <kbd className="px-1.5 py-0.5 text-xs font-medium bg-slate-100 dark:bg-slate-800 rounded">Shift + Enter</kbd> for new line
+              </p>
+              <div className="flex items-center gap-1">
+                <Command className="h-3 w-3 text-slate-400" />
+                <span className="text-xs text-slate-400">AI-powered responses</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
-// Helper functions - TODO: jutro - usunąć mock functions
-
-function getSuggestedQuestions(source: Source): string[] {
-  const baseQuestions = [
-    "Summarize the key points",
-    "What are the main concepts?",
-    "Explain this in simple terms"
+function getSuggestedQuestions(source: Source) {
+  return [
+    {
+      icon: Lightbulb,
+      text: "Summarize the main concepts in simple terms",
+      description: "Get a clear overview of key ideas"
+    },
+    {
+      icon: Zap,
+      text: "What are the most important takeaways?",
+      description: "Focus on actionable insights"
+    },
+    {
+      icon: BookOpen,
+      text: "Create study notes with examples",
+      description: "Perfect for exam preparation"
+    }
   ]
-  
-  const typeSpecific = {
-    pdf: [
-      "What's the main argument?",
-      "List the important definitions",
-      "What examples are given?"
-    ],
-    youtube: [
-      "What's the main topic discussed?",
-      "What are the key takeaways?",
-      "Are there any important timestamps?"
-    ],
-    text: [
-      "What's the central theme?",
-      "What evidence is presented?",
-      "How does this relate to...?"
-    ]
-  }
-  
-  return [...baseQuestions, ...(typeSpecific[source.type as keyof typeof typeSpecific] || [])]
 }
 
 function generateMockResponse(userMessage: string, source: Source): string {
-  // TODO: Jutro - usunąć, zastąpić prawdziwym AI
-  
   const responses = {
-    summary: `Based on "${source.name}", here are the key points:\n\n1. **Main Concept**: The document covers fundamental principles and core theories.\n\n2. **Key Insights**: Several important examples demonstrate practical applications.\n\n3. **Conclusions**: The material emphasizes the importance of understanding these concepts for further study.`,
+    summary: `I'll break down the key concepts from "${source.name}" for you:\n\n**Core Principles:**\n• Foundation concepts that establish the theoretical framework\n• Practical applications demonstrated through real-world examples\n• Critical connections between different topics\n\n**Key Insights:**\nThe document emphasizes how these principles work together to create a comprehensive understanding. Each concept builds upon the previous, creating a logical progression of knowledge.\n\n**Practical Applications:**\nThese concepts can be applied in various contexts, particularly in problem-solving scenarios where systematic thinking is required.\n\nWould you like me to dive deeper into any specific area?`,
     
-    explain: `Let me explain this concept from "${source.name}":\n\nThis topic is about understanding the fundamental principles that govern the subject matter. The key idea is that these concepts build upon each other to create a comprehensive understanding.\n\nWould you like me to dive deeper into any specific aspect?`,
+    explain: `Let me explain this concept from "${source.name}" in simple terms:\n\n**The Basic Idea:**\nThink of it like building blocks - each concept is a foundation piece that supports more complex ideas. The document presents these in a structured way to help you understand the progression.\n\n**Why It Matters:**\nUnderstanding these fundamentals is crucial because they appear repeatedly in advanced applications. Once you grasp the basics, everything else becomes much clearer.\n\n**Real-World Connection:**\nThese principles aren't just theoretical - they have practical applications in everyday scenarios, from problem-solving to decision-making.\n\nWhat specific aspect would you like me to clarify further?`,
     
-    questions: `Great question about "${source.name}"! \n\nBased on the content, this relates to the core principles we discussed. The important thing to understand is how these elements work together.\n\nIs there a particular aspect you'd like me to clarify further?`
+    questions: `Based on "${source.name}", I can see you're exploring some interesting concepts!\n\n**Here's My Understanding:**\nThe document covers fundamental principles that are essential for building a strong knowledge base. These concepts interconnect in meaningful ways.\n\n**Key Areas to Focus On:**\n• The relationship between different concepts\n• Practical applications and examples\n• How to apply these principles in various contexts\n\n**Next Steps:**\nI'd recommend focusing on understanding the core principles first, then exploring how they apply to specific scenarios.\n\nIs there a particular section or concept you'd like to explore in more detail?`
   }
   
   if (userMessage.toLowerCase().includes('summar')) return responses.summary

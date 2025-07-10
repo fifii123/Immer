@@ -1,6 +1,6 @@
 "use client"
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { usePreferences } from "@/context/preferences-context"
 import { 
   ChevronLeft,
@@ -119,6 +119,23 @@ export default function PlaygroundArea({
   onChatClick
 }: PlaygroundAreaProps) {
   const { darkMode } = usePreferences()
+
+  const [handleVisible, setHandleVisible] = useState(true)
+  const [isHovering, setIsHovering] = useState(false)
+
+  useEffect(() => {
+    if (!curtainVisible) {
+      const timer = setTimeout(() => {
+        setHandleVisible(false)
+      }, 2000)
+      
+      return () => clearTimeout(timer)
+    } else {
+      // Reset handle visibility when curtain opens
+      setHandleVisible(true)
+      setIsHovering(false)
+    }
+  }, [curtainVisible])
 
   // Render content based on current state
   const renderContent = () => {
@@ -303,111 +320,125 @@ export default function PlaygroundArea({
       darkMode ? 'bg-card border-border' : 'bg-white border-slate-200'
     } border`}>
       
-{/* Playground Content */}
-<div className={`absolute inset-0 ${!curtainVisible && playgroundContent === 'chat' ? 'pr-12' : ''}`}>
-  <div className="h-full overflow-y-auto">
-    {renderContent()}
-  </div>
-</div>
-      {/* Sliding Curtain */}
-      <div className={`absolute top-0 bottom-0 transition-all duration-500 ease-out overflow-hidden z-10 ${
-        curtainVisible ? 'left-0 right-0' : 'left-[calc(100%-48px)] right-0'
-      } ${darkMode ? 'bg-card border-border' : 'bg-white border-slate-200'} border-l`}>
-        
-        {/* Full curtain content */}
-        <div className={`h-full transition-all duration-300 ${
-          curtainVisible ? 'opacity-100 p-6' : 'opacity-0 p-0 overflow-hidden'
-        }`}>
-          <header className="text-center mb-6">
-            <h3 className={`text-xl font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-              Choose your study method
-            </h3>
-            {selectedSource && (
-              <div className="flex items-center justify-center gap-2 text-sm">
-                <span className={darkMode ? 'text-muted-foreground' : 'text-slate-600'}>From:</span>
-                <div className="flex items-center gap-2">
-                  {getSourceIcon(selectedSource.type, (selectedSource as any).subtype)}
-                  <span className={`font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-                    {selectedSource.name}
-                  </span>
-                </div>
-              </div>
-            )}
-            {!selectedSource && (
-              <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-                Select a source to generate content
-              </p>
-            )}
-          </header>
-          
-          {/* Study Method Tiles */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            {tiles.map((tile) => (
-              <button
-                key={tile.id}
-                className={`group relative p-4 rounded-xl text-left transition-all duration-200 hover:shadow-md ${
-                  darkMode 
-                    ? 'bg-background hover:bg-accent/50 border-border' 
-                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-                } border ${!selectedSource || selectedSource.status !== 'ready' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                onClick={() => selectedSource?.status === 'ready' && onTileClick(tile.id)}
-                disabled={!selectedSource || selectedSource.status !== 'ready'}
-              >
-                <div className="flex flex-col gap-2">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                    darkMode ? 'bg-primary/10' : 'bg-primary/5'
-                  }`}>
-                    {tile.icon}
-                  </div>
-                  <div>
-                    <div className={`text-sm font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-                      {tile.title}
-                    </div>
-                    <div className={`text-xs ${darkMode ? 'text-muted-foreground' : 'text-slate-500'}`}>
-                      {tile.desc}
-                    </div>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-          
-          {/* Ask Questions Button */}
-          <Card 
-            className={`w-full cursor-pointer transition-all duration-200 rounded-xl ${
-              darkMode 
-                ? 'hover:bg-accent/50' 
-                : 'hover:bg-slate-50'
-            } ${!selectedSource || selectedSource.status !== 'ready' ? 'opacity-50 cursor-not-allowed' : ''}`}
-            onClick={() => selectedSource?.status === 'ready' && onChatClick()}
-          >
-            <CardContent className="p-4 text-center">
-              <div className="flex items-center justify-center gap-3">
-                <MessageCircle className={`h-5 w-5 ${darkMode ? 'text-muted-foreground' : 'text-slate-400'}`} />
-                <span className={`text-sm font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-                  Ask Questions
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Playground Content */}
+      <div className={`absolute inset-0 ${!curtainVisible && playgroundContent === 'chat' ? 'pr-12' : ''}`}>
+        <div className="h-full overflow-y-auto">
+          {renderContent()}
         </div>
-        
-        {/* Collapsed handle */}
-        {!curtainVisible && (
-          <div className="absolute left-2 top-1/2 transform -translate-y-1/2">
-            <button
-              className={`w-8 h-16 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                darkMode 
-                  ? 'bg-background text-muted-foreground hover:bg-accent hover:text-foreground' 
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-              }`}
-              onClick={onShowCurtain}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-          </div>
-        )}
       </div>
+
+{/* Sliding Curtain */}
+<div className={`absolute top-0 bottom-0 transition-all duration-500 ease-out overflow-hidden z-10 ${
+  curtainVisible ? 'left-0 right-0' : 'left-[calc(100%-48px)] right-0'
+} ${
+  curtainVisible 
+    ? darkMode ? 'bg-card border-border' : 'bg-white border-slate-200'
+    : (handleVisible || isHovering) 
+      ? darkMode ? 'bg-card border-border' : 'bg-white border-slate-200'
+      : 'bg-transparent border-transparent'
+} border-l`}>
+  
+  {/* Full curtain content */}
+  <div className={`h-full transition-all duration-300 ${
+    curtainVisible ? 'opacity-100 p-6' : 'opacity-0 p-0 overflow-hidden'
+  }`}>
+    <header className="text-center mb-6">
+      <h3 className={`text-xl font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+        Choose your study method
+      </h3>
+      {selectedSource && (
+        <div className="flex items-center justify-center gap-2 text-sm">
+          <span className={darkMode ? 'text-muted-foreground' : 'text-slate-600'}>From:</span>
+          <div className="flex items-center gap-2">
+            {getSourceIcon(selectedSource.type, (selectedSource as any).subtype)}
+            <span className={`font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+              {selectedSource.name}
+            </span>
+          </div>
+        </div>
+      )}
+      {!selectedSource && (
+        <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+          Select a source to generate content
+        </p>
+      )}
+    </header>
+    
+    {/* Study Method Tiles */}
+    <div className="grid grid-cols-2 gap-3 mb-4">
+      {tiles.map((tile) => (
+        <button
+          key={tile.id}
+          className={`group relative p-4 rounded-xl text-left transition-all duration-200 hover:shadow-md ${
+            darkMode 
+              ? 'bg-background hover:bg-accent/50 border-border' 
+              : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+          } border ${!selectedSource || selectedSource.status !== 'ready' ? 'opacity-50 cursor-not-allowed' : ''}`}
+          onClick={() => selectedSource?.status === 'ready' && onTileClick(tile.id)}
+          disabled={!selectedSource || selectedSource.status !== 'ready'}
+        >
+          <div className="flex flex-col gap-2">
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+              darkMode ? 'bg-primary/10' : 'bg-primary/5'
+            }`}>
+              {tile.icon}
+            </div>
+            <div>
+              <div className={`text-sm font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                {tile.title}
+              </div>
+              <div className={`text-xs ${darkMode ? 'text-muted-foreground' : 'text-slate-500'}`}>
+                {tile.desc}
+              </div>
+            </div>
+          </div>
+        </button>
+      ))}
+    </div>
+    
+    {/* Ask Questions Button */}
+    <Card 
+      className={`w-full cursor-pointer transition-all duration-200 rounded-xl ${
+        darkMode 
+          ? 'hover:bg-accent/50' 
+          : 'hover:bg-slate-50'
+      } ${!selectedSource || selectedSource.status !== 'ready' ? 'opacity-50 cursor-not-allowed' : ''}`}
+      onClick={() => selectedSource?.status === 'ready' && onChatClick()}
+    >
+      <CardContent className="p-4 text-center">
+        <div className="flex items-center justify-center gap-3">
+          <MessageCircle className={`h-5 w-5 ${darkMode ? 'text-muted-foreground' : 'text-slate-400'}`} />
+          <span className={`text-sm font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+            Ask Questions
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  </div>
+  
+  {/* Collapsed handle - simplified */}
+  {!curtainVisible && (
+    <div 
+      className="absolute left-0 top-0 bottom-0 w-12"
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
+    >
+      {/* Button - always visible */}
+      <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">
+        <button
+          className={`w-8 h-16 rounded-lg flex items-center justify-center transition-all duration-200 backdrop-blur-sm ${
+            darkMode 
+              ? 'bg-card/95 text-muted-foreground hover:bg-accent hover:text-foreground border border-border/60' 
+              : 'bg-white/95 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
+          }`}
+          onClick={onShowCurtain}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )}
+</div>
     </section>
   )
 }

@@ -289,12 +289,7 @@ export function useQuickStudy() {
   const handleSourceSelect = useCallback((source: Source) => {
     setSelectedSource(source)
     setError(null)
-    
-    // Reset playground when switching sources
-    if (playgroundContent) {
-      setCurtainVisible(true)
-      setPlaygroundContent(null)
-    }
+  
   }, [playgroundContent])
 
 // Handler - generate content (tile click)
@@ -361,7 +356,6 @@ const handleOutputClick = useCallback((output: Output) => {
   // Handler - show curtain
   const handleShowCurtain = useCallback(() => {
     setCurtainVisible(true)
-    setPlaygroundContent(null)
     setError(null)
   }, [])
 
