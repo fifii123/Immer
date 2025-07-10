@@ -1,8 +1,8 @@
 export const runtime = 'nodejs'
 import { NextRequest } from 'next/server'
 
-// Comment out PDF import for now - uncomment after installing pdf-parse
-import pdf from 'pdf-parse'
+// PDF processing library for server-side
+import PDFParser from 'pdf2json'
 
 // Types
 interface Source {
@@ -35,7 +35,6 @@ globalThis.quickStudySessions = sessions
 
 // Upload files to session
 export async function POST(
-  
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
@@ -175,41 +174,92 @@ async function processFileContent(file: File, source: Source): Promise<void> {
   }
 }
 
-// Process PDF files
+// Process PDF files using pdf2json
 async function processPDF(file: File, source: Source): Promise<void> {
   console.log(`📄 Processing PDF: ${file.name}`)
   
-  try {
- 
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-    const data = await pdf(buffer)
-    
-    const extractedText = cleanExtractedText(data.text)
-    
-    if (!extractedText || extractedText.length < 50) {
-      throw new Error('PDF appears to be empty or contains mostly images')
+  return new Promise(async (resolve, reject) => {
+    try {
+      const pdfParser = new PDFParser()
+      
+      // Set up event handlers
+      pdfParser.on('pdfParser_dataError', (errData: any) => {
+        console.error(`❌ PDF parsing error:`, errData)
+        reject(new Error(`Failed to parse PDF: ${errData.parserError}`))
+      })
+      
+      pdfParser.on('pdfParser_dataReady', (pdfData: any) => {
+        try {
+          console.log(`📊 PDF data ready, extracting text...`)
+          
+          // Extract text from all pages
+          let fullText = ''
+          let pageCount = 0
+          
+          // pdf2json stores pages in pdfData.Pages array
+          if (pdfData.Pages && Array.isArray(pdfData.Pages)) {
+            pageCount = pdfData.Pages.length
+            
+            pdfData.Pages.forEach((page: any, pageIndex: number) => {
+              // Extract text from each text element on the page
+              if (page.Texts && Array.isArray(page.Texts)) {
+                page.Texts.forEach((text: any) => {
+                  if (text.R && Array.isArray(text.R)) {
+                    text.R.forEach((textRun: any) => {
+                      if (textRun.T) {
+                        // Decode URI-encoded text
+                        const decodedText = decodeURIComponent(textRun.T)
+                        fullText += decodedText + ' '
+                      }
+                    })
+                  }
+                })
+                // Add page break
+                fullText += '\n\n'
+              }
+              
+              // Log progress for large PDFs
+              if ((pageIndex + 1) % 10 === 0) {
+                console.log(`📄 Processed ${pageIndex + 1}/${pageCount} pages`)
+              }
+            })
+          }
+          
+          // Clean and validate extracted text
+          const extractedText = cleanExtractedText(fullText)
+          
+          if (!extractedText || extractedText.length < 50) {
+            reject(new Error('PDF appears to be empty or contains mostly images without text'))
+            return
+          }
+          
+          // Update source with extracted data
+          source.extractedText = extractedText
+          source.pages = pageCount
+          source.wordCount = countWords(extractedText)
+          source.status = 'ready'
+          
+          console.log(`✅ PDF processed: ${source.pages} pages, ${source.wordCount} words`)
+          resolve()
+          
+        } catch (error) {
+          console.error(`❌ Error extracting text from PDF:`, error)
+          reject(new Error(`Failed to extract text: ${error instanceof Error ? error.message : 'Unknown error'}`))
+        }
+      })
+      
+      // Convert file to buffer and parse
+      const arrayBuffer = await file.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+      
+      // Parse the PDF
+      pdfParser.parseBuffer(buffer)
+      
+    } catch (error) {
+      console.error(`❌ PDF processing failed:`, error)
+      reject(new Error(`Failed to process PDF: ${error instanceof Error ? error.message : 'Unknown error'}`))
     }
-    
-    source.extractedText = extractedText
-    source.pages = data.numpages
-    source.wordCount = countWords(extractedText)
-    source.status = 'ready'
-    
-    console.log(`✅ PDF processed: ${source.pages} pages, ${source.wordCount} words`)
-  
-    // TEMPORARY: Mock PDF processing until pdf-parse is installed
-    source.pages = Math.floor(Math.random() * 20) + 5
-    source.wordCount = Math.floor(Math.random() * 2000) + 500
-    source.extractedText = `Mock extracted text from ${file.name}. This is placeholder content until PDF processing is implemented.`
-    source.status = 'ready'
-    
-    console.log(`✅ PDF processed (mock): ${source.pages} pages, ${source.wordCount} words`)
-    
-  } catch (error) {
-    console.error(`❌ PDF processing failed:`, error)
-    throw new Error(`Failed to process PDF: ${error instanceof Error ? error.message : 'Unknown error'}`)
-  }
+  })
 }
 
 // Process text files
