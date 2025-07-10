@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useState } from 'react'
-import { usePreferences } from "@/context/preferences-context"
 import { 
   Upload,
   FileText,
@@ -41,8 +40,6 @@ export default function AddSourceModal({
   onUrlSubmit,
   uploadInProgress
 }: AddSourceModalProps) {
-  const { darkMode } = usePreferences()
-  
   const [selectedType, setSelectedType] = useState<SourceType>('file')
   const [textContent, setTextContent] = useState('')
   const [urlContent, setUrlContent] = useState('')
@@ -120,9 +117,9 @@ export default function AddSourceModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className={`max-w-md ${darkMode ? 'bg-card' : 'bg-white'}`}>
+      <DialogContent className="max-w-md bg-card">
         <DialogHeader>
-          <DialogTitle className={`text-lg font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+          <DialogTitle className="text-lg font-semibold text-foreground">
             Add Study Source
           </DialogTitle>
         </DialogHeader>
@@ -139,32 +136,22 @@ export default function AddSourceModal({
                   key={type.id}
                   className={`w-full p-4 rounded-lg border-2 text-left transition-all duration-200 ${
                     isSelected
-                      ? darkMode
-                        ? 'border-primary bg-primary/10'
-                        : 'border-primary bg-primary/5'
-                      : darkMode
-                        ? 'border-border hover:border-primary/50 hover:bg-accent/50'
-                        : 'border-slate-200 hover:border-primary/50 hover:bg-slate-50'
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border hover:border-primary/50 hover:bg-accent/50'
                   }`}
                   onClick={() => setSelectedType(type.id)}
                 >
                   <div className="flex items-start gap-3">
                     <div className={`mt-1 p-2 rounded-lg ${
-                      isSelected
-                        ? darkMode ? 'bg-primary/20' : 'bg-primary/10'
-                        : darkMode ? 'bg-muted' : 'bg-slate-100'
+                      isSelected ? 'bg-primary/20' : 'bg-muted'
                     }`}>
                       <Icon className="h-5 w-5 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className={`font-medium text-sm ${
-                        darkMode ? 'text-foreground' : 'text-slate-900'
-                      }`}>
+                      <h3 className="font-medium text-sm text-foreground">
                         {type.title}
                       </h3>
-                      <p className={`text-xs mt-1 ${
-                        darkMode ? 'text-muted-foreground' : 'text-slate-600'
-                      }`}>
+                      <p className="text-xs mt-1 text-muted-foreground">
                         {type.description}
                       </p>
                     </div>
@@ -178,7 +165,7 @@ export default function AddSourceModal({
           <div className="space-y-4">
             {selectedType === 'file' && (
               <div>
-                <Label className={`text-sm font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                <Label className="text-sm font-medium text-foreground">
                   Select Files
                 </Label>
                 <div className="mt-2">
@@ -187,7 +174,7 @@ export default function AddSourceModal({
                     multiple
                     accept=".pdf,.txt,.docx,.doc,.jpg,.jpeg,.png,.gif,.mp3,.wav,.m4a,.mp4,.avi,.mov"
                     onChange={handleFileSelect}
-                    className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                    className="w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
                   />
                 </div>
               </div>
@@ -196,7 +183,7 @@ export default function AddSourceModal({
             {selectedType === 'text' && (
               <div className="space-y-3">
                 <div>
-                  <Label className={`text-sm font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                  <Label className="text-sm font-medium text-foreground">
                     Title (optional)
                   </Label>
                   <Input
@@ -207,7 +194,7 @@ export default function AddSourceModal({
                   />
                 </div>
                 <div>
-                  <Label className={`text-sm font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                  <Label className="text-sm font-medium text-foreground">
                     Text Content *
                   </Label>
                   <Textarea
@@ -217,7 +204,7 @@ export default function AddSourceModal({
                     className="mt-1 min-h-[120px] resize-none"
                     maxLength={50000}
                   />
-                  <div className={`text-xs mt-1 ${darkMode ? 'text-muted-foreground' : 'text-slate-500'}`}>
+                  <div className="text-xs mt-1 text-muted-foreground">
                     {textContent.length.toLocaleString()} / 50,000 characters
                   </div>
                 </div>
@@ -227,7 +214,7 @@ export default function AddSourceModal({
             {selectedType === 'url' && (
               <div className="space-y-3">
                 <div>
-                  <Label className={`text-sm font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                  <Label className="text-sm font-medium text-foreground">
                     Title (optional)
                   </Label>
                   <Input
@@ -238,7 +225,7 @@ export default function AddSourceModal({
                   />
                 </div>
                 <div>
-                  <Label className={`text-sm font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                  <Label className="text-sm font-medium text-foreground">
                     URL *
                   </Label>
                   <Input
@@ -248,7 +235,7 @@ export default function AddSourceModal({
                     onChange={(e) => setUrlContent(e.target.value)}
                     className="mt-1"
                   />
-                  <div className={`text-xs mt-1 ${darkMode ? 'text-muted-foreground' : 'text-slate-500'}`}>
+                  <div className="text-xs mt-1 text-muted-foreground">
                     Websites, articles, YouTube videos, and more
                   </div>
                 </div>

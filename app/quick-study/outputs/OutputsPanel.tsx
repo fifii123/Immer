@@ -1,7 +1,6 @@
 "use client"
 
 import React from 'react'
-import { usePreferences } from "@/context/preferences-context"
 import { 
   ChevronRight,
   Zap,
@@ -52,31 +51,21 @@ export default function OutputsPanel({
   onShowCurtain, 
   onOutputClick 
 }: OutputsPanelProps) {
-  const { darkMode } = usePreferences()
-
   // Filter outputs for selected source
   const sourceOutputs = outputs.filter(output => 
     selectedSource ? output.sourceId === selectedSource.id : false
   )
 
   return (
-    <aside className={`h-full overflow-hidden flex flex-col rounded-2xl ${
-      darkMode ? 'bg-card border-border' : 'bg-white border-slate-200'
-    } border`}>
+    <aside className="h-full overflow-hidden flex flex-col rounded-2xl bg-card border-border border">
       <div className="flex-1 overflow-y-auto p-5">
         <div className="flex items-center justify-between mb-5">
-          <h3 className={`text-xs font-semibold tracking-wide uppercase ${
-            darkMode ? 'text-muted-foreground' : 'text-slate-500'
-          }`}>
+          <h3 className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
             Generated
           </h3>
           {!curtainVisible && (
             <button
-              className={`p-1.5 rounded-lg transition-all duration-200 ${
-                darkMode 
-                  ? 'text-muted-foreground hover:text-foreground hover:bg-accent' 
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
+              className="p-1.5 rounded-lg transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent"
               onClick={onShowCurtain}
             >
               <ChevronRight className="h-4 w-4" />
@@ -88,15 +77,13 @@ export default function OutputsPanel({
         {sourceOutputs.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-center py-12">
             <div>
-              <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-4 ${
-                darkMode ? 'bg-primary/10' : 'bg-primary/5'
-              }`}>
+              <div className="w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-4 bg-primary/10">
                 <Sparkles className="h-8 w-8 text-primary" />
               </div>
-              <h4 className={`text-sm font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+              <h4 className="text-sm font-semibold mb-2 text-foreground">
                 {selectedSource ? 'No content generated yet' : 'No source selected'}
               </h4>
-              <p className={`text-xs ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+              <p className="text-xs text-muted-foreground">
                 {selectedSource 
                   ? 'Generate flashcards, quizzes, or notes to see them here'
                   : 'Select a source to see generated content'
@@ -111,46 +98,36 @@ export default function OutputsPanel({
               {sourceOutputs.map((output) => (
                 <li key={output.id}>
                   <button
-                    className={`w-full group p-3.5 rounded-xl text-left transition-all duration-200 ${
-                      darkMode 
-                        ? 'bg-background hover:bg-accent/50 border-border' 
-                        : 'bg-slate-50 hover:bg-white hover:shadow-sm border-slate-200'
-                    } border ${output.status !== 'ready' ? 'opacity-75 cursor-not-allowed' : ''}`}
+                    className={`w-full group p-3.5 rounded-xl text-left transition-all duration-200 bg-background hover:bg-accent/50 border-border border ${output.status !== 'ready' ? 'opacity-75 cursor-not-allowed' : ''}`}
                     onClick={() => output.status === 'ready' && onOutputClick(output)}
                     disabled={output.status !== 'ready'}
                   >
                     <div className="flex items-start gap-3">
-                      <div className={`p-2 rounded-lg ${
-                        darkMode ? 'bg-card' : 'bg-white'
-                      }`}>
+                      <div className="p-2 rounded-lg bg-card">
                         {getTileIcon(output.type)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={`font-medium text-sm truncate ${
-                          darkMode ? 'text-foreground' : 'text-slate-900'
-                        }`}>
+                        <p className="font-medium text-sm truncate text-foreground">
                           {output.title}
                         </p>
-                        <p className={`text-xs mt-1 ${
-                          darkMode ? 'text-muted-foreground' : 'text-slate-600'
-                        }`}>
+                        <p className="text-xs mt-1 text-muted-foreground">
                           {output.preview}
                         </p>
                         <div className="flex items-center gap-1.5 mt-2">
                           {getStatusIcon(output.status)}
                           <span className={`text-xs ${
                             output.status === 'ready'
-                              ? darkMode ? 'text-green-400' : 'text-green-600'
-                              : darkMode ? 'text-blue-400' : 'text-blue-600'
+                              ? 'text-green-500'
+                              : 'text-blue-500'
                           }`}>
                             {output.status === 'ready' ? 'Ready' : 'Generating...'}
                           </span>
                           {output.count && (
                             <>
-                              <span className={`text-xs ${darkMode ? 'text-muted-foreground' : 'text-slate-400'}`}>
+                              <span className="text-xs text-muted-foreground">
                                 •
                               </span>
-                              <span className={`text-xs ${darkMode ? 'text-muted-foreground' : 'text-slate-500'}`}>
+                              <span className="text-xs text-muted-foreground">
                                 {output.count} items
                               </span>
                             </>
@@ -164,9 +141,7 @@ export default function OutputsPanel({
             </ul>
             
             {/* Item counter */}
-            <p className={`mt-4 text-center text-xs ${
-              darkMode ? 'text-muted-foreground' : 'text-slate-400'
-            }`}>
+            <p className="mt-4 text-center text-xs text-muted-foreground">
               {sourceOutputs.length} item{sourceOutputs.length !== 1 ? 's' : ''} generated
             </p>
           </>

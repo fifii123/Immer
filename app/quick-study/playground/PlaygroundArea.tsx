@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
-import { usePreferences } from "@/context/preferences-context"
 import { 
   ChevronLeft,
   ChevronRight,
@@ -98,13 +97,13 @@ const getSourceIcon = (type: string, subtype?: string) => {
     case 'text':
       return subtype === 'pasted' 
         ? <FileText className="h-4 w-4 text-green-500" />
-        : <FileText className="h-4 w-4 text-slate-500" />
+        : <FileText className="h-4 w-4 text-muted-foreground" />
     case 'url':
       return subtype === 'youtube'
         ? <Youtube className="h-4 w-4 text-red-600" />
         : <Globe className="h-4 w-4 text-blue-500" />
     default:
-      return <FileText className="h-4 w-4 text-slate-500" />
+      return <FileText className="h-4 w-4 text-muted-foreground" />
   }
 }
 
@@ -118,8 +117,6 @@ export default function PlaygroundArea({
   onTileClick,
   onChatClick
 }: PlaygroundAreaProps) {
-  const { darkMode } = usePreferences()
-
   const [handleVisible, setHandleVisible] = useState(true)
   const [isHovering, setIsHovering] = useState(false)
 
@@ -142,37 +139,34 @@ export default function PlaygroundArea({
     // If generating, show loading state
     if (isGenerating) {
       return (
-        <div className="h-full flex items-center justify-center">
-          <div className="text-center">
-            <div className="relative">
-              <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-6 ${
-                darkMode ? 'bg-primary/10' : 'bg-primary/5'
-              }`}>
-                <Loader2 className="h-8 w-8 text-primary animate-spin" />
+        <div className="h-full flex items-center justify-center bg-gradient-to-br from-background to-card/50">
+          <div className="text-center max-w-md">
+            <div className="relative mb-8">
+              <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto bg-gradient-to-br from-indigo-500 to-purple-600 shadow-2xl shadow-indigo-500/25">
+                <Loader2 className="h-10 w-10 text-white animate-spin" />
               </div>
-              <div className="absolute -top-1 -right-1 w-6 h-6 bg-primary rounded-full animate-pulse" />
+              <div className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full animate-pulse shadow-lg" />
             </div>
             
-            <h3 className={`text-xl font-semibold mb-3 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+            <h3 className="text-2xl font-bold mb-4 text-foreground">
               Generating content...
             </h3>
-            <p className={`text-base leading-relaxed mb-4 ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-              AI is analyzing "{selectedSource?.name}" and creating personalized study materials
+            <p className="text-lg leading-relaxed mb-6 text-muted-foreground">
+              AI is analyzing <span className="font-semibold text-indigo-600">"{selectedSource?.name}"</span> and creating personalized study materials
             </p>
             
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-              <div className="flex space-x-1">
-                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div className="flex items-center justify-center gap-3 text-sm">
+              <div className="flex space-x-2">
+                <div className="w-3 h-3 bg-indigo-500 rounded-full animate-bounce shadow-sm" style={{ animationDelay: '0ms' }} />
+                <div className="w-3 h-3 bg-purple-500 rounded-full animate-bounce shadow-sm" style={{ animationDelay: '150ms' }} />
+                <div className="w-3 h-3 bg-pink-500 rounded-full animate-bounce shadow-sm" style={{ animationDelay: '300ms' }} />
               </div>
-              <span>This might take a moment</span>
+              <span className="text-muted-foreground font-medium">This might take a moment</span>
             </div>
           </div>
         </div>
       )
     }
-
     // Route to appropriate viewer based on content type
     switch (playgroundContent) {
       case 'summary':
@@ -187,86 +181,83 @@ export default function PlaygroundArea({
       // TODO: Add more viewers later
       case 'flashcards':
         return (
-          <article className="h-full flex flex-col p-8">
-            <header className="text-center mb-8">
-              <div className="inline-flex items-center gap-3 mb-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                  darkMode ? 'bg-primary/10' : 'bg-primary/5'
-                }`}>
-                  <Zap className="h-5 w-5 text-primary" />
-                </div>
-                <div className="text-left">
-                  <h2 className={`text-2xl font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-                    Interactive Flashcards
-                  </h2>
-                  <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-                    Coming soon - this feature will be implemented next
-                  </p>
-                </div>
+          <div className="h-full flex items-center justify-center bg-gradient-to-br from-background via-card/30 to-background">
+            <div className="text-center max-w-md">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-6 shadow-2xl shadow-indigo-500/25">
+                <Zap className="h-10 w-10 text-white" />
               </div>
-            </header>
-            
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
-                  darkMode ? 'bg-muted' : 'bg-slate-100'
-                }`}>
-                  <Zap className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h3 className={`text-lg font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-                  Flashcards viewer coming soon
-                </h3>
-                <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-                  This content type will be implemented next
+              <h2 className="text-2xl font-bold mb-3 text-foreground">
+                Interactive Flashcards
+              </h2>
+              <p className="text-lg text-muted-foreground mb-6">
+                Coming soon - this feature will be implemented next
+              </p>
+              
+              <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-200">
+                <p className="text-sm text-amber-700 font-medium">
+                  🚧 Under development
                 </p>
               </div>
             </div>
-          </article>
-        )
-
-      case 'quiz':
-      case 'concepts':
-      case 'mindmap':
-        return (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center">
-              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
-                darkMode ? 'bg-muted' : 'bg-slate-100'
-              }`}>
-                <Sparkles className="h-8 w-8 text-muted-foreground" />
-              </div>
-              <h3 className={`text-lg font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-                {playgroundContent} viewer coming soon
-              </h3>
-              <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-                This content type will be implemented next
-              </p>
-            </div>
           </div>
         )
+
+        case 'quiz':
+          case 'concepts':
+          case 'mindmap':
+            return (
+              <div className="h-full flex items-center justify-center bg-gradient-to-br from-background via-card/30 to-background">
+                <div className="text-center max-w-md">
+                  <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-6 shadow-2xl shadow-indigo-500/25">
+                    <Sparkles className="h-10 w-10 text-white" />
+                  </div>
+                  <h2 className="text-2xl font-bold mb-3 text-foreground">
+                    {playgroundContent} viewer coming soon
+                  </h2>
+                  <p className="text-lg text-muted-foreground mb-6">
+                    This content type will be implemented next
+                  </p>
+                  
+                  <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-200">
+                    <p className="text-sm text-amber-700 font-medium">
+                      🚧 Under development
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )
       
       default:
         // Empty state - no content selected
         if (!selectedSource) {
           return (
-            <div className="h-full flex items-center justify-center p-8">
-              <div className="text-center max-w-md">
-                <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 ${
-                  darkMode ? 'bg-primary/10' : 'bg-primary/5'
-                }`}>
-                  <Upload className="h-10 w-10 text-primary" />
+            <div className="h-full flex items-center justify-center bg-gradient-to-br from-background via-card/30 to-background p-8">
+              <div className="text-center max-w-lg">
+                <div className="inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-8 shadow-2xl shadow-indigo-500/25">
+                  <Upload className="h-12 w-12 text-white" />
                 </div>
-                <h2 className={`text-2xl font-semibold mb-3 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                <h2 className="text-3xl font-bold mb-4 text-foreground">
                   Upload your first source
                 </h2>
-                <p className={`text-lg leading-relaxed mb-6 ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+                <p className="text-xl leading-relaxed mb-8 text-muted-foreground">
                   Upload documents, videos, or audio files to start generating personalized study materials
                 </p>
+                
+                {/* Feature highlights */}
+                <div className="flex flex-wrap gap-2 justify-center mb-8">
+                  {['PDF support', 'AI-powered', 'Instant generation', 'Multiple formats'].map((feature) => (
+                    <span key={feature} className="px-3 py-1 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-full border border-indigo-100">
+                      {feature}
+                    </span>
+                  ))}
+                </div>
+                
                 <Button 
-                  variant="outline"
+                  size="lg"
+                  className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30 transition-all"
                   onClick={() => document.getElementById('file-upload')?.click()}
                 >
-                  <Upload className="mr-2 h-4 w-4" />
+                  <Upload className="mr-3 h-5 w-5" />
                   Choose Files
                 </Button>
               </div>
@@ -276,33 +267,45 @@ export default function PlaygroundArea({
 
         // Default empty state with source selected
         return (
-          <div className="h-full flex items-center justify-center p-8">
-            <div className="text-center max-w-md">
-              <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 ${
-                darkMode ? 'bg-primary/10' : 'bg-primary/5'
-              }`}>
-                <Sparkles className="h-10 w-10 text-primary" />
+          <div className="h-full flex items-center justify-center bg-gradient-to-br from-background via-card/30 to-background p-8">
+            <div className="text-center max-w-2xl">
+              <div className="inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-8 shadow-2xl shadow-indigo-500/25">
+                <Sparkles className="h-12 w-12 text-white" />
               </div>
-              <h2 className={`text-2xl font-semibold mb-3 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+              <h2 className="text-3xl font-bold mb-4 text-foreground">
                 Ready to transform your learning
               </h2>
-              <p className={`text-lg leading-relaxed mb-6 ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-                Choose a study method to generate personalized content from "{selectedSource.name}"
+              <p className="text-xl leading-relaxed mb-8 text-muted-foreground">
+                Choose a study method to generate personalized content from{' '}
+                <span className="font-semibold text-indigo-600">"{selectedSource.name}"</span>
               </p>
               
-              <div className="space-y-3">
+              {/* Source info card */}
+              <div className="inline-flex items-center gap-3 px-4 py-3 rounded-xl bg-card border border-border shadow-sm mb-8">
+                {getSourceIcon(selectedSource.type, (selectedSource as any).subtype)}
+                <span className="font-medium text-foreground">{selectedSource.name}</span>
+                <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 border border-green-200">
+                  Ready
+                </span>
+              </div>
+              
+              <div className="space-y-4">
                 <Button 
+                  size="lg"
                   onClick={onShowCurtain}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30 transition-all"
                 >
+                  <Sparkles className="mr-3 h-5 w-5" />
                   Choose Study Method
                 </Button>
+                
                 <div className="flex items-center gap-4 justify-center">
                   <Button 
                     variant="outline" 
                     size="sm"
                     onClick={onChatClick}
                     disabled={!selectedSource || selectedSource.status !== 'ready'}
+                    className="hover:bg-accent border-border shadow-sm"
                   >
                     <MessageCircle className="mr-2 h-4 w-4" />
                     Chat with AI
@@ -316,9 +319,7 @@ export default function PlaygroundArea({
   }
 
   return (
-    <section className={`relative h-full overflow-hidden rounded-2xl ${
-      darkMode ? 'bg-card border-border' : 'bg-white border-slate-200'
-    } border`}>
+    <section className="relative h-full overflow-hidden rounded-2xl bg-card border-border border">
       
       {/* Playground Content */}
       <div className={`absolute inset-0 ${!curtainVisible && playgroundContent === 'chat' ? 'pr-12' : ''}`}>
@@ -332,9 +333,9 @@ export default function PlaygroundArea({
   curtainVisible ? 'left-0 right-0' : 'left-[calc(100%-48px)] right-0'
 } ${
   curtainVisible 
-    ? darkMode ? 'bg-card border-border' : 'bg-white border-slate-200'
+    ? 'bg-card border-border'
     : (handleVisible || isHovering) 
-      ? darkMode ? 'bg-card border-border' : 'bg-white border-slate-200'
+      ? 'bg-card border-border'
       : 'bg-transparent border-transparent'
 } border-l`}>
   
@@ -343,22 +344,22 @@ export default function PlaygroundArea({
     curtainVisible ? 'opacity-100 p-6' : 'opacity-0 p-0 overflow-hidden'
   }`}>
     <header className="text-center mb-6">
-      <h3 className={`text-xl font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+      <h3 className="text-xl font-semibold mb-2 text-foreground">
         Choose your study method
       </h3>
       {selectedSource && (
         <div className="flex items-center justify-center gap-2 text-sm">
-          <span className={darkMode ? 'text-muted-foreground' : 'text-slate-600'}>From:</span>
+          <span className="text-muted-foreground">From:</span>
           <div className="flex items-center gap-2">
             {getSourceIcon(selectedSource.type, (selectedSource as any).subtype)}
-            <span className={`font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+            <span className="font-medium text-foreground">
               {selectedSource.name}
             </span>
           </div>
         </div>
       )}
       {!selectedSource && (
-        <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+        <p className="text-sm text-muted-foreground">
           Select a source to generate content
         </p>
       )}
@@ -369,25 +370,19 @@ export default function PlaygroundArea({
       {tiles.map((tile) => (
         <button
           key={tile.id}
-          className={`group relative p-4 rounded-xl text-left transition-all duration-200 hover:shadow-md ${
-            darkMode 
-              ? 'bg-background hover:bg-accent/50 border-border' 
-              : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-          } border ${!selectedSource || selectedSource.status !== 'ready' ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`group relative p-4 rounded-xl text-left transition-all duration-200 hover:shadow-md bg-background hover:bg-accent/50 border-border border ${!selectedSource || selectedSource.status !== 'ready' ? 'opacity-50 cursor-not-allowed' : ''}`}
           onClick={() => selectedSource?.status === 'ready' && onTileClick(tile.id)}
           disabled={!selectedSource || selectedSource.status !== 'ready'}
         >
           <div className="flex flex-col gap-2">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-              darkMode ? 'bg-primary/10' : 'bg-primary/5'
-            }`}>
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/10">
               {tile.icon}
             </div>
             <div>
-              <div className={`text-sm font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+              <div className="text-sm font-semibold text-foreground">
                 {tile.title}
               </div>
-              <div className={`text-xs ${darkMode ? 'text-muted-foreground' : 'text-slate-500'}`}>
+              <div className="text-xs text-muted-foreground">
                 {tile.desc}
               </div>
             </div>
@@ -398,17 +393,13 @@ export default function PlaygroundArea({
     
     {/* Ask Questions Button */}
     <Card 
-      className={`w-full cursor-pointer transition-all duration-200 rounded-xl ${
-        darkMode 
-          ? 'hover:bg-accent/50' 
-          : 'hover:bg-slate-50'
-      } ${!selectedSource || selectedSource.status !== 'ready' ? 'opacity-50 cursor-not-allowed' : ''}`}
+      className={`w-full cursor-pointer transition-all duration-200 rounded-xl hover:bg-accent/50 ${!selectedSource || selectedSource.status !== 'ready' ? 'opacity-50 cursor-not-allowed' : ''}`}
       onClick={() => selectedSource?.status === 'ready' && onChatClick()}
     >
       <CardContent className="p-4 text-center">
         <div className="flex items-center justify-center gap-3">
-          <MessageCircle className={`h-5 w-5 ${darkMode ? 'text-muted-foreground' : 'text-slate-400'}`} />
-          <span className={`text-sm font-medium ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+          <MessageCircle className="h-5 w-5 text-muted-foreground" />
+          <span className="text-sm font-medium text-foreground">
             Ask Questions
           </span>
         </div>
@@ -426,11 +417,7 @@ export default function PlaygroundArea({
       {/* Button - always visible */}
       <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">
         <button
-          className={`w-8 h-16 rounded-lg flex items-center justify-center transition-all duration-200 backdrop-blur-sm ${
-            darkMode 
-              ? 'bg-card/95 text-muted-foreground hover:bg-accent hover:text-foreground border border-border/60' 
-              : 'bg-white/95 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
-          }`}
+          className="w-8 h-16 rounded-lg flex items-center justify-center transition-all duration-200 backdrop-blur-sm bg-card/95 text-muted-foreground hover:bg-accent hover:text-foreground border border-border/60"
           onClick={onShowCurtain}
         >
           <ChevronLeft className="h-4 w-4" />

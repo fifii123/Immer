@@ -1,7 +1,6 @@
 "use client"
 
 import React from 'react'
-import { usePreferences } from "@/context/preferences-context"
 import { FileCheck, Copy, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -22,7 +21,6 @@ interface SummaryViewerProps {
 }
 
 export default function SummaryViewer({ output, selectedSource }: SummaryViewerProps) {
-  const { darkMode } = usePreferences()
   const { toast } = useToast()
 
   const handleCopy = async () => {
@@ -61,15 +59,13 @@ export default function SummaryViewer({ output, selectedSource }: SummaryViewerP
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
-          <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
-            darkMode ? 'bg-muted' : 'bg-slate-100'
-          }`}>
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 bg-muted">
             <FileCheck className="h-8 w-8 text-muted-foreground" />
           </div>
-          <h3 className={`text-lg font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+          <h3 className="text-lg font-semibold mb-2 text-foreground">
             No summary content
           </h3>
-          <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+          <p className="text-sm text-muted-foreground">
             The summary content is not available
           </p>
         </div>
@@ -82,16 +78,14 @@ export default function SummaryViewer({ output, selectedSource }: SummaryViewerP
       {/* Header */}
       <header className="text-center mb-8">
         <div className="inline-flex items-center gap-3 mb-4">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-            darkMode ? 'bg-primary/10' : 'bg-primary/5'
-          }`}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-primary/10">
             <FileCheck className="h-5 w-5 text-primary" />
           </div>
           <div className="text-left">
-            <h2 className={`text-2xl font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+            <h2 className="text-2xl font-semibold text-foreground">
               {output.title}
             </h2>
-            <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+            <p className="text-sm text-muted-foreground">
               {selectedSource ? `Summary of ${selectedSource.name}` : 'Document Summary'}
             </p>
           </div>
@@ -119,21 +113,17 @@ export default function SummaryViewer({ output, selectedSource }: SummaryViewerP
       </header>
       
       {/* Content */}
-    <div className="flex-1 max-w-4xl mx-auto w-full pb-8"> {/* Dodaj bottom padding */}
-      <ScrollArea className="h-full">
-        <div className={`prose prose-sm max-w-none ${
-          darkMode ? 'prose-invert' : ''
-        }`}>
-          <div className={`p-6 rounded-xl ${
-            darkMode ? 'bg-muted/50' : 'bg-slate-50'
-          }`}>
-            <div className="whitespace-pre-wrap leading-relaxed">
-              {output.content}
+      <div className="flex-1 max-w-4xl mx-auto w-full pb-8">
+        <ScrollArea className="h-full">
+          <div className="prose prose-sm max-w-none">
+            <div className="p-6 rounded-xl bg-muted/50">
+              <div className="whitespace-pre-wrap leading-relaxed text-foreground">
+                {output.content}
+              </div>
             </div>
           </div>
-        </div>
-      </ScrollArea>
-    </div>
-  </article>
+        </ScrollArea>
+      </div>
+    </article>
   )
 }

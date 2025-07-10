@@ -21,7 +21,6 @@ import { useQuickStudy } from './hooks/useQuickStudy'
 
 export default function QuickStudyPage() {
   const router = useRouter()
-  const { darkMode } = usePreferences()
   const { toast } = useToast()
   
   // Główny hook z session management
@@ -66,17 +65,15 @@ export default function QuickStudyPage() {
   // Show loading screen while initializing session
   if (initializing) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${darkMode ? 'bg-background' : 'bg-slate-50'}`}>
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-4 ${
-            darkMode ? 'bg-primary/10' : 'bg-primary/5'
-          }`}>
+          <div className="w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-4 bg-primary/10">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-          <h2 className={`text-xl font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+          <h2 className="text-xl font-semibold mb-2 text-foreground">
             Initializing Quick Study
           </h2>
-          <p className={`${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+          <p className="text-muted-foreground">
             Setting up your study session...
           </p>
         </div>
@@ -85,11 +82,9 @@ export default function QuickStudyPage() {
   }
 
   return (
-    <div className={`min-h-screen ${darkMode ? 'bg-background' : 'bg-slate-50'}`}>
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className={`sticky top-0 z-50 border-b backdrop-blur-xl ${
-        darkMode ? "bg-background/95 border-border" : "bg-white/95 border-slate-200"
-      }`}>
+      <header className="sticky top-0 z-50 border-b backdrop-blur-xl bg-background/95 border-border">
         <nav className="flex h-14 items-center justify-between px-6">
           <div className="flex items-center gap-4">
             <Button 
@@ -101,17 +96,15 @@ export default function QuickStudyPage() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                darkMode ? 'bg-primary/10' : 'bg-primary/5'
-              }`}>
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-primary/10">
                 <Sparkles className="h-4 w-4 text-primary" />
               </div>
               <div>
-                <h1 className={`text-lg font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                <h1 className="text-lg font-semibold text-foreground">
                   Quick Study
                 </h1>
                 {sessionId && (
-                  <p className={`text-xs ${darkMode ? 'text-muted-foreground' : 'text-slate-500'}`}>
+                  <p className="text-xs text-muted-foreground">
                     Session: {sessionId.slice(0, 8)}...
                   </p>
                 )}
@@ -172,15 +165,16 @@ export default function QuickStudyPage() {
           
           {/* Middle Panel - Playground + Sliding Curtain */}
           <PlaygroundArea 
-            curtainVisible={curtainVisible}
-            playgroundContent={playgroundContent}
-            selectedSource={selectedSource}
-            isGenerating={isGenerating}
-            currentOutput={currentOutput} 
-            onShowCurtain={handleShowCurtain}
-            onTileClick={handleTileClick}
-            onChatClick={handleChatClick}
-          />
+  curtainVisible={curtainVisible}
+  playgroundContent={playgroundContent}
+  selectedSource={selectedSource}
+  sources={sources}
+  isGenerating={isGenerating}
+  currentOutput={currentOutput} 
+  onShowCurtain={handleShowCurtain}
+  onTileClick={handleTileClick}
+  onChatClick={handleChatClick}
+/>
           
           {/* Right Panel - Generated Content */}
           <OutputsPanel 

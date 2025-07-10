@@ -101,17 +101,29 @@ export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample D
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900">
+    <div className="h-full flex flex-col bg-background">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
-        <div className="max-w-4xl mx-auto px-6 py-4">
+      <div className="flex-shrink-0 border-b border-border bg-card/80 backdrop-blur-xl">
+        <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-           
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md">
+                <Brain className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  AI Assistant
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Ask anything about your document
+                </p>
+              </div>
+            </div>
             
             {messages.length > 0 && (
               <button
                 onClick={() => setMessages([])}
-                className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 New conversation
               </button>
@@ -125,16 +137,16 @@ export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample D
         <div className="max-w-4xl mx-auto px-6">
           {messages.length === 0 ? (
             // Welcome State
-            <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
+            <div className="flex items-center justify-center py-8">
               <div className="w-full max-w-2xl">
                 <div className="text-center mb-12">
                   <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-6 shadow-2xl shadow-indigo-500/25">
                     <Brain className="h-8 w-8 text-white" />
                   </div>
-                  <h2 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-3">
+                  <h2 className="text-3xl font-bold text-foreground mb-3">
                     Ask anything about your document
                   </h2>
-                  <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto">
+                  <p className="text-muted-foreground max-w-md mx-auto">
                     I'll help you understand complex topics, summarize key points, and answer your questions intelligently.
                   </p>
                 </div>
@@ -142,7 +154,7 @@ export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample D
                 {/* Feature Pills */}
                 <div className="flex flex-wrap gap-2 justify-center mb-8">
                   {['Instant answers', 'Deep analysis', 'Smart summaries', 'Study companion'].map((feature) => (
-                    <span key={feature} className="px-3 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 rounded-full">
+                    <span key={feature} className="px-3 py-1 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-full">
                       {feature}
                     </span>
                   ))}
@@ -150,7 +162,7 @@ export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample D
 
                 {/* Suggested Questions */}
                 <div className="space-y-3">
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 text-center mb-4">
+                  <p className="text-sm font-medium text-foreground text-center mb-4">
                     Try asking
                   </p>
                   <div className="grid gap-3">
@@ -160,31 +172,30 @@ export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample D
                         onClick={() => handleSuggestionClick(question.text)}
                         className="group relative overflow-hidden rounded-xl p-4 text-left transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                       >
-                        <div className="absolute inset-0 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-850 opacity-90"></div>
+                        <div className="absolute inset-0 bg-card opacity-90"></div>
                         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                         <div className="relative flex items-center gap-3">
-                          <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center group-hover:shadow-md transition-shadow">
-                            <question.icon className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                          <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-background shadow-sm flex items-center justify-center group-hover:shadow-md transition-shadow">
+                            <question.icon className="h-5 w-5 text-indigo-600" />
                           </div>
                           <div className="flex-1">
-                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            <p className="text-sm font-medium text-foreground group-hover:text-indigo-600 transition-colors">
                               {question.text}
                             </p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            <p className="text-xs text-muted-foreground mt-0.5">
                               {question.description}
                             </p>
                           </div>
-                          <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
+                          <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-indigo-600 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
                         </div>
                       </button>
                     ))}
                   </div>
                 </div>
-              </div>
-            </div>
+              </div></div>
           ) : (
             // Messages List
-            <div className="py-8 space-y-6">
+            <div className="py-4 space-y-4">
               {messages.map((message) => (
                 <div
                   key={message.id}
@@ -205,7 +216,7 @@ export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample D
                       className={`rounded-2xl px-5 py-3 ${
                         message.role === 'user'
                           ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-lg shadow-indigo-500/25'
-                          : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm'
+                          : 'bg-card border border-border shadow-sm'
                       }`}
                     >
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">
@@ -214,15 +225,15 @@ export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample D
                     </div>
                     <p className={`text-xs mt-2 ${
                       message.role === 'user' ? 'text-right' : 'text-left'
-                    } text-slate-400 dark:text-slate-500`}>
+                    } text-muted-foreground`}>
                       {formatTime(message.timestamp)}
                     </p>
                   </div>
 
                   {message.role === 'user' && (
                     <div className="flex-shrink-0 mt-1">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                        <User className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                      <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                        <User className="h-4 w-4 text-muted-foreground" />
                       </div>
                     </div>
                   )}
@@ -237,11 +248,11 @@ export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample D
                       <Sparkles className="h-4 w-4 text-white" />
                     </div>
                   </div>
-                  <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3 shadow-sm">
+                  <div className="bg-card border border-border rounded-2xl px-5 py-3 shadow-sm">
                     <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
                     </div>
                   </div>
                 </div>
@@ -254,10 +265,10 @@ export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample D
       </div>
 
       {/* Input Area */}
-      <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
-        <div className="max-w-4xl mx-auto px-6 py-4">
+      <div className="flex-shrink-0 border-t border-border bg-card/80 backdrop-blur-xl">
+        <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="relative">
-            <div className="relative">
+            <div className="relative flex items-end gap-3">
               <textarea
                 ref={inputRef}
                 value={inputValue}
@@ -265,44 +276,38 @@ export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample D
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
                 rows={1}
-                className="w-full resize-none rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-6 py-4 pr-14 text-sm placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 dark:focus:ring-indigo-400/10 transition-all"
+                className="flex-1 resize-none rounded-2xl border border-border bg-background px-4 py-3 text-sm placeholder-muted-foreground focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
                 placeholder="Ask me anything..."
-                style={{ minHeight: '56px', maxHeight: '200px' }}
+                style={{ minHeight: '44px', maxHeight: '120px' }}
                 onInput={(e) => {
                   const target = e.target as HTMLTextAreaElement
                   target.style.height = 'auto'
-                  target.style.height = target.scrollHeight + 'px'
+                  target.style.height = Math.min(target.scrollHeight, 120) + 'px'
                 }}
               />
               
-              <div className="absolute right-2 bottom-2 flex items-center gap-2">
-                {inputValue && (
-                  <span className="text-xs text-slate-400 mr-2">
-                    {inputValue.length}
-                  </span>
+              <button
+                type="button"
+                onClick={handleSendMessage}
+                disabled={!inputValue.trim() || isLoading}
+                className="flex-shrink-0 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 p-2.5 text-white shadow-lg shadow-indigo-500/25 transition-all hover:shadow-xl hover:shadow-indigo-500/30 disabled:opacity-50 disabled:shadow-none"
+                style={{ height: '44px', width: '44px' }}
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
                 )}
-                <button
-                  type="button"
-                  onClick={handleSendMessage}
-                  disabled={!inputValue.trim() || isLoading}
-                  className="rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 p-2.5 text-white shadow-lg shadow-indigo-500/25 transition-all hover:shadow-xl hover:shadow-indigo-500/30 disabled:opacity-50 disabled:shadow-none"
-                >
-                  {isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
+              </button>
             </div>
             
             <div className="flex items-center justify-between mt-2">
-              <p className="text-xs text-slate-400 dark:text-slate-500">
-                <kbd className="px-1.5 py-0.5 text-xs font-medium bg-slate-100 dark:bg-slate-800 rounded">Enter</kbd> to send, <kbd className="px-1.5 py-0.5 text-xs font-medium bg-slate-100 dark:bg-slate-800 rounded">Shift + Enter</kbd> for new line
+              <p className="text-xs text-muted-foreground">
+                <kbd className="px-1.5 py-0.5 text-xs font-medium bg-muted rounded">Enter</kbd> to send, <kbd className="px-1.5 py-0.5 text-xs font-medium bg-muted rounded">Shift + Enter</kbd> for new line
               </p>
               <div className="flex items-center gap-1">
-                <Command className="h-3 w-3 text-slate-400" />
-                <span className="text-xs text-slate-400">AI-powered responses</span>
+                <Command className="h-3 w-3 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">AI-powered responses</span>
               </div>
             </div>
           </div>
