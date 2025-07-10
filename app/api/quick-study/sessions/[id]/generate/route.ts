@@ -4,11 +4,15 @@ import { NextRequest } from 'next/server'
 interface Source {
   id: string;
   name: string;
-  type: 'pdf' | 'youtube' | 'text' | 'docx' | 'image' | 'audio';
+  type: 'pdf' | 'youtube' | 'text' | 'docx' | 'image' | 'audio' | 'url';
   status: 'ready' | 'processing' | 'error';
   size?: string;
   duration?: string;
   pages?: number;
+  extractedText?: string; // Available for AI processing
+  wordCount?: number;
+  processingError?: string;
+  subtype?: string;
 }
 
 interface Output {
@@ -88,6 +92,12 @@ export async function POST(
     
     // Generate content (mock for now)
     console.log(`⚡ Processing ${source.name} to create ${type}`)
+    
+    // TODO: Use source.extractedText for AI processing
+    // Example: const content = source.extractedText || 'No content available'
+    // Example: const aiResponse = await callAI(content, type, settings)
+    
+    console.log(`📄 Source has ${source.wordCount || 0} words available for processing`)
     
     // Simulate processing time
     await new Promise(resolve => setTimeout(resolve, 1000))

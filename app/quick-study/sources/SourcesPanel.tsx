@@ -191,13 +191,24 @@ export default function SourcesPanel({
                           </span>
                         </div>
                         
-                        {(source.size || source.duration || source.pages) && (
+                        {(source.size || source.duration || source.pages || source.wordCount) && (
                           <p className={`text-xs mt-1 ${
                             darkMode ? 'text-muted-foreground' : 'text-slate-500'
                           } ${source.status === 'error' ? 'opacity-50' : ''}`}>
                             {source.pages && `${source.pages} pages`}
-                            {source.pages && (source.size || source.duration) && ' • '}
+                            {source.pages && (source.size || source.duration || source.wordCount) && ' • '}
+                            {source.wordCount && `${source.wordCount.toLocaleString()} words`}
+                            {source.wordCount && (source.size || source.duration) && ' • '}
                             {source.size || source.duration}
+                          </p>
+                        )}
+                        
+                        {/* Processing error display */}
+                        {source.status === 'error' && source.processingError && (
+                          <p className={`text-xs mt-1 ${
+                            darkMode ? 'text-red-400' : 'text-red-600'
+                          }`}>
+                            Error: {source.processingError}
                           </p>
                         )}
                         

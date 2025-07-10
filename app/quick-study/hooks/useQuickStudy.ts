@@ -6,11 +6,15 @@ import { useState, useCallback, useEffect } from 'react'
 interface Source {
   id: string;
   name: string;
-  type: 'pdf' | 'youtube' | 'text' | 'docx' | 'image' | 'audio';
+  type: 'pdf' | 'youtube' | 'text' | 'docx' | 'image' | 'audio' | 'url';
   status: 'ready' | 'processing' | 'error';
   size?: string;
   duration?: string;
   pages?: number;
+  extractedText?: string; // Extracted content for AI processing
+  wordCount?: number;
+  processingError?: string;
+  subtype?: string;
 }
 
 interface Output {

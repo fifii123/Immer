@@ -1,19 +1,42 @@
 import { NextRequest } from 'next/server'
 
-// In-memory storage - same reference as in route.ts
+// Types - same as in route.ts
+interface Source {
+  id: string;
+  name: string;
+  type: 'pdf' | 'youtube' | 'text' | 'docx' | 'image' | 'audio' | 'url';
+  status: 'ready' | 'processing' | 'error';
+  size?: string;
+  duration?: string;
+  pages?: number;
+  extractedText?: string;
+  wordCount?: number;
+  processingError?: string;
+  subtype?: string;
+}
+
+interface Output {
+  id: string;
+  type: 'flashcards' | 'quiz' | 'notes' | 'summary' | 'concepts' | 'mindmap';
+  title: string;
+  preview: string;
+  status: 'ready' | 'generating' | 'error';
+  sourceId: string;
+  createdAt: Date;
+  count?: number;
+}
+
 interface SessionData {
-  sources: any[]
-  outputs: any[]
+  sources: Source[]
+  outputs: Output[]
   createdAt: Date
 }
 
-// Import the same sessions Map (in real app, this would be database)
-// For now, we'll declare it here too (in production, move to shared module)
+// Global in-memory store - same reference as in sessions/route.ts
 declare global {
   var quickStudySessions: Map<string, SessionData> | undefined
 }
 
-// Use global variable to persist across hot reloads in development
 const sessions = globalThis.quickStudySessions ?? new Map<string, SessionData>()
 globalThis.quickStudySessions = sessions
 
@@ -32,13 +55,16 @@ export async function GET(
     
     if (!sessionData) {
       console.log(`❌ Session not found: ${sessionId}`)
+      console.log(`📊 Available sessions: ${Array.from(sessions.keys()).join(', ')}`)
       return Response.json(
         { message: 'Session not found' },
         { status: 404 }
       )
     }
     
-    console.log(`✅ Found session: ${sessionId} with ${sessionData.sources.length} sources`)
+    console.log(`✅ Found session: ${sessionId}`)
+    console.log(`📄 Sources: ${sessionData.sources.length}`)
+    console.log(`📋 Outputs: ${sessionData.outputs.length}`)
     
     // Return session data
     return Response.json({

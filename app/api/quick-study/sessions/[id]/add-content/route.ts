@@ -9,6 +9,9 @@ interface Source {
   size?: string;
   duration?: string;
   pages?: number;
+  extractedText?: string;
+  wordCount?: number;
+  processingError?: string;
   subtype?: string;
 }
 
@@ -105,8 +108,11 @@ async function processTextContent(text: string, title?: string): Promise<Source>
     throw new Error('Text content too long (maximum 50,000 characters)')
   }
   
+  // Clean text
+  const cleanedText = cleanExtractedText(text)
+  
   // Generate title if not provided
-  const generatedTitle = title || generateTitleFromText(text)
+  const generatedTitle = title || generateTitleFromText(cleanedText)
   
   // Create source object
   const source: Source = {
@@ -115,13 +121,12 @@ async function processTextContent(text: string, title?: string): Promise<Source>
     type: 'text',
     status: 'ready',
     size: `${(text.length / 1024).toFixed(1)} KB`,
+    extractedText: cleanedText,
+    wordCount: countWords(cleanedText),
     subtype: 'pasted'
   }
   
-  // TODO: Store the actual text content for later AI processing
-  // In real implementation, you might want to store this in a separate content store
-  
-  console.log(`✅ Created text source: ${source.name}`)
+  console.log(`✅ Created text source: ${source.name} (${source.wordCount} words)`)
   return source
 }
 
@@ -148,12 +153,18 @@ async function processUrlContent(url: string, title?: string): Promise<Source> {
     }
   }
   
+  // TODO: Implement actual URL content fetching here
+  // For now, create placeholder content
+  const placeholderText = `Content from: ${url}\n\nThis content will be extracted automatically when URL processing is implemented.`
+  
   // Create source object
   const source: Source = {
     id: `url-${Date.now()}`,
     name: generatedTitle,
     type: urlType === 'youtube' ? 'youtube' : 'url',
     status: 'ready', // TODO: Change to 'processing' when implementing real URL fetching
+    extractedText: placeholderText,
+    wordCount: countWords(placeholderText),
     subtype: urlType
   }
   
@@ -161,11 +172,6 @@ async function processUrlContent(url: string, title?: string): Promise<Source> {
   if (urlType === 'youtube') {
     source.duration = '~ min' // TODO: Get real duration from YouTube API
   }
-  
-  // TODO: Implement actual URL content fetching
-  // - For YouTube: get transcript, title, description
-  // - For websites: scrape content, clean HTML
-  // - Store content for AI processing
   
   console.log(`✅ Created URL source: ${source.name} (${urlType})`)
   return source
@@ -232,4 +238,25 @@ function generateTitleFromText(text: string): string {
   // If first line is too short or too long, use first 50 chars
   const truncated = text.trim().substring(0, 50)
   return truncated.length < text.trim().length ? `${truncated}...` : truncated
+}
+
+// Clean and normalize extracted text
+function cleanExtractedText(text: string): string {
+  if (!text) return ''
+  
+  return text
+    // Remove excessive whitespace
+    .replace(/\s+/g, ' ')
+    // Remove weird characters
+    .replace(/[^\w\s\-.,;:!?()[\]{}'"]/g, ' ')
+    // Clean up multiple spaces again
+    .replace(/\s+/g, ' ')
+    // Trim
+    .trim()
+}
+
+// Count words in text
+function countWords(text: string): number {
+  if (!text) return 0
+  return text.split(/\s+/).filter(word => word.length > 0).length
 }
