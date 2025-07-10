@@ -1,3 +1,5 @@
+// TODO: delete this file and call directly .../[id]/generate/{output_type}
+
 import { NextRequest } from 'next/server'
 
 // Types

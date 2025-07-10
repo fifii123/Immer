@@ -1,3 +1,5 @@
+// Creating a new session
+
 import { NextRequest } from 'next/server'
 
 // In-memory storage - replace with database later

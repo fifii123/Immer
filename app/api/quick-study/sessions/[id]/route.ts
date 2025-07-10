@@ -1,3 +1,5 @@
+// Restore session
+
 import { NextRequest } from 'next/server'
 
 // Types - same as in route.ts
