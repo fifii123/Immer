@@ -1,7 +1,9 @@
 "use client"
 
+import React from 'react'
 import { useRouter } from "next/navigation"
 import { usePreferences } from "@/context/preferences-context"
+import { useToast } from "@/components/ui/use-toast"
 import { 
   ArrowLeft, 
   Upload,
@@ -18,6 +20,7 @@ import { useQuickStudy } from './hooks/useQuickStudy'
 export default function QuickStudyPage() {
   const router = useRouter()
   const { darkMode } = usePreferences()
+  const { toast } = useToast()
   
   // Główny hook z całą logiką
   const {
@@ -27,12 +30,50 @@ export default function QuickStudyPage() {
     playgroundContent,
     outputs,
     isGenerating,
+    uploadInProgress,
+    fetchingSources,
+    error,
     handleSourceSelect,
     handleTileClick,
     handleOutputClick,
     handleShowCurtain,
-    handleChatClick
+    handleChatClick,
+    handleFileUpload,
+    fetchSources,
+    clearError
   } = useQuickStudy()
+
+  // Error handling with toast notifications
+  React.useEffect(() => {
+    if (error) {
+      toast({
+        title: "Error",
+        description: error,
+        variant: "destructive"
+      })
+      clearError()
+    }
+  }, [error, toast, clearError])
+
+  // Success notifications for uploads
+  React.useEffect(() => {
+    if (!uploadInProgress && sources.length > 0) {
+      // Check if there's a newly uploaded source (one that was just processed)
+      const hasProcessingSources = sources.some(s => s.status === 'processing')
+      if (!hasProcessingSources) {
+        // All sources are ready, show success if we just finished uploading
+        const recentSources = sources.filter(s => 
+          s.id.startsWith('upload-') && s.status === 'ready'
+        )
+        if (recentSources.length > 0) {
+          toast({
+            title: "Upload successful",
+            description: `${recentSources.length} file(s) uploaded and processed successfully`
+          })
+        }
+      }
+    }
+  }, [sources, uploadInProgress, toast])
 
   return (
     <div className={`min-h-screen ${darkMode ? 'bg-background' : 'bg-slate-50'}`}>
@@ -69,9 +110,11 @@ export default function QuickStudyPage() {
               variant="outline" 
               size="sm"
               className="hover:bg-accent"
+              onClick={() => document.getElementById('file-upload')?.click()}
+              disabled={uploadInProgress}
             >
               <Upload className="h-4 w-4 mr-2" />
-              Upload
+              {uploadInProgress ? 'Uploading...' : 'Upload'}
             </Button>
           </div>
         </nav>
@@ -86,6 +129,10 @@ export default function QuickStudyPage() {
             sources={sources}
             selectedSource={selectedSource}
             onSourceSelect={handleSourceSelect}
+            uploadInProgress={uploadInProgress}
+            onFileUpload={handleFileUpload}
+            fetchingSources={fetchingSources}
+            onRefresh={fetchSources}
           />
           
           {/* Middle Panel - Playground + Sliding Curtain */}
@@ -103,6 +150,7 @@ export default function QuickStudyPage() {
           <OutputsPanel 
             outputs={outputs}
             curtainVisible={curtainVisible}
+            selectedSource={selectedSource}
             onShowCurtain={handleShowCurtain}
             onOutputClick={handleOutputClick}
           />

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 
 // Types
 interface Source {
@@ -27,173 +27,274 @@ interface Output {
 type PlaygroundContent = 'flashcards' | 'quiz' | 'notes' | 'summary' | 'concepts' | 'mindmap' | 'chat' | null;
 
 export function useQuickStudy() {
-  // State management - dokładnie jak w oryginalnym page.tsx
-  const [sources, setSources] = useState<Source[]>([
-    { 
-      id: '1', 
-      name: 'Machine Learning Fundamentals', 
-      type: 'pdf', 
-      status: 'ready',
-      size: '2.4 MB',
-      pages: 42
-    },
-    { 
-      id: '2', 
-      name: 'Neural Networks Explained', 
-      type: 'youtube', 
-      status: 'ready',
-      duration: '25 min'
-    },
-    { 
-      id: '3', 
-      name: 'Deep Learning Research Notes', 
-      type: 'text', 
-      status: 'processing',
-      size: '156 KB'
-    },
-    { 
-      id: '4', 
-      name: 'Computer Vision Basics', 
-      type: 'pdf', 
-      status: 'ready',
-      size: '1.8 MB',
-      pages: 28
-    },
-    { 
-      id: '5', 
-      name: 'AI Ethics Lecture', 
-      type: 'youtube', 
-      status: 'ready',
-      duration: '45 min'
-    }
-  ])
+  // Core state - puste na początku, gotowe na backend
+  const [sources, setSources] = useState<Source[]>([])
+  const [selectedSource, setSelectedSource] = useState<Source | null>(null)
+  const [outputs, setOutputs] = useState<Output[]>([])
   
-  const [selectedSource, setSelectedSource] = useState<Source | null>(sources[0])
+  // UI state
   const [curtainVisible, setCurtainVisible] = useState(true)
   const [playgroundContent, setPlaygroundContent] = useState<PlaygroundContent>(null)
-  const [outputs, setOutputs] = useState<Output[]>([
-    {
-      id: '1',
-      type: 'flashcards',
-      title: 'ML Fundamentals Cards',
-      preview: '24 cards covering key concepts',
-      status: 'ready',
-      sourceId: '1',
-      createdAt: new Date(),
-      count: 24
-    },
-    {
-      id: '2',
-      type: 'quiz',
-      title: 'Neural Networks Quiz',
-      preview: '12 questions on deep learning',
-      status: 'ready',
-      sourceId: '2',
-      createdAt: new Date(),
-      count: 12
-    },
-    {
-      id: '3',
-      type: 'notes',
-      title: 'AI Research Summary',
-      preview: '5 sections with key insights',
-      status: 'ready',
-      sourceId: '3',
-      createdAt: new Date(),
-      count: 5
-    },
-    {
-      id: '4',
-      type: 'summary',
-      title: 'Core Concepts Overview',
-      preview: 'Essential points extracted',
-      status: 'ready',
-      sourceId: '1',
-      createdAt: new Date(),
-      count: 1
-    },
-    {
-      id: '5',
-      type: 'concepts',
-      title: 'Key Definitions Map',
-      preview: '18 important terms defined',
-      status: 'ready',
-      sourceId: '2',
-      createdAt: new Date(),
-      count: 18
-    },
-    {
-      id: '6',
-      type: 'mindmap',
-      title: 'Learning Pathways',
-      preview: 'Visual connection map',
-      status: 'generating',
-      sourceId: '3',
-      createdAt: new Date(),
-      count: 1
-    },
-    {
-      id: '7',
-      type: 'flashcards',
-      title: 'Computer Vision Cards',
-      preview: '16 cards on image processing',
-      status: 'ready',
-      sourceId: '4',
-      createdAt: new Date(),
-      count: 16
-    }
-  ])
   const [isGenerating, setIsGenerating] = useState(false)
+  
+  // Loading states
+  const [uploadInProgress, setUploadInProgress] = useState(false)
+  const [fetchingSources, setFetchingSources] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // Handlers - dokładnie jak w oryginalnym page.tsx
-  const handleSourceSelect = useCallback((source: Source) => {
-    setSelectedSource(source)
+  // Load sources on mount
+  useEffect(() => {
+    fetchSources()
   }, [])
 
-  const handleTileClick = useCallback((type: string) => {
+  // Fetch sources from backend
+  const fetchSources = useCallback(async () => {
+    setFetchingSources(true)
+    setError(null)
+    
+    try {
+      const response = await fetch('/api/quick-study/sources', {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch sources')
+      }
+      
+      const sources = await response.json()
+      setSources(sources)
+      
+      // Auto-select first source if none selected
+      if (sources.length > 0 && !selectedSource) {
+        setSelectedSource(sources[0])
+      }
+
+      // Fetch outputs for the selected source
+      if (sources.length > 0) {
+        await fetchOutputs(selectedSource?.id || sources[0].id)
+      }
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch sources')
+      // Set empty arrays on error
+      setSources([])
+      setOutputs([])
+    } finally {
+      setFetchingSources(false)
+    }
+  }, [selectedSource])
+
+  // Fetch outputs for a specific source
+  const fetchOutputs = useCallback(async (sourceId: string) => {
+    try {
+      const response = await fetch(`/api/quick-study/outputs?sourceId=${sourceId}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      })
+      
+      if (response.ok) {
+        const outputs = await response.json()
+        setOutputs(outputs)
+      }
+    } catch (err) {
+      console.error('Failed to fetch outputs:', err)
+      // Don't show error to user for outputs fetch failure
+    }
+  }, [])
+
+  // Handler - file upload
+  const handleFileUpload = useCallback(async (files: File[]) => {
+    setUploadInProgress(true)
+    setError(null)
+    
+    try {
+      const formData = new FormData()
+      files.forEach(file => formData.append('files', file))
+      
+      const response = await fetch('/api/quick-study/upload', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Upload failed')
+      }
+      
+      const newSources = await response.json()
+      setSources(prev => [...prev, ...newSources])
+      
+      // Auto-select first uploaded source if none selected
+      if (newSources.length > 0 && !selectedSource) {
+        setSelectedSource(newSources[0])
+      }
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploadInProgress(false)
+    }
+  }, [selectedSource])
+
+  // Handler - source selection
+  const handleSourceSelect = useCallback((source: Source) => {
+    setSelectedSource(source)
+    setError(null)
+    
+    // Reset playground when switching sources
+    if (playgroundContent) {
+      setCurtainVisible(true)
+      setPlaygroundContent(null)
+    }
+
+    // Fetch outputs for the selected source
+    fetchOutputs(source.id)
+  }, [playgroundContent, fetchOutputs])
+
+  // Handler - generate content
+  const handleTileClick = useCallback(async (type: string) => {
+    if (!selectedSource || selectedSource.status !== 'ready') {
+      setError('Please select a ready source first')
+      return
+    }
+    
     setCurtainVisible(false)
     setPlaygroundContent(type as PlaygroundContent)
     setIsGenerating(true)
+    setError(null)
     
-    setTimeout(() => {
-      setIsGenerating(false)
-      const counts = {
-        flashcards: Math.floor(Math.random() * 20) + 15,
-        quiz: Math.floor(Math.random() * 10) + 8,
-        notes: Math.floor(Math.random() * 5) + 3,
-        summary: 1,
-        concepts: Math.floor(Math.random() * 15) + 10,
-        mindmap: 1
+    try {
+      const response = await fetch('/api/quick-study/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({
+          sourceId: selectedSource.id,
+          type: type,
+          settings: {} // Additional generation settings
+        })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Generation failed')
       }
       
-      const newOutput: Output = {
-        id: Date.now().toString(),
-        type: type as any,
-        title: `${type.charAt(0).toUpperCase() + type.slice(1)} from ${selectedSource?.name}`,
-        preview: `${counts[type as keyof typeof counts]} ${type === 'summary' || type === 'mindmap' ? 'section' : 'items'} generated`,
-        status: 'ready',
-        sourceId: selectedSource?.id || '1',
-        createdAt: new Date(),
-        count: counts[type as keyof typeof counts]
-      }
+      const newOutput = await response.json()
       setOutputs(prev => [...prev, newOutput])
-    }, 3000)
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Generation failed')
+      setCurtainVisible(true) // Show curtain again on error
+      setPlaygroundContent(null)
+    } finally {
+      setIsGenerating(false)
+    }
   }, [selectedSource])
 
+  // Handler - view existing output
   const handleOutputClick = useCallback((output: Output) => {
+    if (output.status !== 'ready') {
+      setError('Content is still generating')
+      return
+    }
+    
     setCurtainVisible(false)
     setPlaygroundContent(output.type)
+    setError(null)
   }, [])
 
+  // Handler - show curtain
   const handleShowCurtain = useCallback(() => {
     setCurtainVisible(true)
     setPlaygroundContent(null)
+    setError(null)
   }, [])
 
+  // Handler - chat mode
   const handleChatClick = useCallback(() => {
+    if (!selectedSource || selectedSource.status !== 'ready') {
+      setError('Please select a ready source first')
+      return
+    }
+    
     setCurtainVisible(false)
     setPlaygroundContent('chat')
+    setError(null)
+  }, [selectedSource])
+
+  // Handler - delete source
+  const handleDeleteSource = useCallback(async (sourceId: string) => {
+    try {
+      const response = await fetch(`/api/quick-study/sources/${sourceId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete source')
+      }
+      
+      // Remove from state
+      setSources(prev => prev.filter(s => s.id !== sourceId))
+      setOutputs(prev => prev.filter(o => o.sourceId !== sourceId))
+      
+      // Clear selection if deleted source was selected
+      if (selectedSource?.id === sourceId) {
+        setSelectedSource(null)
+        setCurtainVisible(true)
+        setPlaygroundContent(null)
+      }
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete source')
+    }
+  }, [selectedSource])
+
+  // Handler - delete output
+  const handleDeleteOutput = useCallback(async (outputId: string) => {
+    try {
+      const response = await fetch(`/api/quick-study/outputs/${outputId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete output')
+      }
+      
+      // Remove from state
+      setOutputs(prev => prev.filter(o => o.id !== outputId))
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete output')
+    }
   }, [])
+
+  // Clear error
+  const clearError = useCallback(() => {
+    setError(null)
+  }, [])
+
+  // Refresh data
+  const refreshData = useCallback(async () => {
+    await fetchSources()
+    if (selectedSource) {
+      await fetchOutputs(selectedSource.id)
+    }
+  }, [fetchSources, selectedSource, fetchOutputs])
 
   return {
     // State
@@ -203,14 +304,57 @@ export function useQuickStudy() {
     playgroundContent,
     outputs,
     isGenerating,
+    uploadInProgress,
+    fetchingSources,
+    error,
     
     // Handlers
     handleSourceSelect,
     handleTileClick,
     handleOutputClick,
     handleShowCurtain,
-    handleChatClick
+    handleChatClick,
+    handleFileUpload,
+    handleDeleteSource,
+    handleDeleteOutput,
+    fetchSources,
+    fetchOutputs,
+    refreshData,
+    clearError
   }
+}
+
+// Helper functions
+function getFileType(file: File): Source['type'] {
+  const mimeType = file.type.toLowerCase()
+  const fileName = file.name.toLowerCase()
+  
+  // Check by MIME type first
+  if (mimeType.includes('pdf')) return 'pdf'
+  if (mimeType.includes('text')) return 'text'
+  if (mimeType.includes('word') || mimeType.includes('document')) return 'docx'
+  if (mimeType.includes('image')) return 'image'
+  if (mimeType.includes('audio')) return 'audio'
+  if (mimeType.includes('video')) return 'youtube' // Treat video files as youtube type
+  
+  // Check by file extension as fallback
+  if (fileName.endsWith('.pdf')) return 'pdf'
+  if (fileName.endsWith('.txt') || fileName.endsWith('.md')) return 'text'
+  if (fileName.endsWith('.doc') || fileName.endsWith('.docx')) return 'docx'
+  if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png') || fileName.endsWith('.gif')) return 'image'
+  if (fileName.endsWith('.mp3') || fileName.endsWith('.wav') || fileName.endsWith('.m4a')) return 'audio'
+  if (fileName.endsWith('.mp4') || fileName.endsWith('.avi') || fileName.endsWith('.mov')) return 'youtube'
+  
+  // Default fallback
+  return 'text'
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 export type { Source, Output, PlaygroundContent }

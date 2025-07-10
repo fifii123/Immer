@@ -16,7 +16,7 @@ import {
   Sparkles,
   Bot,
   Send,
-  LayoutGrid,
+  Upload,
   FileText,
   Youtube,
   Image,
@@ -96,6 +96,249 @@ export default function PlaygroundArea({
 }: PlaygroundAreaProps) {
   const { darkMode } = usePreferences()
 
+  // Render content based on current state
+  const renderContent = () => {
+    // If generating, show loading state
+    if (isGenerating) {
+      return (
+        <div className="h-full flex items-center justify-center">
+          <div className="text-center">
+            <div className="relative">
+              <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-6 ${
+                darkMode ? 'bg-primary/10' : 'bg-primary/5'
+              }`}>
+                <Loader2 className="h-8 w-8 text-primary animate-spin" />
+              </div>
+              <div className="absolute -top-1 -right-1 w-6 h-6 bg-primary rounded-full animate-pulse" />
+            </div>
+            
+            <h3 className={`text-xl font-semibold mb-3 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+              Generating content...
+            </h3>
+            <p className={`text-base leading-relaxed mb-4 ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+              AI is analyzing "{selectedSource?.name}" and creating personalized study materials
+            </p>
+            
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+              <span>This might take a moment</span>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // Specific content viewers
+    if (playgroundContent === 'flashcards') {
+      return (
+        <article className="h-full flex flex-col p-8">
+          <header className="text-center mb-8">
+            <div className="inline-flex items-center gap-3 mb-4">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                darkMode ? 'bg-primary/10' : 'bg-primary/5'
+              }`}>
+                <Zap className="h-5 w-5 text-primary" />
+              </div>
+              <div className="text-left">
+                <h2 className={`text-2xl font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                  Interactive Flashcards
+                </h2>
+                <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+                  Spaced repetition for optimal retention
+                </p>
+              </div>
+            </div>
+          </header>
+          
+          <div className="flex-1 flex items-center justify-center">
+            <ul className="w-full max-w-2xl space-y-4">
+              {[
+                { front: "What is the primary goal of machine learning?", difficulty: "Easy" },
+                { front: "Explain the difference between supervised and unsupervised learning", difficulty: "Medium" },
+                { front: "How does gradient descent optimization work?", difficulty: "Hard" }
+              ].map((card, index) => (
+                <li key={index}>
+                  <Card 
+                    className={`group cursor-pointer transition-all duration-300 hover:shadow-lg rounded-xl ${
+                      darkMode 
+                        ? 'bg-card hover:bg-accent/50' 
+                        : 'bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <span className={`text-xs font-medium px-3 py-1 rounded-full ${
+                          card.difficulty === 'Easy' 
+                            ? darkMode ? 'bg-green-500/10 text-green-400' : 'bg-green-50 text-green-700'
+                            : card.difficulty === 'Medium' 
+                              ? darkMode ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-50 text-amber-700'
+                              : darkMode ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-700'
+                        }`}>
+                          {card.difficulty}
+                        </span>
+                        <span className={`text-xs ${darkMode ? 'text-muted-foreground' : 'text-slate-500'}`}>
+                          Card {index + 1} of 24
+                        </span>
+                      </div>
+                      <p className={`text-lg leading-relaxed ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                        {card.front}
+                      </p>
+                      <div className={`text-sm mt-4 flex items-center gap-2 ${
+                        darkMode ? 'text-muted-foreground' : 'text-slate-500'
+                      }`}>
+                        <ChevronRight className="h-4 w-4" />
+                        Click to reveal answer
+                      </div>
+                    </CardContent>
+                  </Card>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </article>
+      )
+    }
+    
+    if (playgroundContent === 'chat') {
+      return (
+        <article className="h-full flex flex-col p-8">
+          <header className="text-center mb-8">
+            <div className="inline-flex items-center gap-3 mb-4">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                darkMode ? 'bg-primary/10' : 'bg-primary/5'
+              }`}>
+                <Bot className="h-5 w-5 text-primary" />
+              </div>
+              <div className="text-left">
+                <h2 className={`text-2xl font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                  AI Study Assistant
+                </h2>
+                <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+                  Ask questions about {selectedSource?.name || 'your materials'}
+                </p>
+              </div>
+            </div>
+          </header>
+          
+          <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full">
+            <div className="flex-1 flex items-center justify-center pb-4">
+              <Card className={`w-full rounded-xl ${
+                darkMode ? 'bg-background' : 'bg-slate-50'
+              }`}>
+                <CardContent className="p-6">
+                  <div className="text-center">
+                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
+                      darkMode ? 'bg-primary/10' : 'bg-primary/5'
+                    }`}>
+                      <Bot className="h-8 w-8 text-primary" />
+                    </div>
+                    <h3 className={`text-lg font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+                      Ready to help you learn
+                    </h3>
+                    <p className={`${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+                      Ask any question about your study materials
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            
+            <form className="flex gap-3 mt-auto">
+              <div className="flex-1 relative">
+                <input 
+                  type="text"
+                  className={`w-full p-4 pr-12 rounded-xl border focus:outline-none focus:ring-2 focus:ring-primary transition-all ${
+                    darkMode 
+                      ? 'bg-background border-border text-foreground placeholder-muted-foreground' 
+                      : 'bg-white border-slate-200 placeholder-slate-500'
+                  }`}
+                  placeholder={`Ask anything about ${selectedSource?.name || 'your materials'}...`}
+                />
+                <Button 
+                  size="icon" 
+                  className="absolute right-2 top-2 h-8 w-8 rounded-lg"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            </form>
+          </div>
+        </article>
+      )
+    }
+
+    // Empty state - no content selected
+    if (!selectedSource) {
+      return (
+        <div className="h-full flex items-center justify-center p-8">
+          <div className="text-center max-w-md">
+            <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 ${
+              darkMode ? 'bg-primary/10' : 'bg-primary/5'
+            }`}>
+              <Upload className="h-10 w-10 text-primary" />
+            </div>
+            <h2 className={`text-2xl font-semibold mb-3 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+              Upload your first source
+            </h2>
+            <p className={`text-lg leading-relaxed mb-6 ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+              Upload documents, videos, or audio files to start generating personalized study materials
+            </p>
+            <Button 
+              variant="outline"
+              onClick={() => document.getElementById('file-upload')?.click()}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Choose Files
+            </Button>
+          </div>
+        </div>
+      )
+    }
+
+    // Default empty state with source selected
+    return (
+      <div className="h-full flex items-center justify-center p-8">
+        <div className="text-center max-w-md">
+          <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 ${
+            darkMode ? 'bg-primary/10' : 'bg-primary/5'
+          }`}>
+            <Sparkles className="h-10 w-10 text-primary" />
+          </div>
+          <h2 className={`text-2xl font-semibold mb-3 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
+            Ready to transform your learning
+          </h2>
+          <p className={`text-lg leading-relaxed mb-6 ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+            Choose a study method to generate personalized content from "{selectedSource.name}"
+          </p>
+          
+          <div className="space-y-3">
+            <Button 
+              onClick={onShowCurtain}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              Choose Study Method
+            </Button>
+            <div className="flex items-center gap-4 justify-center">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={onChatClick}
+                disabled={!selectedSource || selectedSource.status !== 'ready'}
+              >
+                <MessageCircle className="mr-2 h-4 w-4" />
+                Chat with AI
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <section className={`relative h-full overflow-hidden rounded-2xl ${
       darkMode ? 'bg-card border-border' : 'bg-white border-slate-200'
@@ -103,171 +346,7 @@ export default function PlaygroundArea({
       
       {/* Playground Content */}
       <div className={`absolute inset-0 ${!curtainVisible && playgroundContent === 'chat' ? 'pr-12' : ''}`}>
-        {playgroundContent === 'flashcards' && (
-          <article className="h-full flex flex-col p-8">
-            <header className="text-center mb-8">
-              <div className="inline-flex items-center gap-3 mb-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                  darkMode ? 'bg-primary/10' : 'bg-primary/5'
-                }`}>
-                  <Zap className="h-5 w-5 text-primary" />
-                </div>
-                <div className="text-left">
-                  <h2 className={`text-2xl font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-                    Interactive Flashcards
-                  </h2>
-                  <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-                    Spaced repetition for optimal retention
-                  </p>
-                </div>
-              </div>
-            </header>
-            
-            {isGenerating ? (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="text-center">
-                  <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-primary" />
-                  <h3 className={`text-lg font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-                    Analyzing content
-                  </h3>
-                  <p className={`${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-                    Creating flashcards from {selectedSource?.name}...
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <ul className="w-full max-w-2xl space-y-4">
-                  {[
-                    { front: "What is the primary goal of machine learning?", difficulty: "Easy" },
-                    { front: "Explain the difference between supervised and unsupervised learning", difficulty: "Medium" },
-                    { front: "How does gradient descent optimization work?", difficulty: "Hard" }
-                  ].map((card, index) => (
-                    <li key={index}>
-                      <Card 
-                        className={`group cursor-pointer transition-all duration-300 hover:shadow-lg rounded-xl ${
-                          darkMode 
-                            ? 'bg-card hover:bg-accent/50' 
-                            : 'bg-white hover:bg-slate-50'
-                        }`}
-                      >
-                        <CardContent className="p-6">
-                          <div className="flex items-start justify-between mb-4">
-                            <span className={`text-xs font-medium px-3 py-1 rounded-full ${
-                              card.difficulty === 'Easy' 
-                                ? darkMode ? 'bg-green-500/10 text-green-400' : 'bg-green-50 text-green-700'
-                                : card.difficulty === 'Medium' 
-                                  ? darkMode ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-50 text-amber-700'
-                                  : darkMode ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-700'
-                            }`}>
-                              {card.difficulty}
-                            </span>
-                            <span className={`text-xs ${darkMode ? 'text-muted-foreground' : 'text-slate-500'}`}>
-                              Card {index + 1} of 24
-                            </span>
-                          </div>
-                          <p className={`text-lg leading-relaxed ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-                            {card.front}
-                          </p>
-                          <div className={`text-sm mt-4 flex items-center gap-2 ${
-                            darkMode ? 'text-muted-foreground' : 'text-slate-500'
-                          }`}>
-                            <ChevronRight className="h-4 w-4" />
-                            Click to reveal answer
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </article>
-        )}
-        
-        {playgroundContent === 'chat' && (
-          <article className="h-full flex flex-col p-8">
-            <header className="text-center mb-8">
-              <div className="inline-flex items-center gap-3 mb-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                  darkMode ? 'bg-primary/10' : 'bg-primary/5'
-                }`}>
-                  <Bot className="h-5 w-5 text-primary" />
-                </div>
-                <div className="text-left">
-                  <h2 className={`text-2xl font-semibold ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-                    AI Study Assistant
-                  </h2>
-                  <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-                    Ask questions about your materials
-                  </p>
-                </div>
-              </div>
-            </header>
-            
-            <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full">
-              <div className="flex-1 flex items-center justify-center pb-4">
-                <Card className={`w-full rounded-xl ${
-                  darkMode ? 'bg-background' : 'bg-slate-50'
-                }`}>
-                  <CardContent className="p-6">
-                    <div className="text-center">
-                      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
-                        darkMode ? 'bg-primary/10' : 'bg-primary/5'
-                      }`}>
-                        <Bot className="h-8 w-8 text-primary" />
-                      </div>
-                      <h3 className={`text-lg font-semibold mb-2 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-                        Ready to help you learn
-                      </h3>
-                      <p className={`${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-                        Ask any question about your study materials
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-              
-              <form className="flex gap-3 mt-auto">
-                <div className="flex-1 relative">
-                  <input 
-                    type="text"
-                    className={`w-full p-4 pr-12 rounded-xl border focus:outline-none focus:ring-2 focus:ring-primary transition-all ${
-                      darkMode 
-                        ? 'bg-background border-border text-foreground placeholder-muted-foreground' 
-                        : 'bg-white border-slate-200 placeholder-slate-500'
-                    }`}
-                    placeholder="Ask anything about machine learning..."
-                  />
-                  <Button 
-                    size="icon" 
-                    className="absolute right-2 top-2 h-8 w-8 rounded-lg"
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </article>
-        )}
-        
-        {!playgroundContent && (
-          <div className="h-full flex items-center justify-center p-8">
-            <div className="text-center max-w-md">
-              <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 ${
-                darkMode ? 'bg-primary/10' : 'bg-primary/5'
-              }`}>
-                <Sparkles className="h-10 w-10 text-primary" />
-              </div>
-              <h2 className={`text-2xl font-semibold mb-3 ${darkMode ? 'text-foreground' : 'text-slate-900'}`}>
-                Ready to transform your learning
-              </h2>
-              <p className={`text-lg leading-relaxed ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
-                Select a source and choose how you'd like to study it
-              </p>
-            </div>
-          </div>
-        )}
+        {renderContent()}
       </div>
 
       {/* Sliding Curtain - dokładnie jak w oryginalnym */}
@@ -294,6 +373,11 @@ export default function PlaygroundArea({
                 </div>
               </div>
             )}
+            {!selectedSource && (
+              <p className={`text-sm ${darkMode ? 'text-muted-foreground' : 'text-slate-600'}`}>
+                Select a source to generate content
+              </p>
+            )}
           </header>
           
           {/* Study Method Tiles */}
@@ -305,8 +389,9 @@ export default function PlaygroundArea({
                   darkMode 
                     ? 'bg-background hover:bg-accent/50 border-border' 
                     : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-                } border`}
-                onClick={() => onTileClick(tile.id)}
+                } border ${!selectedSource || selectedSource.status !== 'ready' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onClick={() => selectedSource?.status === 'ready' && onTileClick(tile.id)}
+                disabled={!selectedSource || selectedSource.status !== 'ready'}
               >
                 <div className="flex flex-col gap-2">
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
@@ -333,8 +418,8 @@ export default function PlaygroundArea({
               darkMode 
                 ? 'hover:bg-accent/50' 
                 : 'hover:bg-slate-50'
-            }`}
-            onClick={onChatClick}
+            } ${!selectedSource || selectedSource.status !== 'ready' ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={() => selectedSource?.status === 'ready' && onChatClick()}
           >
             <CardContent className="p-4 text-center">
               <div className="flex items-center justify-center gap-3">
