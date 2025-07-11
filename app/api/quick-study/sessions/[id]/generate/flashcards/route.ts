@@ -119,7 +119,45 @@ export async function POST(
     
     switch (source.type) {
       case 'pdf':
-      case 'text':
+        case 'text':
+          if (!source.extractedText) {
+            return Response.json(
+              { message: 'No text content available for processing' },
+              { status: 400 }
+            )
+          }
+          
+          // Use Knowledge Graph if available for MUCH better content
+          let enhancedText = source.extractedText
+          let enhancedSettings = settings
+          
+          if (source.knowledgeGraph && source.knowledgeGraph.entities.size > 0) {
+            console.log(`📊 Using Knowledge Graph with ${source.knowledgeGraph.entities.size} entities for flashcards`)
+            
+            // Extract high-confidence entities from Knowledge Graph
+            const entities = Array.from(source.knowledgeGraph.entities.values())
+            const highConfidenceEntities = entities
+              .filter(e => e.confidence > 0.7)
+              .sort((a, b) => b.confidence - a.confidence)
+              .slice(0, 50) // Top 50 entities
+            
+            // Create enriched context with Knowledge Graph entities
+            const entityContext = highConfidenceEntities.map(entity => 
+              `${entity.name}: ${entity.descriptions[0] || entity.properties?.definition || 'Important concept'}`
+            ).join('\n')
+            
+            enhancedText = `${source.extractedText}\n\nKEY ENTITIES FROM KNOWLEDGE GRAPH:\n${entityContext}`
+            
+            enhancedSettings = {
+              ...settings,
+              knowledgeGraphAvailable: true,
+              priorityTerms: highConfidenceEntities.slice(0, 20).map(e => e.name),
+              totalEntities: source.knowledgeGraph.entities.size
+            }
+          }
+          
+          generatedContent = await generateFlashcardsFromText(enhancedText, source.name, enhancedSettings)
+          break
         if (!source.extractedText) {
           return Response.json(
             { message: 'No text content available for processing' },

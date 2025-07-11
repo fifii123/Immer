@@ -3,6 +3,7 @@
 export const runtime = 'nodejs'
 import { NextRequest } from 'next/server'
 import { createStructuredChunks, type StructuredChunk } from '../../../../../../lib/structuredChunking'
+import { buildKnowledgeGraph, type KnowledgeGraph } from '../../../../../../lib/knowledgeGraph'
 
 // PDF processing library for server-side
 import PDFParser from 'pdf2json'
@@ -12,7 +13,7 @@ interface Source {
   id: string;
   name: string;
   type: 'pdf' | 'youtube' | 'text' | 'docx' | 'image' | 'audio' | 'url';
-  status: 'ready' | 'processing' | 'error' | 'structuring'; // Add new status
+  status: 'ready' | 'processing' | 'error' | 'structuring' | 'building_graph';
   size?: string;
   duration?: string;
   pages?: number;
@@ -20,8 +21,9 @@ interface Source {
   wordCount?: number;
   processingError?: string;
   subtype?: string;
-    structuredChunks?: StructuredChunk[]; // Add this field
-    processingStage?: 'extracting' | 'structuring' | 'complete'; // Add progress tracking
+  structuredChunks?: StructuredChunk[];
+  knowledgeGraph?: KnowledgeGraph; // ADD THIS
+  processingStage?: 'extracting' | 'structuring' | 'building_graph' | 'complete';
 }
 
 interface SessionData {
@@ -205,17 +207,27 @@ async function createStructuredChunksForSource(file: File, source: Source): Prom
     }
     
     const structuredChunks = await createStructuredChunks(source.extractedText!, options)
-    
     source.structuredChunks = structuredChunks
-    source.status = 'ready'
-    source.processingStage = 'complete'
     
     console.log(`✅ Created ${structuredChunks.length} structured chunks for ${file.name}`)
     
+    // STEP 2: Build Knowledge Graph from structured chunks
+    console.log(`🕸️ Building knowledge graph for ${file.name}`)
+    source.status = 'building_graph'
+    source.processingStage = 'building_graph'
+    
+    const knowledgeGraph = await buildKnowledgeGraph(structuredChunks, file.name)
+    source.knowledgeGraph = knowledgeGraph
+    
+    console.log(`✅ Built knowledge graph: ${knowledgeGraph.entities.size} entities, ${knowledgeGraph.relations.size} relations`)
+    
+    source.status = 'ready'
+    source.processingStage = 'complete'
+    
   } catch (error) {
-    console.error(`❌ Structured chunking failed for ${file.name}:`, error)
+    console.error(`❌ Processing failed for ${file.name}:`, error)
     source.status = 'error'
-    source.processingError = `Chunking failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    source.processingError = `Processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`
   }
 }
 

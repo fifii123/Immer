@@ -1,7 +1,7 @@
 export const runtime = 'nodejs'
 import { NextRequest } from 'next/server'
 import { OpenAI } from 'openai'
-
+import { generateKnowledgeMapFromGraph } from '../../../../../../../lib/knowledgeGraph'
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -128,16 +128,25 @@ export async function POST(
         case 'youtube':
         case 'audio':
         case 'url':
-          if (!source.structuredChunks || source.structuredChunks.length === 0) {
+          if (!source.knowledgeGraph) {
             return Response.json(
-              { message: 'Document is still being processed. Please wait for chunking to complete.' },
+              { message: 'Knowledge graph is still being built. Please wait for processing to complete.' },
               { status: 400 }
             )
           }
-          generatedContent = await generateKnowledgeMapFromStructuredChunks(
-            source.structuredChunks, 
-            source.name, 
-            settings
+          
+          console.log(`📊 Using Knowledge Graph with ${source.knowledgeGraph.entities.size} entities for knowledge map`)
+          
+          // Enhanced settings for maximum nodes
+          const enhancedSettings = {
+            ...settings,
+            maxNodes: 200, // Allow up to 200 nodes (vs default 50)
+            showAllEntities: true
+          }
+          
+          generatedContent = await generateKnowledgeMapFromGraph(
+            source.knowledgeGraph, 
+            enhancedSettings
           )
           break
         
