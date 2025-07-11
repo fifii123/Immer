@@ -92,6 +92,7 @@ export default function FlashcardViewer({ output, selectedSource }: FlashcardVie
   const [displayCards, setDisplayCards] = useState<Flashcard[]>([])
   const [isFlipping, setIsFlipping] = useState(false)
 
+
   // Parse deck content on mount
   useEffect(() => {
     if (!output?.content) return
@@ -128,7 +129,7 @@ export default function FlashcardViewer({ output, selectedSource }: FlashcardVie
     
     // Studied only filter
     if (showStudiedOnly) {
-      filtered = filtered.filter(card => studiedCards.has(card.id))
+      filtered = filtered.filter(card => incorrectCards.has(card.id))
     }
     
     // Shuffle if requested
@@ -154,8 +155,6 @@ useEffect(() => {
     setCurrentCardIndex(0)
     setIsFlipped(false)
     setStudiedCards(new Set())
-    setCorrectCards(new Set())
-    setIncorrectCards(new Set())
     setCardAnimation('study-enter')
   }, [])
 
@@ -166,6 +165,17 @@ useEffect(() => {
     setStudiedCards(new Set())
     setCorrectCards(new Set())
     setIncorrectCards(new Set())
+    setSelectedCategory('all')
+    setSelectedDifficulty('all')
+    setShowStudiedOnly(false)
+    setShuffled(false)
+    setCardAnimation('')
+  }, [])
+
+  const softReset = useCallback(() => {
+    setStudyMode('preview')
+    setCurrentCardIndex(0)
+    setIsFlipped(false)
     setSelectedCategory('all')
     setSelectedDifficulty('all')
     setShowStudiedOnly(false)
@@ -209,8 +219,19 @@ useEffect(() => {
     }, 100)
     
   }, [isFlipping, displayCards, currentCardIndex])
+
+  const nextCard = useCallback(() => {
+    if (currentCardIndex < displayCards.length - 1) {
+      setCurrentCardIndex(prev => prev + 1)
+      setIsFlipped(false)
+      setCardAnimation('study-enter')
+    } else {
+      // End of deck
+      setStudyMode('review')
+    }
+  }, [currentCardIndex, displayCards.length])
+
   const handleCardResult = useCallback((correct: boolean) => {
-    if (isFlipping) return
     const currentCard = displayCards[currentCardIndex]
     if (!currentCard) return
     
@@ -247,19 +268,9 @@ useEffect(() => {
     setTimeout(() => {
       nextCard()
     }, 600)
-  }, [displayCards, currentCardIndex])
+  }, [displayCards, currentCardIndex, nextCard])
 
-  const nextCard = useCallback(() => {
-    if (isFlipping) return 
-    if (currentCardIndex < displayCards.length - 1) {
-      setCurrentCardIndex(prev => prev + 1)
-      setIsFlipped(false)
-      setCardAnimation('study-enter')
-    } else {
-      // End of deck
-      setStudyMode('review')
-    }
-  }, [currentCardIndex, displayCards.length])
+
 
   const previousCard = useCallback(() => {
     if (isFlipping) return 
@@ -413,14 +424,14 @@ useEffect(() => {
           </Button>
           
           <Button
-            variant={showStudiedOnly ? "default" : "outline"}
-            onClick={() => setShowStudiedOnly(!showStudiedOnly)}
-            disabled={studiedCards.size === 0}
-            className="flashcard-action-btn border-2"
-          >
-            <Eye className="h-4 w-4 mr-2" />
-            {showStudiedOnly ? 'Studied Only' : 'Show Studied'}
-          </Button>
+  variant={showStudiedOnly ? "default" : "outline"}
+  onClick={() => setShowStudiedOnly(!showStudiedOnly)}
+  disabled={incorrectCards.size === 0}
+  className="flashcard-action-btn border-2"
+>
+  <RefreshCw className="h-4 w-4 mr-2" />
+  {showStudiedOnly ? 'All Cards' : 'Review Cards'}
+</Button>
         </div>
         
         {/* Difficulty Distribution */}
@@ -581,65 +592,68 @@ useEffect(() => {
           </div>
         </div>
         
-        {/* Navigation and Actions */}
-        <div className="flex items-center justify-between">
-          <Button
-            variant="outline"
-            onClick={previousCard}
-            disabled={currentCardIndex === 0}
-            className="flashcard-action-btn border-2 px-6 py-3"
-          >
-            <ChevronLeft className="h-5 w-5 mr-2" />
-            Previous
-          </Button>
-          
-          {isFlipped ? (
-            <div className="flex gap-4">
-              <Button
-                variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleCardResult(false)
-                }}
-                className="flashcard-action-btn border-2 border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20 px-6 py-3"
-              >
-                <X className="h-5 w-5 mr-2" />
-                Study Again
-              </Button>
-              <Button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleCardResult(true)
-                }}
-                className="flashcard-action-btn bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3"
-              >
-                <Check className="h-5 w-5 mr-2" />
-                Got It!
-              </Button>
-            </div>
-          ) : (
-            <Button
-              onClick={(e) => {
-                e.stopPropagation()
-                flipCard()
-              }}
-              className="flashcard-action-btn bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-8 py-3"
-            >
-              <Eye className="h-5 w-5 mr-2" />
-              Reveal Answer
-            </Button>
-          )}
-          
-          <Button
-            variant="outline"
-            onClick={nextCard}
-            disabled={currentCardIndex === displayCards.length - 1}
-            className="flashcard-action-btn border-2 px-6 py-3"
-          >
-            Next
-            <ChevronRight className="h-5 w-5 ml-2" />
-          </Button>
-        </div>
+{/* Navigation and Actions */}
+<div className="flex items-center justify-between">
+  <Button
+    variant="outline"
+    onClick={previousCard}
+    disabled={currentCardIndex === 0}
+    className="flashcard-action-btn border-2 px-6 py-3"
+  >
+    <ChevronLeft className="h-5 w-5 mr-2" />
+    Previous
+  </Button>
+  
+  {isFlipped ? (
+    // When flipped: show only rating buttons (no Next button)
+    <div className="flex gap-4">
+      <Button
+        variant="outline"
+        onClick={(e) => {
+          e.stopPropagation()
+          handleCardResult(false)
+        }}
+        className="flashcard-action-btn border-2 border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20 px-6 py-3"
+      >
+        <X className="h-5 w-5 mr-2" />
+        Study Again
+      </Button>
+      <Button
+        onClick={(e) => {
+          e.stopPropagation()
+          handleCardResult(true)
+        }}
+        className="flashcard-action-btn bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3"
+      >
+        <Check className="h-5 w-5 mr-2" />
+        Got It!
+      </Button>
+    </div>
+  ) : (
+    // When not flipped: show Reveal Answer button and Next button
+    <>
+      <Button
+        onClick={(e) => {
+          e.stopPropagation()
+          flipCard()
+        }}
+        className="flashcard-action-btn bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white px-8 py-3"
+      >
+        <Eye className="h-5 w-5 mr-2" />
+        Reveal Answer
+      </Button>
+      
+      <Button
+        variant="outline"
+        onClick={nextCard}
+        className="flashcard-action-btn border-2 px-6 py-3"
+      >
+        {currentCardIndex === displayCards.length - 1 ? 'Finish' : 'Next'}
+        <ChevronRight className="h-5 w-5 ml-2" />
+      </Button>
+    </>
+  )}
+</div>
       </div>
     )
   }
@@ -736,7 +750,7 @@ useEffect(() => {
             </Button>
             
             <Button 
-              onClick={resetDeck}
+              onClick={softReset}
               className="w-full sm:w-auto bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white flashcard-action-btn py-6 px-8 text-lg"
             >
               <BookOpen className="mr-2 h-5 w-5" />
