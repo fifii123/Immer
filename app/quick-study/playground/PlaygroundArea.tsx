@@ -16,6 +16,7 @@ import {
   Bot,
   Send,
   Upload,
+  Clock,
   FileText,
   Youtube,
   Image,
@@ -35,6 +36,7 @@ import NotesViewer from '../outputs/viewers/NotesViewer'
 import ChatViewer from '../outputs/viewers/ChatViewer'
 import QuizViewer from '../outputs/viewers/QuizViewer'
 import FlashcardViewer from '../outputs/viewers/FlashcardViewer'
+import TimelineViewer from '../outputs/viewers/TimelineViewer'
 
 interface PlaygroundAreaProps {
   curtainVisible: boolean
@@ -73,10 +75,10 @@ const tiles = [
     desc: 'Essential points'
   },
   { 
-    id: 'concepts', 
-    icon: <Key className="h-5 w-5" />, 
-    title: 'Concepts Map', 
-    desc: 'Key definitions'
+    id: 'timeline', 
+    icon: <Clock className="h-5 w-5"/>, 
+    title: 'Timeline Builder', 
+    desc: 'Interactive sequence'
   },
   { 
     id: 'mindmap', 
@@ -189,7 +191,9 @@ switch (playgroundContent) {
   case 'flashcards':
     return <FlashcardViewer output={currentOutput} selectedSource={selectedSource} />
     
-  case 'concepts':
+    case 'timeline':
+      return <TimelineViewer output={currentOutput} selectedSource={selectedSource} />
+      
   case 'mindmap':
     return (
       <div className="h-full flex items-center justify-center bg-gradient-to-br from-background via-card/30 to-background">
