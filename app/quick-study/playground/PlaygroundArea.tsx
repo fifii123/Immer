@@ -20,6 +20,7 @@ import {
   FileText,
   Youtube,
   Image,
+  Network,
   Mic,
   File,
   Globe
@@ -37,6 +38,7 @@ import ChatViewer from '../outputs/viewers/ChatViewer'
 import QuizViewer from '../outputs/viewers/QuizViewer'
 import FlashcardViewer from '../outputs/viewers/FlashcardViewer'
 import TimelineViewer from '../outputs/viewers/TimelineViewer'
+import KnowledgeMapViewer from '../outputs/viewers/KnowledgeMapViewer'
 
 interface PlaygroundAreaProps {
   curtainVisible: boolean
@@ -81,10 +83,10 @@ const tiles = [
     desc: 'Interactive sequence'
   },
   { 
-    id: 'mindmap', 
-    icon: <Brain className="h-5 w-5" />, 
-    title: 'Visual Map', 
-    desc: 'Connected ideas'
+    id: 'knowledge-map',
+    icon: <Network className="h-5 w-5" />, 
+    title: 'Knowledge Map',
+    desc: 'Interactive concept graph' 
   }
 ]
 
@@ -194,28 +196,8 @@ switch (playgroundContent) {
     case 'timeline':
       return <TimelineViewer output={currentOutput} selectedSource={selectedSource} />
       
-  case 'mindmap':
-    return (
-      <div className="h-full flex items-center justify-center bg-gradient-to-br from-background via-card/30 to-background">
-        <div className="text-center max-w-md">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-6 shadow-2xl shadow-indigo-500/25">
-            <Sparkles className="h-10 w-10 text-white" />
-          </div>
-          <h2 className="text-2xl font-bold mb-3 text-foreground">
-            {playgroundContent} viewer coming soon
-          </h2>
-          <p className="text-lg text-muted-foreground mb-6">
-            This content type will be implemented next
-          </p>
-          
-          <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-200">
-            <p className="text-sm text-amber-700 font-medium">
-              🚧 Under development
-            </p>
-          </div>
-        </div>
-      </div>
-    )
+      case 'knowledge-map':
+        return <KnowledgeMapViewer output={currentOutput} selectedSource={selectedSource} />
 }
   }
 

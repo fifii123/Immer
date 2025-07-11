@@ -235,3 +235,15 @@ body {
   background: linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--primary)/0.8) 100%);
   transition: width 0.3s ease;
 }
+/* Płynne animacje dla ReactFlow */
+.react-flow__viewport {
+  transition: transform 0.15s ease-in-out;
+}
+
+.react-flow__node {
+  transition: transform 0.3s ease-in-out;
+}
+
+.react-flow__edge {
+  transition: all 0.3s ease-in-out;
+}

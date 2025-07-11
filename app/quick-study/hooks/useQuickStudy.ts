@@ -19,7 +19,7 @@ interface Source {
 
 interface Output {
   id: string;
-  type: 'flashcards' | 'quiz' | 'notes' | 'summary' | 'timeline' | 'mindmap';
+  type: 'flashcards' | 'quiz' | 'notes' | 'summary' | 'timeline' | 'knowledge-map';
   title: string;
   preview: string;
   status: 'ready' | 'generating' | 'error';
@@ -36,7 +36,8 @@ interface Session {
   createdAt: string;
 }
 
-type PlaygroundContent = 'flashcards' | 'quiz' | 'notes' | 'summary' | 'timeline' | 'mindmap' | 'chat' | null;
+type PlaygroundContent = 'flashcards' | 'quiz' | 'notes' | 'summary' | 'timeline' | 'knowledge-map' | 'chat' | null;
+
 
 export function useQuickStudy() {
   // Session management
