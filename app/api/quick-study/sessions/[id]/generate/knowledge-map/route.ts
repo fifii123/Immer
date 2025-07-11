@@ -124,15 +124,22 @@ export async function POST(
     
     switch (source.type) {
       case 'pdf':
-      case 'text':
-        if (!source.extractedText) {
-          return Response.json(
-            { message: 'No text content available for processing' },
-            { status: 400 }
+        case 'text':
+        case 'youtube':
+        case 'audio':
+        case 'url':
+          if (!source.structuredChunks || source.structuredChunks.length === 0) {
+            return Response.json(
+              { message: 'Document is still being processed. Please wait for chunking to complete.' },
+              { status: 400 }
+            )
+          }
+          generatedContent = await generateKnowledgeMapFromStructuredChunks(
+            source.structuredChunks, 
+            source.name, 
+            settings
           )
-        }
-        generatedContent = await generateKnowledgeMapFromText(source.extractedText, source.name, settings)
-        break
+          break
         
       case 'docx':
         generatedContent = JSON.stringify({
@@ -349,28 +356,41 @@ export async function POST(
   }
 }
 
-// Generate knowledge map from text using AI
-async function generateKnowledgeMapFromText(extractedText: string, sourceName: string, settings: any): Promise<string> {
-  console.log(`🤖 Generating AI knowledge map for: ${sourceName}`)
+// OLD CODE - usuń całą funkcję generateKnowledgeMapFromText
+
+// NEW CODE - dodaj nową funkcję:
+async function generateKnowledgeMapFromStructuredChunks(
+  chunks: any[], 
+  sourceName: string, 
+  settings: any
+): Promise<string> {
+  console.log(`🗺️ Generating knowledge map from ${chunks.length} structured chunks`)
   
   try {
     const maxNodes = settings?.maxNodes || 15
-    const includeConnections = settings?.includeConnections !== false // default true
+    const includeConnections = settings?.includeConnections !== false
     
+    // Step 1: Select most relevant chunks for knowledge mapping
+    const selectedChunks = selectChunksForKnowledgeMap(chunks, maxNodes)
+    console.log(`📊 Selected ${selectedChunks.length} chunks for knowledge mapping`)
+    
+    // Step 2: Create rich context from selected chunks
+    const contextForAI = createKnowledgeMapContext(selectedChunks, sourceName)
+    
+    // Step 3: Generate knowledge map with full document context
     const response = await openai.chat.completions.create({
       model: "gpt-4-1106-preview",
       messages: [
         {
           role: "system",
-          content: `Jesteś ekspertem w tworzeniu interaktywnych map wiedzy. Twoim zadaniem jest stworzenie strukturalnej mapy konceptów, która:
+          content: `Jesteś ekspertem w tworzeniu interaktywnych map wiedzy. Masz dostęp do strukturalnych danych z całego dokumentu.
 
-1. Identyfikuje główne tematy i ich hierarchię (3 poziomy max)
-2. Tworzy logiczne połączenia między konceptami  
-3. Skupia się na STRUKTURZE nie na szczegółowych opisach
-4. Nadaje każdemu konceptowi odpowiednią wagę (importance)
-5. Grupuje powiązane koncepty w kategorie
+ZADANIE: Stwórz comprehensive knowledge map który reprezentuje CAŁY dokument, nie tylko fragmenty.
 
-WAŻNE: To jest mapa STRUKTURALNA - nie generuj opisów, tylko tytuły i relacje!
+DANE WEJŚCIOWE:
+- Masz dostęp do kluczowych idei z całego dokumentu
+- Każdy chunk reprezentuje inną część/sekcję
+- Twoja mapa powinna łączyć koncepty z różnych części
 
 Format odpowiedzi - MUSI być poprawny JSON:
 {
@@ -384,8 +404,8 @@ Format odpowiedzi - MUSI być poprawny JSON:
       "category": "Kategoria tematyczna",
       "importance": "high|medium|low",
       "connections": ["id1", "id2"], // powiązane koncepty
-      "x": 0, // pozycja X (opcjonalna)
-      "y": 0  // pozycja Y (opcjonalna)
+      "x": 0, // pozycja X
+      "y": 0  // pozycja Y
     }
   ],
   "edges": [
@@ -399,26 +419,19 @@ Format odpowiedzi - MUSI być poprawny JSON:
   "categories": ["Kategoria 1", "Kategoria 2"]
 }
 
-Zasady:
-- Maksymalnie ${maxNodes} węzłów
-- Level 0: 1 główny temat
-- Level 1: 3-5 kategorii głównych  
-- Level 2: 8-12 szczegółowych konceptów
-- Importance: high = kluczowe koncepty, medium = ważne detale, low = dodatkowe info
-- Connections: max 3 połączenia per węzeł
-- Tytuły: krótkie, jednoznaczne, przyjazne studentom`
+ZASADY:
+- Level 0: 1 główny temat całego dokumentu
+- Level 1: 3-5 kategorii głównych z różnych części dokumentu
+- Level 2: 8-12 szczegółowych konceptów z całego materiału
+- Połącz koncepty z różnych sekcji dokumentu
+- Pokaż jak różne części dokumentu się uzupełniają`
         },
         {
           role: "user",
-          content: `Stwórz strukturalną mapę wiedzy na podstawie poniższego tekstu. Skup się na hierarchii konceptów i ich relacjach.
-
-${includeConnections ? 'Uwzględnij połączenia między powiązanymi konceptami.' : 'Skup się głównie na hierarchii.'}
-
-Materiał z "${sourceName}":
-${extractedText.slice(0, 12000)}`
+          content: contextForAI
         }
       ],
-      temperature: 0.3, // Lower for more structured output
+      temperature: 0.3,
       max_tokens: 2500,
       response_format: { type: "json_object" }
     })
@@ -429,17 +442,17 @@ ${extractedText.slice(0, 12000)}`
       throw new Error('No content generated by AI')
     }
     
-    // Validate JSON structure
+    // Validate and enhance the response
     const parsed = JSON.parse(content)
     if (!parsed.nodes || !Array.isArray(parsed.nodes)) {
       throw new Error('Invalid knowledge map format generated by AI')
     }
     
-    // Ensure nodes have proper IDs and structure
+    // Add unique IDs and validate structure
     parsed.nodes = parsed.nodes.map((node: any, index: number) => ({
       id: node.id || `node${index + 1}`,
       title: node.title || `Concept ${index + 1}`,
-      level: Math.max(0, Math.min(2, node.level || 0)), // Clamp to 0-2
+      level: Math.max(0, Math.min(2, node.level || 0)),
       category: node.category || 'General',
       importance: ['high', 'medium', 'low'].includes(node.importance) ? node.importance : 'medium',
       connections: Array.isArray(node.connections) ? node.connections : [],
@@ -447,26 +460,137 @@ ${extractedText.slice(0, 12000)}`
       y: node.y || 0
     }))
     
-    // Ensure edges exist and are valid
+    // Ensure edges are valid
     if (!parsed.edges || !Array.isArray(parsed.edges)) {
       parsed.edges = []
     }
     
-    // Validate edges reference existing nodes
     const nodeIds = new Set(parsed.nodes.map((n: any) => n.id))
     parsed.edges = parsed.edges.filter((edge: any) => 
       nodeIds.has(edge.from) && nodeIds.has(edge.to)
     )
     
-    // Update counts and categories
+    // Update metadata
     parsed.totalConcepts = parsed.nodes.length
     parsed.categories = [...new Set(parsed.nodes.map((node: any) => node.category))]
     
-    console.log(`✅ AI knowledge map generated successfully with ${parsed.nodes.length} nodes and ${parsed.edges.length} edges`)
+    console.log(`✅ Knowledge map generated: ${parsed.nodes.length} nodes, ${parsed.edges.length} edges`)
     return JSON.stringify(parsed)
     
   } catch (error) {
-    console.error('Error generating knowledge map with AI:', error)
+    console.error('Error generating knowledge map:', error)
     throw new Error(`AI generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
+}
+
+// OLD CODE - znajdź tę funkcję i zastąp:
+
+// NEW CODE:
+function selectChunksForKnowledgeMap(chunks: any[], maxNodes: number) {
+  // Reduce to max 8 chunks for context to avoid JSON parsing issues
+  const maxChunksForProcessing = Math.min(8, chunks.length)
+  
+  // Prioritize chunks with high importance and rich concepts
+  const priorityChunks = chunks
+    .map(chunk => ({
+      ...chunk,
+      score: calculateKnowledgeMapScore(chunk)
+    }))
+    .sort((a, b) => b.score - a.score)
+  
+  const selected = []
+  const totalChunks = chunks.length
+  
+  // Always include first chunk (introduction)
+  if (chunks.length > 0) {
+    selected.push(priorityChunks[0])
+  }
+  
+  // Always include last chunk (conclusion) 
+  if (chunks.length > 1) {
+    const lastChunk = priorityChunks.find(c => c.order === totalChunks - 1)
+    if (lastChunk && !selected.find(s => s.id === lastChunk.id)) {
+      selected.push(lastChunk)
+    }
+  }
+  
+  // Add high-scoring chunks from middle sections
+  const remainingSlots = Math.min(maxChunksForProcessing - selected.length, priorityChunks.length - selected.length)
+  const remaining = priorityChunks.filter(c => !selected.find(s => s.id === c.id))
+  
+  // Select chunks evenly distributed across document
+  for (let i = 0; i < remainingSlots && i < remaining.length; i++) {
+    // Try to get chunks from different parts of document
+    const chunkIndex = Math.floor(i * remaining.length / remainingSlots)
+    if (remaining[chunkIndex] && !selected.find(s => s.id === remaining[chunkIndex].id)) {
+      selected.push(remaining[chunkIndex])
+    }
+  }
+  
+  const finalSelection = selected.sort((a, b) => a.order - b.order) // Restore document order
+  console.log(`📊 Selected chunks from positions: ${finalSelection.map(c => c.order).join(', ')} (out of ${totalChunks - 1})`)
+  
+  return finalSelection
+}
+
+function calculateKnowledgeMapScore(chunk: any): number {
+  let score = 0
+  
+  // Importance weight
+  if (chunk.metadata?.importance === 'high') score += 10
+  else if (chunk.metadata?.importance === 'medium') score += 5
+  
+  // Chunk type weight
+  const chunkType = chunk.metadata?.chunkType
+  if (chunkType === 'definition') score += 8
+  else if (chunkType === 'introduction') score += 6
+  else if (chunkType === 'conclusion') score += 6
+  else if (chunkType === 'analysis') score += 4
+  
+  // Content richness
+  score += Math.min(chunk.keyIdeas?.length || 0, 5) // Max 5 points
+  score += Math.min(chunk.detailedConcepts?.length || 0, 3) // Max 3 points
+  
+  // Position bonus for intro and conclusion
+  if (chunk.order === 0) score += 5 // Introduction bonus
+  
+  return score
+}
+
+// OLD CODE - usuń całą funkcję createKnowledgeMapContext
+
+// NEW CODE:
+function createKnowledgeMapContext(chunks: any[], sourceName: string): string {
+  // Limit context size to avoid JSON errors
+  const maxChunksForContext = Math.min(chunks.length, 8) // Reduce from 15 to 8
+  const limitedChunks = chunks.slice(0, maxChunksForContext)
+  
+  const context = `Stwórz mapę wiedzy dla dokumentu "${sourceName}".
+
+KLUCZOWE SEKCJE DOKUMENTU (${chunks.length} total, pokazuję ${limitedChunks.length} najważniejszych):
+
+${limitedChunks.map((chunk, index) => {
+  // Limit each chunk description to avoid overly long context
+  const keyIdeas = chunk.keyIdeas?.slice(0, 3) || [] // Max 3 ideas per chunk
+  const concepts = chunk.detailedConcepts?.slice(0, 2) || [] // Max 2 concepts per chunk
+  
+  return `
+SEKCJA ${chunk.order + 1}: ${chunk.title || `Część ${chunk.order + 1}`}
+Typ: ${chunk.metadata?.chunkType || 'analiza'} | Ważność: ${chunk.metadata?.importance || 'średnia'}
+${chunk.metadata?.pageRange ? `Strony: ${chunk.metadata.pageRange}` : ''}
+
+Kluczowe idee: ${keyIdeas.map((idea: string) => idea.substring(0, 100)).join(' • ')}
+
+${concepts.length > 0 ? `Koncepty: ${concepts.map((c: any) => `${c.concept} (${c.explanation?.substring(0, 80)})`).join(' • ')}` : ''}
+
+Streszczenie: ${chunk.summary?.substring(0, 150) || 'Brak streszczenia'}`
+}).join('\n')}
+
+${chunks.length > limitedChunks.length ? `\n[...oraz ${chunks.length - limitedChunks.length} dodatkowych sekcji]` : ''}
+
+ZADANIE: Stwórz mapę z 12-15 węzłami reprezentującymi CAŁOŚĆ dokumentu.`
+
+  console.log(`📏 Context size: ${context.length} chars, ~${Math.ceil(context.length / 4)} tokens`)
+  
+  return context
 }

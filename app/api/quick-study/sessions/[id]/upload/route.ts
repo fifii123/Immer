@@ -2,6 +2,7 @@
 
 export const runtime = 'nodejs'
 import { NextRequest } from 'next/server'
+import { createStructuredChunks, type StructuredChunk } from '../../../../../../lib/structuredChunking'
 
 // PDF processing library for server-side
 import PDFParser from 'pdf2json'
@@ -11,7 +12,7 @@ interface Source {
   id: string;
   name: string;
   type: 'pdf' | 'youtube' | 'text' | 'docx' | 'image' | 'audio' | 'url';
-  status: 'ready' | 'processing' | 'error';
+  status: 'ready' | 'processing' | 'error' | 'structuring'; // Add new status
   size?: string;
   duration?: string;
   pages?: number;
@@ -19,6 +20,8 @@ interface Source {
   wordCount?: number;
   processingError?: string;
   subtype?: string;
+    structuredChunks?: StructuredChunk[]; // Add this field
+    processingStage?: 'extracting' | 'structuring' | 'complete'; // Add progress tracking
 }
 
 interface SessionData {
@@ -143,6 +146,9 @@ export async function POST(
 async function processFileContent(file: File, source: Source): Promise<void> {
   console.log(`🔄 Processing content for ${file.name} (type: ${source.type})`)
   
+  // Set initial processing stage
+  source.processingStage = 'extracting'
+  
   switch (source.type) {
     case 'pdf':
       await processPDF(file, source)
@@ -155,24 +161,61 @@ async function processFileContent(file: File, source: Source): Promise<void> {
     case 'docx':
       // TODO: Implement DOCX processing
       source.status = 'ready'
+      source.processingStage = 'complete'
       console.log(`⚠️ DOCX processing not implemented yet`)
       break
       
     case 'image':
       // TODO: Implement OCR processing
       source.status = 'ready'
+      source.processingStage = 'complete'
       console.log(`⚠️ Image OCR not implemented yet`)
       break
       
     case 'audio':
       // TODO: Implement audio transcription
       source.status = 'ready'
+      source.processingStage = 'complete'
       console.log(`⚠️ Audio transcription not implemented yet`)
       break
       
     default:
       source.status = 'ready'
+      source.processingStage = 'complete'
       console.log(`⚠️ No specific processing for type: ${source.type}`)
+  }
+  
+  // If we have extracted text, proceed to structured chunking
+  if (source.extractedText && source.extractedText.trim().length > 100) {
+    await createStructuredChunksForSource(file, source)
+  }
+}
+
+async function createStructuredChunksForSource(file: File, source: Source): Promise<void> {
+  try {
+    console.log(`🧠 Starting structured chunking for ${file.name}`)
+    source.status = 'structuring'
+    source.processingStage = 'structuring'
+    
+    const options = {
+      sourceType: source.type,
+      totalPages: source.pages,
+      duration: source.duration,
+      fileName: file.name
+    }
+    
+    const structuredChunks = await createStructuredChunks(source.extractedText!, options)
+    
+    source.structuredChunks = structuredChunks
+    source.status = 'ready'
+    source.processingStage = 'complete'
+    
+    console.log(`✅ Created ${structuredChunks.length} structured chunks for ${file.name}`)
+    
+  } catch (error) {
+    console.error(`❌ Structured chunking failed for ${file.name}:`, error)
+    source.status = 'error'
+    source.processingError = `Chunking failed: ${error instanceof Error ? error.message : 'Unknown error'}`
   }
 }
 
@@ -239,7 +282,7 @@ async function processPDF(file: File, source: Source): Promise<void> {
           source.extractedText = extractedText
           source.pages = pageCount
           source.wordCount = countWords(extractedText)
-          source.status = 'ready'
+         
           
           console.log(`✅ PDF processed: ${source.pages} pages, ${source.wordCount} words`)
           resolve()
@@ -280,7 +323,7 @@ async function processTextFile(file: File, source: Source): Promise<void> {
     // Update source with text data
     source.extractedText = cleanedText
     source.wordCount = countWords(cleanedText)
-    source.status = 'ready'
+   
     
     console.log(`✅ Text file processed: ${source.wordCount} words`)
     

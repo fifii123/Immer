@@ -1,13 +1,14 @@
 // Upload pasted text or URL
 
 import { NextRequest } from 'next/server'
+import { createStructuredChunks, type StructuredChunk } from '../../../../../../lib/structuredChunking'
 
 // Types
 interface Source {
   id: string;
   name: string;
   type: 'pdf' | 'youtube' | 'text' | 'docx' | 'image' | 'audio' | 'url';
-  status: 'ready' | 'processing' | 'error';
+  status: 'ready' | 'processing' | 'error' | 'structuring'; // Add new status
   size?: string;
   duration?: string;
   pages?: number;
@@ -15,6 +16,8 @@ interface Source {
   wordCount?: number;
   processingError?: string;
   subtype?: string;
+    structuredChunks?: StructuredChunk[]; // Add this field
+    processingStage?: 'extracting' | 'structuring' | 'complete'; // Add progress tracking
 }
 
 interface SessionData {
@@ -121,11 +124,32 @@ async function processTextContent(text: string, title?: string): Promise<Source>
     id: `text-${Date.now()}`,
     name: generatedTitle,
     type: 'text',
-    status: 'ready',
+    status: 'structuring',
+    processingStage: 'structuring',
     size: `${(text.length / 1024).toFixed(1)} KB`,
     extractedText: cleanedText,
     wordCount: countWords(cleanedText),
     subtype: 'pasted'
+  }
+  
+  // Create structured chunks
+  try {
+    const options = {
+      sourceType: 'text' as const,
+      fileName: generatedTitle
+    }
+    
+    const structuredChunks = await createStructuredChunks(cleanedText, options)
+    source.structuredChunks = structuredChunks
+    source.status = 'ready'
+    source.processingStage = 'complete'
+    
+    console.log(`✅ Created ${structuredChunks.length} structured chunks for pasted text`)
+    
+  } catch (error) {
+    console.error('❌ Text chunking failed:', error)
+    source.status = 'error'
+    source.processingError = `Chunking failed: ${error instanceof Error ? error.message : 'Unknown error'}`
   }
   
   console.log(`✅ Created text source: ${source.name} (${source.wordCount} words)`)
@@ -164,10 +188,31 @@ async function processUrlContent(url: string, title?: string): Promise<Source> {
     id: `url-${Date.now()}`,
     name: generatedTitle,
     type: urlType === 'youtube' ? 'youtube' : 'url',
-    status: 'ready', // TODO: Change to 'processing' when implementing real URL fetching
+    status: 'structuring',
+    processingStage: 'structuring',
     extractedText: placeholderText,
     wordCount: countWords(placeholderText),
     subtype: urlType
+  }
+  
+  // Create structured chunks for URL content
+  try {
+    const options = {
+      sourceType: (urlType === 'youtube' ? 'youtube' : 'url'),
+      fileName: generatedTitle
+    }
+    
+    const structuredChunks = await createStructuredChunks(placeholderText, options)
+    source.structuredChunks = structuredChunks
+    source.status = 'ready'
+    source.processingStage = 'complete'
+    
+    console.log(`✅ Created ${structuredChunks.length} structured chunks for URL content`)
+    
+  } catch (error) {
+    console.error('❌ URL chunking failed:', error)
+    source.status = 'error'
+    source.processingError = `Chunking failed: ${error instanceof Error ? error.message : 'Unknown error'}`
   }
   
   // Add type-specific metadata
