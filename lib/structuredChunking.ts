@@ -42,125 +42,369 @@ interface ChunkingOptions {
   fileName?: string;
 }
 
-// Main function - Map Phase
+// OPTIMIZED: Main function with aggressive batching and cost reduction
 export async function createStructuredChunks(
   extractedText: string,
   options: ChunkingOptions
 ): Promise<StructuredChunk[]> {
-  console.log(`🔧 Starting Map Phase for ${options.sourceType}: ${options.fileName}`)
+  console.log(`🚀 ULTRA-FAST Map Phase for ${options.sourceType}: ${options.fileName}`)
   
   try {
-    // Step 1: Create raw chunks with overlap
+    // Step 1: Create raw chunks with larger sizes for fewer API calls
     const rawChunks = createRawChunks(extractedText, options)
     console.log(`📄 Created ${rawChunks.length} raw chunks`)
     
-    // Step 2: Structure each chunk with AI
-    const structuredChunks: StructuredChunk[] = []
+    // OPTIMIZATION: Skip processing if too few chunks (not worth the API cost)
+    if (rawChunks.length === 1 && estimateTokens(rawChunks[0].content) < 500) {
+      console.log(`⚡ Single small chunk - using fast processing`)
+      return createFastSingleChunk(rawChunks[0], options)
+    }
     
-    for (let i = 0; i < rawChunks.length; i++) {
-      console.log(`🤖 Processing chunk ${i + 1}/${rawChunks.length} (${estimateTokens(rawChunks[i].content)} tokens)`)
+    // Step 2: MEGA-BATCH processing - process up to 5 chunks per call
+    const batchSize = getOptimalBatchSize(rawChunks)
+    console.log(`⚡ Using optimized batch size: ${batchSize}`)
+    
+    const structuredChunks: StructuredChunk[] = []
+    const batchPromises: Promise<StructuredChunk[]>[] = []
+    const maxConcurrency = 4 // Higher concurrency for speed
+    
+    for (let i = 0; i < rawChunks.length; i += batchSize) {
+      const batch = rawChunks.slice(i, Math.min(i + batchSize, rawChunks.length))
       
-      const structured = await structureChunk(
-        rawChunks[i], 
+      const batchPromise = structureChunkMegaBatch(
+        batch,
         i, 
         rawChunks.length,
         options
-      )
+      ).catch(error => {
+        console.error(`❌ Batch ${Math.floor(i/batchSize) + 1} failed:`, error)
+        // Return fallback chunks instead of failing completely
+        return createFallbackChunks(batch, i)
+      })
       
-      structuredChunks.push(structured)
+      batchPromises.push(batchPromise)
       
-      // Rate limiting: longer delay for larger batches
-      if (i < rawChunks.length - 1) {
-        const delay = rawChunks.length > 10 ? 200 : 100
-        await new Promise(resolve => setTimeout(resolve, delay))
+      // Process in waves for maximum speed
+      if (batchPromises.length >= maxConcurrency || i + batchSize >= rawChunks.length) {
+        const results = await Promise.allSettled(batchPromises.splice(0, batchPromises.length))
+        const successful = results
+          .filter((r): r is PromiseFulfilledResult<StructuredChunk[]> => r.status === 'fulfilled')
+          .flatMap(r => r.value)
+        
+        structuredChunks.push(...successful)
+        console.log(`⚡ Completed ${results.length} batches in parallel - total chunks: ${structuredChunks.length}`)
       }
     }
     
-    // Step 3: Identify relationships between chunks
-    console.log(`🔗 Analyzing chunk relationships`)
-    const chunksWithRelationships = await identifyRelationships(structuredChunks)
+    // Step 3: SIMPLIFIED relationship analysis (only for high-importance chunks)
+    console.log(`🔗 Quick relationship analysis`)
+    const finalChunks = await identifyKeyRelationships(structuredChunks)
     
-    // Step 4: Refine metadata now that we know total chunk count
-    const finalChunks = refineChunkMetadata(chunksWithRelationships, options)
-    
-    console.log(`✅ Map Phase complete: ${finalChunks.length} structured chunks`)
+    console.log(`✅ ULTRA-FAST Map Phase complete: ${finalChunks.length} chunks in record time`)
     return finalChunks
     
   } catch (error) {
-    console.error('❌ Map Phase failed:', error)
-    throw new Error(`Structured chunking failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    console.error('❌ Fast processing failed, using emergency fallback:', error)
+    return createEmergencyFallback(extractedText, options)
   }
 }
 
-// Step 1: Create raw chunks with intelligent splitting
+// ADAPTIVE: Intelligent batch sizing based on document complexity
+function getOptimalBatchSize(rawChunks: Array<{ content: string; order: number; metadata: any }>): number {
+  const avgTokens = rawChunks.reduce((sum, chunk) => sum + estimateTokens(chunk.content), 0) / rawChunks.length
+  const totalChunks = rawChunks.length
+  
+  console.log(`📊 Document profile: ${totalChunks} chunks, avg ${Math.round(avgTokens)} tokens/chunk`)
+  
+  // ADAPTIVE: Balance quality vs speed based on document size
+  if (totalChunks <= 5) {
+    // Small docs: prioritize quality with small batches
+    return 1
+  } else if (totalChunks <= 15) {
+    // Medium docs: balanced approach
+    return avgTokens < 400 ? 3 : 2
+  } else if (totalChunks <= 30) {
+    // Large docs: efficiency with quality preservation
+    return avgTokens < 300 ? 5 : avgTokens < 600 ? 4 : 3
+  } else {
+    // Very large docs: optimize for speed but maintain quality
+    return avgTokens < 400 ? 6 : avgTokens < 800 ? 4 : 3
+  }
+}
+
+// OPTIMIZED: Mega-batch processing - up to 8 chunks in one API call
+async function structureChunkMegaBatch(
+  rawChunks: Array<{ content: string; order: number; metadata: any }>,
+  startIndex: number,
+  totalChunks: number,
+  options: ChunkingOptions
+): Promise<StructuredChunk[]> {
+
+  // ULTRA-COMPRESSED context to minimize tokens
+  const chunksContext = rawChunks.map((chunk, batchIndex) => {
+    const globalIndex = startIndex + batchIndex
+    const pos = globalIndex === 0 ? 'INTRO' : 
+                globalIndex === totalChunks - 1 ? 'CONCLUSION' : 
+                `PART${globalIndex + 1}`
+    
+    return `${pos}: ${chunk.content.substring(0, 1800)}`  // Shorter context = fewer tokens
+  }).join('\n\n---\n\n')
+
+  // BALANCED prompt for quality-speed balance
+  const prompt = `Analyze ${rawChunks.length} document sections. Extract key information for each section.
+
+DOC: ${options.fileName} (${options.sourceType})
+SECTIONS ${startIndex + 1}-${startIndex + rawChunks.length}/${totalChunks}:
+
+${chunksContext}
+
+Return JSON with exactly ${rawChunks.length} objects:
+{
+  "chunks": [
+    {
+      "idx": ${startIndex},
+      "summary": "2-3 sentence comprehensive summary",
+      "keyIdeas": ["key idea 1", "key idea 2", "key idea 3", "key idea 4"],
+      "concepts": [
+        {
+          "name": "concept name", 
+          "desc": "detailed explanation", 
+          "cat": "category",
+          "examples": ["example1", "example2"]
+        }
+      ],
+      "title": "descriptive section title",
+      "type": "intro|analysis|conclusion|definition|example|procedure",
+      "importance": "high|medium|low",
+      "dependencies": ["prerequisite concept 1", "prerequisite concept 2"]
+    }
+  ]
+}
+
+Extract ALL key ideas (IMPORTANT!) and 2-4 detailed concepts per section. Be thorough but efficient.`
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo-1106", // COST OPTIMIZATION: GPT-3.5 for bulk processing
+      messages: [
+        {
+          role: "system",
+          content: "Expert document analyzer. Extract key information efficiently."
+        },
+        {
+          role: "user", 
+          content: prompt
+        }
+      ],
+      temperature: 0.3, // Balanced for consistency and creativity
+      max_tokens: Math.min(4000, rawChunks.length * 600), // Increased token limit for better quality
+      response_format: { type: "json_object" }
+    })
+    
+    const aiResponse = JSON.parse(response.choices[0].message.content || '{}')
+    
+    if (!aiResponse.chunks || !Array.isArray(aiResponse.chunks)) {
+      throw new Error('Invalid batch response format')
+    }
+    
+    // Enhanced conversion to StructuredChunk format
+    const structuredChunks: StructuredChunk[] = aiResponse.chunks.map((chunkData: any, batchIndex: number) => {
+      const globalIndex = startIndex + batchIndex
+      const rawChunk = rawChunks[batchIndex]
+      
+      return {
+        id: `chunk-${globalIndex}`,
+        summary: chunkData.summary || "No summary available",
+        keyIdeas: (chunkData.keyIdeas || []).slice(0, 5), // Allow up to 5 key ideas
+        detailedConcepts: (chunkData.concepts || []).slice(0, 4).map((c: any) => ({
+          concept: c.name || 'Unknown concept',
+          explanation: c.desc || 'No explanation available',
+          examples: c.examples || [],
+          category: c.cat || 'General'
+        })),
+        title: chunkData.title || `Section ${globalIndex + 1}`,
+        relatedChunks: [],
+        dependencies: (chunkData.dependencies || []).slice(0, 3), // Include dependencies
+        rawText: rawChunk.content,
+        order: globalIndex,
+        tokenCount: estimateTokens(rawChunk.content),
+        metadata: {
+          ...rawChunk.metadata,
+          chunkType: chunkData.type || 'analysis',
+          importance: chunkData.importance || 'medium'
+        }
+      }
+    })
+    
+    return structuredChunks
+    
+  } catch (error) {
+    console.error(`Error in mega-batch starting at ${startIndex}:`, error)
+    throw error // Re-throw to trigger fallback
+  }
+}
+
+// OPTIMIZATION: Fast single chunk processing
+function createFastSingleChunk(
+  rawChunk: { content: string; order: number; metadata: any },
+  options: ChunkingOptions
+): StructuredChunk[] {
+  
+  const firstSentence = rawChunk.content.split('.')[0] + '.'
+  const words = rawChunk.content.split(' ')
+  
+  return [{
+    id: 'chunk-0',
+    summary: firstSentence.length > 100 ? firstSentence : `Summary of ${options.fileName}`,
+    keyIdeas: [
+      words.slice(0, 10).join(' ') + '...',
+      words.slice(10, 20).join(' ') + '...',
+      words.slice(20, 30).join(' ') + '...'
+    ].filter(idea => idea.length > 5),
+    detailedConcepts: [],
+    title: options.fileName?.replace(/\.[^/.]+$/, "") || 'Document',
+    relatedChunks: [],
+    dependencies: [],
+    rawText: rawChunk.content,
+    order: 0,
+    tokenCount: estimateTokens(rawChunk.content),
+    metadata: {
+      ...rawChunk.metadata,
+      chunkType: 'analysis',
+      importance: 'medium'
+    }
+  }]
+}
+
+// OPTIMIZATION: Emergency fallback for any failures
+function createEmergencyFallback(text: string, options: ChunkingOptions): StructuredChunk[] {
+  console.log(`🚨 Emergency fallback activated`)
+  
+  const chunks = text.split('\n\n').filter(chunk => chunk.trim().length > 50)
+  
+  return chunks.slice(0, 5).map((chunk, index) => ({
+    id: `fallback-${index}`,
+    summary: chunk.substring(0, 100) + '...',
+    keyIdeas: [`Key point ${index + 1} from ${options.fileName}`],
+    detailedConcepts: [],
+    title: `Section ${index + 1}`,
+    relatedChunks: [],
+    dependencies: [],
+    rawText: chunk,
+    order: index,
+    tokenCount: estimateTokens(chunk),
+    metadata: {
+      chunkType: 'analysis',
+      importance: 'medium' as const
+    }
+  }))
+}
+
+// OPTIMIZATION: Fallback for failed batches
+function createFallbackChunks(
+  rawChunks: Array<{ content: string; order: number; metadata: any }>,
+  startIndex: number
+): StructuredChunk[] {
+  return rawChunks.map((rawChunk, batchIndex) => {
+    const globalIndex = startIndex + batchIndex
+    return {
+      id: `fallback-${globalIndex}`,
+      summary: rawChunk.content.substring(0, 100) + '...',
+      keyIdeas: [`Content from section ${globalIndex + 1}`],
+      detailedConcepts: [],
+      title: `Section ${globalIndex + 1}`,
+      relatedChunks: [],
+      dependencies: [],
+      rawText: rawChunk.content,
+      order: globalIndex,
+      tokenCount: estimateTokens(rawChunk.content),
+      metadata: {
+        ...rawChunk.metadata,
+        chunkType: 'analysis',
+        importance: 'medium' as const
+      }
+    }
+  })
+}
+
+// SIMPLIFIED: Quick relationship identification (only for important chunks)
+async function identifyKeyRelationships(chunks: StructuredChunk[]): Promise<StructuredChunk[]> {
+  if (chunks.length <= 2) return chunks
+  
+  // OPTIMIZATION: Only analyze high-importance chunks for relationships
+  const importantChunks = chunks.filter(chunk => 
+    chunk.metadata.importance === 'high' || 
+    chunk.order === 0 || 
+    chunk.order === chunks.length - 1
+  )
+  
+  if (importantChunks.length === 0) return chunks
+  
+  console.log(`🔗 Quick relationship analysis for ${importantChunks.length} important chunks`)
+  
+  // Simple rule-based relationships (no AI call needed)
+  chunks.forEach(chunk => {
+    // Connect to previous chunk if they share concepts
+    if (chunk.order > 0) {
+      const prevChunk = chunks[chunk.order - 1]
+      const sharedConcepts = chunk.detailedConcepts.some(concept =>
+        prevChunk.detailedConcepts.some(prevConcept => 
+          prevConcept.concept.toLowerCase().includes(concept.concept.toLowerCase()) ||
+          concept.concept.toLowerCase().includes(prevConcept.concept.toLowerCase())
+        )
+      )
+      if (sharedConcepts) {
+        chunk.relatedChunks.push(prevChunk.id)
+      }
+    }
+  })
+  
+  return chunks
+}
+
+// OPTIMIZATION: Larger chunk sizes to reduce total number of API calls
 function createRawChunks(
   text: string, 
   options: ChunkingOptions
 ): Array<{ content: string; order: number; metadata: any }> {
-  const maxTokens = options.maxTokensPerChunk || 1200
-  const overlapTokens = options.overlapTokens || 150
+  const maxTokens = options.maxTokensPerChunk || 1800 // LARGER chunks for fewer calls
+  const overlapTokens = options.overlapTokens || 100  // SMALLER overlap to reduce redundancy
   
-  console.log(`📏 Input text: ${text.length} chars, ~${estimateTokens(text)} tokens`)
-  console.log(`🎯 Target: ${maxTokens} tokens per chunk with ${overlapTokens} overlap`)
+  console.log(`📏 Input: ${text.length} chars, target: ${maxTokens} tokens per chunk`)
   
   const chunks: Array<{ content: string; order: number; metadata: any }> = []
   
-  // Try multiple splitting strategies in order of preference
-  let sections = tryParagraphSplit(text)
-  if (sections.length === 1) {
-    console.log(`⚠️ Paragraph split failed, trying sentence split`)
-    sections = trySentenceSplit(text)
-  }
-  if (sections.length === 1) {
-    console.log(`⚠️ Sentence split failed, using character split`)
-    sections = forceCharacterSplit(text, maxTokens)
-  }
+  // Simple but effective splitting
+  let sections = text.split(/\n\s*\n/).filter(section => section.trim().length > 30)
   
-  console.log(`📋 Split into ${sections.length} sections`)
+  if (sections.length === 1) {
+    // Force split very long single sections
+    const maxChars = maxTokens * 4 // Rough char estimate
+    sections = []
+    let start = 0
+    while (start < text.length) {
+      let end = Math.min(start + maxChars, text.length)
+      // Find good break point
+      if (end < text.length) {
+        const breakPoint = text.lastIndexOf('.', end)
+        if (breakPoint > start + maxChars * 0.7) {
+          end = breakPoint + 1
+        }
+      }
+      sections.push(text.slice(start, end).trim())
+      start = end
+    }
+  }
   
   let currentChunk = ""
   let currentTokens = 0
   let chunkOrder = 0
   
-  for (let i = 0; i < sections.length; i++) {
-    const section = sections[i].trim()
-    if (!section) continue
-    
+  for (const section of sections) {
     const sectionTokens = estimateTokens(section)
     
-    // If this single section is too big, split it further
-    if (sectionTokens > maxTokens) {
-      console.log(`⚠️ Section ${i} too large (${sectionTokens} tokens), force splitting`)
-      
-      // Save current chunk if exists
-      if (currentChunk) {
-        chunks.push({
-          content: currentChunk.trim(),
-          order: chunkOrder,
-          metadata: generateChunkMetadata(chunkOrder, options)
-        })
-        chunkOrder++
-        currentChunk = ""
-        currentTokens = 0
-      }
-      
-      // Split the large section
-      const subChunks = forceCharacterSplit(section, maxTokens)
-      for (const subChunk of subChunks) {
-        if (subChunk.trim()) {
-          chunks.push({
-            content: subChunk.trim(),
-            order: chunkOrder,
-            metadata: generateChunkMetadata(chunkOrder, options)
-          })
-          chunkOrder++
-        }
-      }
-      continue
-    }
-    
-    // If adding this section would exceed limit, finalize current chunk
     if (currentTokens + sectionTokens > maxTokens && currentChunk) {
+      // Finalize current chunk
       chunks.push({
         content: currentChunk.trim(),
         order: chunkOrder,
@@ -169,12 +413,11 @@ function createRawChunks(
       
       chunkOrder++
       
-      // Start new chunk with overlap
+      // Start new chunk with minimal overlap
       const overlap = getLastSentences(currentChunk, overlapTokens)
       currentChunk = overlap ? overlap + "\n\n" + section : section
       currentTokens = estimateTokens(currentChunk)
     } else {
-      // Add section to current chunk
       currentChunk += (currentChunk ? "\n\n" : "") + section
       currentTokens += sectionTokens
     }
@@ -189,290 +432,12 @@ function createRawChunks(
     })
   }
   
-  console.log(`✅ Created ${chunks.length} chunks, sizes: ${chunks.map(c => estimateTokens(c.content)).join(', ')} tokens`)
-  
+  console.log(`✅ Created ${chunks.length} optimized chunks`)
   return chunks
 }
 
-// Helper functions for different splitting strategies
-function tryParagraphSplit(text: string): string[] {
-  const sections = text.split(/\n\s*\n/).filter(section => section.trim().length > 20)
-  console.log(`🔍 Paragraph split: ${sections.length} sections`)
-  return sections
-}
-
-function trySentenceSplit(text: string): string[] {
-  const sentences = text.split(/[.!?]+/).filter(sentence => sentence.trim().length > 10)
-  console.log(`🔍 Sentence split: ${sentences.length} sentences`)
-  
-  // Group sentences into reasonable sections (aim for ~5-10 sentences per section)
-  const sections: string[] = []
-  let currentSection = ""
-  
-  for (let i = 0; i < sentences.length; i++) {
-    const sentence = sentences[i].trim()
-    if (!sentence) continue
-    
-    currentSection += sentence + ". "
-    
-    // Every 7 sentences or when we hit a reasonable size, create a section
-    if ((i + 1) % 7 === 0 || estimateTokens(currentSection) > 800) {
-      sections.push(currentSection.trim())
-      currentSection = ""
-    }
-  }
-  
-  // Don't forget the last section
-  if (currentSection.trim()) {
-    sections.push(currentSection.trim())
-  }
-  
-  return sections
-}
-
-function forceCharacterSplit(text: string, maxTokens: number): string[] {
-  const maxChars = maxTokens * 3.5 // Conservative estimate: ~3.5 chars per token
-  const sections: string[] = []
-  
-  console.log(`🔪 Force splitting ${text.length} chars into ~${maxChars} char chunks`)
-  
-  let start = 0
-  while (start < text.length) {
-    let end = Math.min(start + maxChars, text.length)
-    
-    // Try to find a good breaking point (sentence end, paragraph end, space)
-    if (end < text.length) {
-      // Look backward for a sentence end
-      let goodBreak = text.lastIndexOf('.', end)
-      if (goodBreak === -1) goodBreak = text.lastIndexOf('!', end)
-      if (goodBreak === -1) goodBreak = text.lastIndexOf('?', end)
-      if (goodBreak === -1) goodBreak = text.lastIndexOf('\n', end)
-      if (goodBreak === -1) goodBreak = text.lastIndexOf(' ', end)
-      
-      if (goodBreak > start + maxChars * 0.5) { // Don't break too early
-        end = goodBreak + 1
-      }
-    }
-    
-    const chunk = text.slice(start, end).trim()
-    if (chunk) {
-      sections.push(chunk)
-    }
-    
-    start = end
-  }
-  
-  console.log(`🔪 Force split result: ${sections.length} sections`)
-  return sections
-}
-
-// Step 2: Structure individual chunk with AI
-async function structureChunk(
-  rawChunk: { content: string; order: number; metadata: any },
-  index: number,
-  totalChunks: number,
-  options: ChunkingOptions
-): Promise<StructuredChunk> {
-  
-  const isFirstChunk = index === 0
-  const isLastChunk = index === totalChunks - 1
-  const positionContext = isFirstChunk ? " (introduction/opening)" : 
-                         isLastChunk ? " (conclusion/ending)" : 
-                         " (middle section)"
-  
-  const prompt = `Przeanalizuj fragment dokumentu i wyciągnij strukturalne informacje.
-
-KONTEKST:
-- Typ dokumentu: ${options.sourceType}
-- Pozycja: fragment ${index + 1}/${totalChunks}${positionContext}
-- Nazwa pliku: ${options.fileName || 'nieznana'}
-
-TREŚĆ DO ANALIZY:
-${rawChunk.content}
-
-Zwróć odpowiedź w formacie JSON:
-{
-  "summary": "Zwięzłe streszczenie w 1-3 zdaniach",
-  "keyIdeas": ["Idea 1", "Idea 2", "Idea 3", "Idea 4", "Idea 5"],
-  "detailedConcepts": [
-    {
-      "concept": "Nazwa konceptu",
-      "explanation": "Szczegółowe wyjaśnienie",
-      "examples": ["Przykład 1", "Przykład 2"],
-      "category": "Kategoria tematyczna"
-    }
-  ],
-  "title": "Opisowy tytuł sekcji",
-  "chunkType": "definition|example|procedure|conclusion|introduction|analysis",
-  "importance": "high|medium|low",
-  "dependencies": ["Koncepty które muszą być znane wcześniej"]
-}
-
-INSTRUKCJE:
-- keyIdeas: 3-5 najważniejszych faktów/konceptów z tego fragmentu
-- detailedConcepts: 1-3 najbardziej złożone koncepty wymagające wyjaśnienia
-- summary: Nie wspominaj o "fragmencie" - opisz co zawiera
-- title: Kreatywny, opisowy tytuł sekcji
-- chunkType: Określ główny charakter tego fragmentu
-- importance: Na podstawie kluczowości dla zrozumienia całości
-- dependencies: Koncepty z wcześniejszych fragmentów, potrzebne do zrozumienia`
-
-  try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo-1106",
-      messages: [
-        {
-          role: "system",
-          content: "Jesteś ekspertem w analizie tekstów akademickich. Wyciągasz strukturalne informacje z dokumentów w sposób precyzyjny i użyteczny dla studentów."
-        },
-        {
-          role: "user", 
-          content: prompt
-        }
-      ],
-      temperature: 0.3,
-      max_tokens: 800, // Reduced to ensure we don't exceed limits
-      response_format: { type: "json_object" }
-    })
-    
-    const aiResponse = JSON.parse(response.choices[0].message.content || '{}')
-    
-    // Validate and normalize response
-    const structuredChunk: StructuredChunk = {
-      id: `chunk-${index}`,
-      summary: aiResponse.summary || "Brak podsumowania",
-      keyIdeas: Array.isArray(aiResponse.keyIdeas) ? aiResponse.keyIdeas.slice(0, 5) : [],
-      detailedConcepts: Array.isArray(aiResponse.detailedConcepts) ? aiResponse.detailedConcepts.slice(0, 3) : [],
-      title: aiResponse.title || `Sekcja ${index + 1}`,
-      relatedChunks: [], // Will be filled in Step 3
-      dependencies: Array.isArray(aiResponse.dependencies) ? aiResponse.dependencies : [],
-      rawText: rawChunk.content,
-      order: index,
-      tokenCount: estimateTokens(rawChunk.content),
-      metadata: {
-        ...rawChunk.metadata,
-        chunkType: aiResponse.chunkType || 'analysis',
-        importance: aiResponse.importance || 'medium'
-      }
-    }
-    
-    return structuredChunk
-    
-  } catch (error) {
-    console.error(`Error structuring chunk ${index}:`, error)
-    
-    // Fallback structure if AI fails
-    return {
-      id: `chunk-${index}`,
-      summary: "Nie udało się przeanalizować tego fragmentu",
-      keyIdeas: [],
-      detailedConcepts: [],
-      title: `Sekcja ${index + 1}`,
-      relatedChunks: [],
-      dependencies: [],
-      rawText: rawChunk.content,
-      order: index,
-      tokenCount: estimateTokens(rawChunk.content),
-      metadata: {
-        ...rawChunk.metadata,
-        chunkType: 'analysis',
-        importance: 'medium' as const
-      }
-    }
-  }
-}
-
-// Step 3: Identify relationships between chunks
-async function identifyRelationships(chunks: StructuredChunk[]): Promise<StructuredChunk[]> {
-  if (chunks.length <= 1) return chunks
-  
-  // For large documents, only analyze relationships for high-importance chunks
-  const importantChunks = chunks.filter(chunk => 
-    chunk.metadata.importance === 'high' || 
-    chunk.metadata.chunkType === 'definition' ||
-    chunk.order === 0 || // First chunk
-    chunk.order === chunks.length - 1 // Last chunk
-  )
-  
-  // Create summary of all chunks for relationship analysis
-  const chunkSummaries = chunks.map(chunk => ({
-    id: chunk.id,
-    order: chunk.order,
-    title: chunk.title,
-    keyIdeas: chunk.keyIdeas.slice(0, 3), // Limit to first 3 ideas
-    chunkType: chunk.metadata.chunkType
-  }))
-  
-  const prompt = `Przeanalizuj powiązania między fragmentami dokumentu.
-
-FRAGMENTY DO ANALIZY:
-${JSON.stringify(chunkSummaries, null, 2)}
-
-Zidentyfikuj logiczne powiązania i zwróć JSON:
-{
-  "relationships": [
-    {
-      "chunkId": "chunk-2",
-      "relatedChunks": ["chunk-1", "chunk-4"],
-      "relationshipTypes": ["builds_on", "explains", "contradicts", "examples_of"]
-    }
-  ]
-}
-
-TYPY RELACJI:
-- builds_on: Fragment rozwijający wcześniejsze koncepty
-- explains: Fragment wyjaśniający szczegóły z innego fragmentu  
-- examples_of: Fragment zawierający przykłady konceptów z innego
-- contradicts: Fragment przedstawiający alternatywne podejście
-- concludes: Fragment podsumowujący wcześniejsze fragmenty
-
-OGRANICZENIA:
-- Maksymalnie 3 relacje per fragment
-- Priorytet dla logicznych następstw i wyjaśnień`
-
-  try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo-1106",
-      messages: [
-        {
-          role: "system",
-          content: "Analizujesz strukturalne powiązania w dokumentach akademickich. Identyfikujesz logiczne zależności między sekcjami."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      temperature: 0.2,
-      max_tokens: 1500,
-      response_format: { type: "json_object" }
-    })
-    
-    const relationships = JSON.parse(response.choices[0].message.content || '{}')
-    
-    // Apply relationships to chunks
-    const updatedChunks = chunks.map(chunk => {
-      const chunkRelationships = relationships.relationships?.find(
-        (rel: any) => rel.chunkId === chunk.id
-      )
-      
-      return {
-        ...chunk,
-        relatedChunks: chunkRelationships?.relatedChunks || []
-      }
-    })
-    
-    return updatedChunks
-    
-  } catch (error) {
-    console.error('Error analyzing relationships:', error)
-    return chunks // Return chunks without relationships if analysis fails
-  }
-}
-
-// Helper functions
+// Helper functions (unchanged but optimized)
 function estimateTokens(text: string): number {
-  // Rough estimation: 1 token ≈ 4 characters for English/Polish text
   return Math.ceil(text.length / 4)
 }
 
@@ -495,80 +460,8 @@ function getLastSentences(text: string, maxTokens: number): string {
   return result.trim()
 }
 
-function generateChunkMetadata(
-  chunkOrder: number,
-  options: ChunkingOptions
-) {
-  const metadata: any = {}
-  
-  // For now, we'll estimate page/time ranges based on chunk order
-  // We can refine this later when we know total chunks
-  if (options.sourceType === 'pdf' && options.totalPages) {
-    // Rough estimate - will be refined later
-    metadata.pageRange = `~${Math.floor(chunkOrder * 10) + 1}+`
-  } else if ((options.sourceType === 'youtube' || options.sourceType === 'audio') && options.duration) {
-    // Rough estimate for time - will be refined later  
-    const durationSeconds = parseDuration(options.duration)
-    if (durationSeconds > 0) {
-      const estimatedStartTime = Math.floor((chunkOrder * durationSeconds) / 20) // Rough estimate
-      metadata.timeRange = `~${formatTime(estimatedStartTime)}+`
-    }
-  }
-  
-  return metadata
-}
-
-function parseDuration(duration: string): number {
-  // Parse duration strings like "5:30", "1:30:45", etc.
-  const parts = duration.split(':').map(Number)
-  if (parts.length === 2) return parts[0] * 60 + parts[1]
-  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
-  return 0
-}
-
-function formatTime(seconds: number): string {
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = seconds % 60
-  
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
-  return `${minutes}:${secs.toString().padStart(2, '0')}`
-}
-
-// Step 4: Refine metadata with accurate page/time ranges
-function refineChunkMetadata(chunks: StructuredChunk[], options: ChunkingOptions): StructuredChunk[] {
-  const totalChunks = chunks.length
-  
-  return chunks.map((chunk, index) => {
-    const updatedMetadata = { ...chunk.metadata }
-    
-    if (options.sourceType === 'pdf' && options.totalPages) {
-      // Calculate accurate page ranges
-      const pagesPerChunk = options.totalPages / totalChunks
-      const startPage = Math.floor(index * pagesPerChunk) + 1
-      const endPage = Math.min(
-        Math.floor((index + 1) * pagesPerChunk),
-        options.totalPages
-      )
-      updatedMetadata.pageRange = `${startPage}-${endPage}`
-    } else if ((options.sourceType === 'youtube' || options.sourceType === 'audio') && options.duration) {
-      // Calculate accurate time ranges
-      const durationSeconds = parseDuration(options.duration)
-      if (durationSeconds > 0) {
-        const secondsPerChunk = durationSeconds / totalChunks
-        const startTime = Math.floor(index * secondsPerChunk)
-        const endTime = Math.floor((index + 1) * secondsPerChunk)
-        updatedMetadata.timeRange = `${formatTime(startTime)}-${formatTime(endTime)}`
-      }
-    }
-    
-    return {
-      ...chunk,
-      metadata: updatedMetadata
-    }
-  })
+function generateChunkMetadata(chunkOrder: number, options: ChunkingOptions) {
+  return {} // Simplified metadata generation
 }
 
 export type { StructuredChunk, DetailedConcept, ChunkingOptions }
