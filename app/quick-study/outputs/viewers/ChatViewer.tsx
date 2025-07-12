@@ -30,14 +30,17 @@ interface Source {
 }
 
 interface ChatViewerProps {
+  sessionId: string | null
   selectedSource?: Source | null
 }
 
-export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample Document', type: 'pdf', status: 'ready' } }: ChatViewerProps) {
+export default function ChatViewer({ sessionId, selectedSource = { id: '1', name: 'Sample Document', type: 'pdf', status: 'ready' } }: ChatViewerProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
+  const [streamingMessage, setStreamingMessage] = useState<string>('')
+  const [isStreaming, setIsStreaming] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -51,37 +54,120 @@ export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample D
   }, [])
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return
-
+    if (!inputValue.trim() || isLoading || !sessionId || !selectedSource) return
+  
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
       content: inputValue.trim(),
       timestamp: new Date()
     }
-
+  
     setMessages(prev => [...prev, userMessage])
     setInputValue('')
     setIsLoading(true)
-    setIsTyping(true)
-
-    // Simulate AI response
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    
-    const mockResponse = generateMockResponse(userMessage.content, selectedSource!)
-    
-    // Simulate typing effect
-    const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: mockResponse,
-      timestamp: new Date()
+    setIsStreaming(true)
+    setStreamingMessage('')
+  
+    try {
+      // Prepare conversation history (last 10 messages for context)
+      const conversationHistory = messages.slice(-10).map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }))
+  
+      const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sourceId: selectedSource.id,
+          message: userMessage.content,
+          conversationHistory: conversationHistory
+        }),
+      })
+  
+      if (!response.ok) {
+        throw new Error('Failed to get chat response')
+      }
+  
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error('No response stream available')
+      }
+  
+      let fullResponse = ''
+      const assistantMessageId = (Date.now() + 1).toString()
+  
+      // Add initial empty assistant message
+      const initialAssistantMessage: Message = {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: '',
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, initialAssistantMessage])
+  
+      // Read the stream
+      while (true) {
+        const { done, value } = await reader.read()
+        
+        if (done) break
+  
+        const chunk = new TextDecoder().decode(value)
+        const lines = chunk.split('\n\n')
+  
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              
+              if (data.type === 'chunk') {
+                fullResponse += data.content
+                setStreamingMessage(fullResponse)
+                
+                // Update the assistant message in real time
+                setMessages(prev => prev.map(msg => 
+                  msg.id === assistantMessageId 
+                    ? { ...msg, content: fullResponse }
+                    : msg
+                ))
+              } else if (data.type === 'complete') {
+                // Final content update
+                setMessages(prev => prev.map(msg => 
+                  msg.id === assistantMessageId 
+                    ? { ...msg, content: data.fullContent }
+                    : msg
+                ))
+                break
+              } else if (data.type === 'error') {
+                throw new Error(data.message)
+              }
+            } catch (parseError) {
+              console.error('Error parsing streaming data:', parseError)
+            }
+          }
+        }
+      }
+  
+    } catch (error) {
+      console.error('Chat error:', error)
+      
+      // Add error message
+      const errorMessage: Message = {
+        id: (Date.now() + 2).toString(),
+        role: 'assistant',
+        content: 'Przepraszam, wystąpił błąd podczas generowania odpowiedzi. Spróbuj ponownie.',
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMessage])
+    } finally {
+      setIsLoading(false)
+      setIsStreaming(false)
+      setStreamingMessage('')
+      inputRef.current?.focus()
     }
-
-    setMessages(prev => [...prev, assistantMessage])
-    setIsTyping(false)
-    setIsLoading(false)
-    inputRef.current?.focus()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -241,24 +327,24 @@ export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample D
               ))}
               
               {/* Typing Indicator */}
-              {isTyping && (
-                <div className="flex gap-4 justify-start">
-                  <div className="flex-shrink-0 mt-1">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md">
-                      <Sparkles className="h-4 w-4 text-white" />
-                    </div>
-                  </div>
-                  <div className="bg-card border border-border rounded-2xl px-5 py-3 shadow-sm">
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              <div ref={messagesEndRef} />
+{/* Typing Indicator */}
+
+{isLoading && !isStreaming && (
+  <div className="flex gap-4 justify-start">
+    <div className="flex-shrink-0 mt-1">
+      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md">
+        <Sparkles className="h-4 w-4 text-white" />
+      </div>
+    </div>
+    <div className="bg-card border border-border rounded-2xl px-5 py-3 shadow-sm">
+      <div className="flex items-center gap-1">
+        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
+      </div>
+    </div>
+  </div>
+)}     <div ref={messagesEndRef} />
             </div>
           )}
         </div>
@@ -287,18 +373,18 @@ export default function ChatViewer({ selectedSource = { id: '1', name: 'Sample D
               />
               
               <button
-                type="button"
-                onClick={handleSendMessage}
-                disabled={!inputValue.trim() || isLoading}
-                className="flex-shrink-0 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 p-2.5 text-white shadow-lg shadow-indigo-500/25 transition-all hover:shadow-xl hover:shadow-indigo-500/30 disabled:opacity-50 disabled:shadow-none"
-                style={{ height: '44px', width: '44px' }}
-              >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </button>
+  type="button"
+  onClick={handleSendMessage}
+  disabled={!inputValue.trim() || isLoading}
+  className="flex-shrink-0 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 p-2.5 text-white shadow-lg shadow-indigo-500/25 transition-all hover:shadow-xl hover:shadow-indigo-500/30 disabled:opacity-50 disabled:shadow-none flex items-center justify-center"
+  style={{ height: '44px', width: '44px' }}
+>
+  {isLoading ? (
+    <Loader2 className="h-4 w-4 animate-spin" />
+  ) : (
+    <Send className="h-4 w-4" />
+  )}
+</button>
             </div>
             
             <div className="flex items-center justify-between mt-2">
@@ -331,23 +417,8 @@ function getSuggestedQuestions(source: Source) {
     },
     {
       icon: BookOpen,
-      text: "Create study notes with examples",
-      description: "Perfect for exam preparation"
+      text: "Explain this concept with examples",
+      description: "Get detailed explanations with real examples"
     }
   ]
-}
-
-function generateMockResponse(userMessage: string, source: Source): string {
-  const responses = {
-    summary: `I'll break down the key concepts from "${source.name}" for you:\n\n**Core Principles:**\n• Foundation concepts that establish the theoretical framework\n• Practical applications demonstrated through real-world examples\n• Critical connections between different topics\n\n**Key Insights:**\nThe document emphasizes how these principles work together to create a comprehensive understanding. Each concept builds upon the previous, creating a logical progression of knowledge.\n\n**Practical Applications:**\nThese concepts can be applied in various contexts, particularly in problem-solving scenarios where systematic thinking is required.\n\nWould you like me to dive deeper into any specific area?`,
-    
-    explain: `Let me explain this concept from "${source.name}" in simple terms:\n\n**The Basic Idea:**\nThink of it like building blocks - each concept is a foundation piece that supports more complex ideas. The document presents these in a structured way to help you understand the progression.\n\n**Why It Matters:**\nUnderstanding these fundamentals is crucial because they appear repeatedly in advanced applications. Once you grasp the basics, everything else becomes much clearer.\n\n**Real-World Connection:**\nThese principles aren't just theoretical - they have practical applications in everyday scenarios, from problem-solving to decision-making.\n\nWhat specific aspect would you like me to clarify further?`,
-    
-    questions: `Based on "${source.name}", I can see you're exploring some interesting concepts!\n\n**Here's My Understanding:**\nThe document covers fundamental principles that are essential for building a strong knowledge base. These concepts interconnect in meaningful ways.\n\n**Key Areas to Focus On:**\n• The relationship between different concepts\n• Practical applications and examples\n• How to apply these principles in various contexts\n\n**Next Steps:**\nI'd recommend focusing on understanding the core principles first, then exploring how they apply to specific scenarios.\n\nIs there a particular section or concept you'd like to explore in more detail?`
-  }
-  
-  if (userMessage.toLowerCase().includes('summar')) return responses.summary
-  if (userMessage.toLowerCase().includes('explain') || userMessage.toLowerCase().includes('what')) return responses.explain
-  
-  return responses.questions
 }

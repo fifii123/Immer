@@ -165,6 +165,7 @@ export default function QuickStudyPage() {
           
           {/* Middle Panel - Playground + Sliding Curtain */}
           <PlaygroundArea 
+  sessionId={sessionId}
   curtainVisible={curtainVisible}
   playgroundContent={playgroundContent}
   selectedSource={selectedSource}

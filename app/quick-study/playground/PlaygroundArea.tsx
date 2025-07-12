@@ -42,6 +42,7 @@ import TimelineViewer from '../outputs/viewers/TimelineViewer'
 import KnowledgeMapViewer from '../outputs/viewers/KnowledgeMapViewer'
 
 interface PlaygroundAreaProps {
+  sessionId: string | null
   curtainVisible: boolean
   playgroundContent: PlaygroundContent
   selectedSource: Source | null
@@ -117,6 +118,7 @@ const getSourceIcon = (type: string, subtype?: string) => {
 }
 
 export default function PlaygroundArea({
+  sessionId,
   curtainVisible,
   playgroundContent,
   selectedSource,
@@ -125,7 +127,7 @@ export default function PlaygroundArea({
   onShowCurtain,
   onTileClick,
   onChatClick
-}: PlaygroundAreaProps) {
+}: PlaygroundAreaProps)  {
   const [handleVisible, setHandleVisible] = useState(true)
   const [isHovering, setIsHovering] = useState(false)
   const [noteTypeModalOpen, setNoteTypeModalOpen] = useState(false)
@@ -202,8 +204,8 @@ export default function PlaygroundArea({
       case 'notes':
         return <NotesViewer output={currentOutput} selectedSource={selectedSource} />
         
-      case 'chat':
-        return <ChatViewer selectedSource={selectedSource} />
+        case 'chat':
+          return <ChatViewer sessionId={sessionId} selectedSource={selectedSource} />
         
       case 'quiz':
         return <QuizViewer output={currentOutput} selectedSource={selectedSource} />
