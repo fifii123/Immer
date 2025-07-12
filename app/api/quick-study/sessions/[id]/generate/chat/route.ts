@@ -219,28 +219,10 @@ ${source.extractedText.length > 8000 ? '\n[Materiał został skrócony - bazuj n
   }
   
   // For unsupported source types
-  const unsupportedMessage = getUnsupportedSourceMessage(source.type)
+
   return `${basePrompt}
 
-${unsupportedMessage}
 
 Odpowiadaj na pytania ogólne dotyczące tego typu materiału i pomagaj użytkownikowi zrozumieć, jak będzie można go przetworzyć gdy funkcja zostanie zaimplementowana.`
 }
 
-// Get message for unsupported source types
-function getUnsupportedSourceMessage(sourceType: string): string {
-  switch (sourceType) {
-    case 'docx':
-      return 'UWAGA: Przetwarzanie plików DOCX nie jest jeszcze zaimplementowane. Mogę udzielić ogólnych informacji o pracy z dokumentami Word.'
-    case 'image':
-      return 'UWAGA: Analiza obrazów (OCR) nie jest jeszcze zaimplementowana. Mogę udzielić ogólnych informacji o pracy z materiałami wizualnymi.'
-    case 'audio':
-      return 'UWAGA: Transkrypcja audio nie jest jeszcze zaimplementowana. Mogę udzielić ogólnych informacji o pracy z materiałami audio.'
-    case 'youtube':
-      return 'UWAGA: Analiza transkrypcji YouTube nie jest jeszcze zaimplementowana. Mogę udzielić ogólnych informacji o uczeniu się z filmów.'
-    case 'url':
-      return 'UWAGA: Ekstrakcja treści z stron internetowych nie jest jeszcze zaimplementowana. Mogę udzielić ogólnych informacji o pracy z treściami web.'
-    default:
-      return 'Materiał nie zawiera jeszcze przetworzonej treści.'
-  }
-}

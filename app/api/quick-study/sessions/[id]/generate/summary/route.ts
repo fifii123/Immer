@@ -100,9 +100,7 @@ export async function POST(
     // Generate content based on source type
     let generatedContent: string
     
-    switch (source.type) {
-      case 'pdf':
-      case 'text':
+
         if (!source.extractedText) {
           return Response.json(
             { message: 'No text content available for processing' },
@@ -110,34 +108,9 @@ export async function POST(
           )
         }
         generatedContent = await generateSummaryFromText(source.extractedText, source.name)
-        break
+  
         
-      case 'docx':
-        generatedContent = `**${source.name} - DOCX Summary**\n\nDOCX processing is not implemented yet. This is a placeholder for DOCX summary generation.\n\nWhen implemented, this will:\n• Extract text from DOCX files\n• Create comprehensive summaries\n• Highlight key points and conclusions`
-        break
-        
-      case 'image':
-        generatedContent = `**${source.name} - Image Summary**\n\nImage OCR processing is not implemented yet. This is a placeholder for image summary generation.\n\nWhen implemented, this will:\n• Extract text from images using OCR\n• Summarize the extracted content\n• Identify key visual elements`
-        break
-        
-      case 'audio':
-        generatedContent = `**${source.name} - Audio Summary**\n\nAudio transcription is not implemented yet. This is a placeholder for audio summary generation.\n\nWhen implemented, this will:\n• Transcribe audio to text\n• Create summaries of spoken content\n• Identify main topics and key points`
-        break
-        
-      case 'youtube':
-        generatedContent = `**${source.name} - YouTube Summary**\n\nYouTube transcript processing is not implemented yet. This is a placeholder for video summary generation.\n\nWhen implemented, this will:\n• Extract transcripts from YouTube videos\n• Summarize video content\n• Highlight key topics and timestamps`
-        break
-        
-      case 'url':
-        generatedContent = `**${source.name} - Web Content Summary**\n\nURL content extraction is not implemented yet. This is a placeholder for web content summary generation.\n\nWhen implemented, this will:\n• Extract content from web pages\n• Create summaries of articles\n• Identify main arguments and conclusions`
-        break
-        
-      default:
-        return Response.json(
-          { message: `Unsupported source type: ${source.type}` },
-          { status: 400 }
-        )
-    }
+   
     
     // Create preview (first line, max 100 chars)
     const preview = generatedContent.split('\n')[0].substring(0, 100) + '...'

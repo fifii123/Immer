@@ -100,9 +100,7 @@ export async function POST(
     // Generate content based on source type
     let generatedContent: string
     
-    switch (source.type) {
-      case 'pdf':
-      case 'text':
+   
         if (!source.extractedText) {
           return Response.json(
             { message: 'No text content available for processing' },
@@ -110,35 +108,9 @@ export async function POST(
           )
         }
         generatedContent = await generateNotesFromText(source.extractedText, source.name, settings)
-        break
+
         
-      case 'docx':
-        generatedContent = `**${source.name} - DOCX Notes**\n\nDOCX processing is not implemented yet. This is a placeholder for DOCX notes generation.\n\nWhen implemented, this will:\n• Extract text from DOCX files\n• Create structured study notes\n• Organize content with headings and bullet points\n• Highlight key definitions and concepts`
-        break
-        
-      case 'image':
-        generatedContent = `**${source.name} - Image Notes**\n\nImage OCR processing is not implemented yet. This is a placeholder for image notes generation.\n\nWhen implemented, this will:\n• Extract text from images using OCR\n• Create organized study notes\n• Identify and structure key information\n• Format content for easy studying`
-        break
-        
-      case 'audio':
-        generatedContent = `**${source.name} - Audio Notes**\n\nAudio transcription is not implemented yet. This is a placeholder for audio notes generation.\n\nWhen implemented, this will:\n• Transcribe audio to text\n• Create structured notes from lectures/podcasts\n• Organize content by topics\n• Include timestamps for reference`
-        break
-        
-      case 'youtube':
-        generatedContent = `**${source.name} - YouTube Notes**\n\nYouTube transcript processing is not implemented yet. This is a placeholder for video notes generation.\n\nWhen implemented, this will:\n• Extract transcripts from YouTube videos\n• Create comprehensive study notes\n• Include timestamps and key moments\n• Organize by topics and sections`
-        break
-        
-      case 'url':
-        generatedContent = `**${source.name} - Web Content Notes**\n\nURL content extraction is not implemented yet. This is a placeholder for web content notes generation.\n\nWhen implemented, this will:\n• Extract content from web pages\n• Create structured study notes\n• Organize information hierarchically\n• Include important links and references`
-        break
-        
-      default:
-        return Response.json(
-          { message: `Unsupported source type: ${source.type}` },
-          { status: 400 }
-        )
-    }
-    
+   
     // Create preview (first line without markdown, max 100 chars)
     const preview = generatedContent.split('\n')[0].replace(/[#*]/g, '').substring(0, 100) + '...'
     

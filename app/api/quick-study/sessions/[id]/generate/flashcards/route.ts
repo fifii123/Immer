@@ -117,9 +117,7 @@ export async function POST(
     // Generate content based on source type
     let generatedContent: string
     
-    switch (source.type) {
-      case 'pdf':
-      case 'text':
+
         if (!source.extractedText) {
           return Response.json(
             { message: 'No text content available for processing' },
@@ -127,110 +125,8 @@ export async function POST(
           )
         }
         generatedContent = await generateFlashcardsFromText(source.extractedText, source.name, settings)
-        break
-        
-      case 'docx':
-        generatedContent = JSON.stringify({
-          title: `Flashcards - ${source.name}`,
-          description: "DOCX processing is not implemented yet. This is a placeholder for DOCX flashcard generation.",
-          cards: [
-            {
-              id: "placeholder-1",
-              front: "What file format is not yet supported?",
-              back: "DOCX files are not yet supported but will be implemented in a future update.",
-              difficulty: "easy",
-              category: "File Types",
-              tags: ["docx", "file-format", "future"]
-            }
-          ],
-          totalCards: 1,
-          categories: ["File Types"]
-        })
-        break
-        
-      case 'image':
-        generatedContent = JSON.stringify({
-          title: `Flashcards - ${source.name}`,
-          description: "Image OCR processing is not implemented yet. This is a placeholder for image flashcard generation.",
-          cards: [
-            {
-              id: "placeholder-1",
-              front: "What is OCR?",
-              back: "Optical Character Recognition - technology used to extract text from images and make it machine-readable.",
-              difficulty: "medium",
-              category: "Technology",
-              tags: ["ocr", "image-processing", "text-extraction"]
-            }
-          ],
-          totalCards: 1,
-          categories: ["Technology"]
-        })
-        break
-        
-      case 'audio':
-        generatedContent = JSON.stringify({
-          title: `Flashcards - ${source.name}`,
-          description: "Audio transcription is not implemented yet. This is a placeholder for audio flashcard generation.",
-          cards: [
-            {
-              id: "placeholder-1",
-              front: "How do you create flashcards from audio?",
-              back: "First transcribe the audio to text, then extract key concepts and definitions to create question-answer pairs.",
-              difficulty: "medium",
-              category: "Process",
-              tags: ["audio", "transcription", "learning"]
-            }
-          ],
-          totalCards: 1,
-          categories: ["Process"]
-        })
-        break
-        
-      case 'youtube':
-        generatedContent = JSON.stringify({
-          title: `Flashcards - ${source.name}`,
-          description: "YouTube transcript processing is not implemented yet. This is a placeholder for video flashcard generation.",
-          cards: [
-            {
-              id: "placeholder-1",
-              front: "What makes YouTube good for learning?",
-              back: "Visual and auditory learning combined with searchable transcripts make YouTube an excellent educational platform.",
-              difficulty: "easy",
-              category: "Education",
-              tags: ["youtube", "video-learning", "transcripts"]
-            }
-          ],
-          totalCards: 1,
-          categories: ["Education"]
-        })
-        break
-        
-      case 'url':
-        generatedContent = JSON.stringify({
-          title: `Flashcards - ${source.name}`,
-          description: "URL content extraction is not implemented yet. This is a placeholder for web content flashcard generation.",
-          cards: [
-            {
-              id: "placeholder-1",
-              front: "What is web scraping?",
-              back: "The process of automatically extracting data from websites to use in other applications or formats.",
-              difficulty: "medium",
-              category: "Web Technology",
-              tags: ["web-scraping", "data-extraction", "automation"]
-            }
-          ],
-          totalCards: 1,
-          categories: ["Web Technology"]
-        })
-        break
-        
-      default:
-        return Response.json(
-          { message: `Unsupported source type: ${source.type}` },
-          { status: 400 }
-        )
-    }
-    
+ 
+   
     // Parse the flashcard content to get card count
     let cardCount = 0
     try {

@@ -117,9 +117,7 @@ export async function POST(
     // Generate content based on source type
     let generatedContent: string
     
-    switch (source.type) {
-      case 'pdf':
-      case 'text':
+
         if (!source.extractedText) {
           return Response.json(
             { message: 'No text content available for processing' },
@@ -127,109 +125,9 @@ export async function POST(
           )
         }
         generatedContent = await generateQuizFromText(source.extractedText, source.name, settings)
-        break
+      
         
-      case 'docx':
-        generatedContent = JSON.stringify({
-          title: `Interactive Quiz - ${source.name}`,
-          description: "DOCX processing is not implemented yet. This is a placeholder for DOCX quiz generation.",
-          questions: [
-            {
-              id: "placeholder-1",
-              question: "What file type is not yet supported for quiz generation?",
-              options: ["PDF", "DOCX", "Text", "All are supported"],
-              correctAnswer: "DOCX",
-              explanation: "DOCX processing will be implemented in a future update.",
-              difficulty: "easy"
-            }
-          ],
-          timeLimit: 10,
-          passingScore: 70
-        })
-        break
-        
-      case 'image':
-        generatedContent = JSON.stringify({
-          title: `Interactive Quiz - ${source.name}`,
-          description: "Image OCR processing is not implemented yet. This is a placeholder for image quiz generation.",
-          questions: [
-            {
-              id: "placeholder-1",
-              question: "What technology is needed to extract text from images?",
-              options: ["OCR", "PDF Parser", "Text Editor", "Image Viewer"],
-              correctAnswer: "OCR",
-              explanation: "OCR (Optical Character Recognition) is used to extract text from images.",
-              difficulty: "medium"
-            }
-          ],
-          timeLimit: 5,
-          passingScore: 70
-        })
-        break
-        
-      case 'audio':
-        generatedContent = JSON.stringify({
-          title: `Interactive Quiz - ${source.name}`,
-          description: "Audio transcription is not implemented yet. This is a placeholder for audio quiz generation.",
-          questions: [
-            {
-              id: "placeholder-1",
-              question: "What is the first step in creating a quiz from audio content?",
-              options: ["Create questions", "Transcribe audio", "Set timer", "Choose difficulty"],
-              correctAnswer: "Transcribe audio",
-              explanation: "Audio must first be transcribed to text before quiz questions can be generated.",
-              difficulty: "easy"
-            }
-          ],
-          timeLimit: 10,
-          passingScore: 70
-        })
-        break
-        
-      case 'youtube':
-        generatedContent = JSON.stringify({
-          title: `Interactive Quiz - ${source.name}`,
-          description: "YouTube transcript processing is not implemented yet. This is a placeholder for video quiz generation.",
-          questions: [
-            {
-              id: "placeholder-1",
-              question: "What feature allows creating quizzes from YouTube videos?",
-              options: ["Video download", "Transcript extraction", "Thumbnail analysis", "Comment parsing"],
-              correctAnswer: "Transcript extraction",
-              explanation: "YouTube transcripts provide the text content needed for quiz generation.",
-              difficulty: "medium"
-            }
-          ],
-          timeLimit: 15,
-          passingScore: 70
-        })
-        break
-        
-      case 'url':
-        generatedContent = JSON.stringify({
-          title: `Interactive Quiz - ${source.name}`,
-          description: "URL content extraction is not implemented yet. This is a placeholder for web content quiz generation.",
-          questions: [
-            {
-              id: "placeholder-1",
-              question: "What is required to create quizzes from web articles?",
-              options: ["URL only", "Content extraction", "Browser cookies", "User login"],
-              correctAnswer: "Content extraction",
-              explanation: "The text content must be extracted from web pages to generate meaningful quiz questions.",
-              difficulty: "easy"
-            }
-          ],
-          timeLimit: 10,
-          passingScore: 70
-        })
-        break
-        
-      default:
-        return Response.json(
-          { message: `Unsupported source type: ${source.type}` },
-          { status: 400 }
-        )
-    }
+ 
     
     // Parse the quiz content to get question count
     let questionCount = 0

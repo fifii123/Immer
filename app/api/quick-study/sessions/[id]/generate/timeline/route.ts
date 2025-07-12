@@ -117,9 +117,7 @@ export async function POST(
     // Generate content based on source type
     let generatedContent: string
     
-    switch (source.type) {
-      case 'pdf':
-      case 'text':
+
         if (!source.extractedText) {
           return Response.json(
             { message: 'No text content available for processing' },
@@ -127,109 +125,9 @@ export async function POST(
           )
         }
         generatedContent = await generateTimelineFromText(source.extractedText, source.name, settings)
-        break
+
         
-      case 'docx':
-        generatedContent = JSON.stringify({
-          title: `Timeline - ${source.name}`,
-          description: "DOCX processing is not implemented yet. This is a placeholder for DOCX timeline generation.",
-          events: [
-            {
-              id: "placeholder-1",
-              title: "Learn about DOCX support",
-              description: "DOCX files will be supported in a future update with full text extraction.",
-              sequence: 1,
-              category: "Development",
-              importance: "medium"
-            }
-          ],
-          totalEvents: 1,
-          categories: ["Development"]
-        })
-        break
-        
-      case 'image':
-        generatedContent = JSON.stringify({
-          title: `Timeline - ${source.name}`,
-          description: "Image OCR processing is not implemented yet. This is a placeholder for image timeline generation.",
-          events: [
-            {
-              id: "placeholder-1",
-              title: "Extract text from image",
-              description: "OCR technology will be used to read text from images and create meaningful timelines.",
-              sequence: 1,
-              category: "OCR Processing",
-              importance: "high"
-            }
-          ],
-          totalEvents: 1,
-          categories: ["OCR Processing"]
-        })
-        break
-        
-      case 'audio':
-        generatedContent = JSON.stringify({
-          title: `Timeline - ${source.name}`,
-          description: "Audio transcription is not implemented yet. This is a placeholder for audio timeline generation.",
-          events: [
-            {
-              id: "placeholder-1",
-              title: "Transcribe audio content",
-              description: "Audio will be converted to text and then analyzed for sequential content.",
-              sequence: 1,
-              category: "Audio Processing",
-              importance: "high"
-            }
-          ],
-          totalEvents: 1,
-          categories: ["Audio Processing"]
-        })
-        break
-        
-      case 'youtube':
-        generatedContent = JSON.stringify({
-          title: `Timeline - ${source.name}`,
-          description: "YouTube transcript processing is not implemented yet. This is a placeholder for video timeline generation.",
-          events: [
-            {
-              id: "placeholder-1",
-              title: "Extract video transcript",
-              description: "YouTube video transcripts will be analyzed to create chronological timelines of content.",
-              sequence: 1,
-              category: "Video Processing",
-              importance: "medium"
-            }
-          ],
-          totalEvents: 1,
-          categories: ["Video Processing"]
-        })
-        break
-        
-      case 'url':
-        generatedContent = JSON.stringify({
-          title: `Timeline - ${source.name}`,
-          description: "URL content extraction is not implemented yet. This is a placeholder for web content timeline generation.",
-          events: [
-            {
-              id: "placeholder-1",
-              title: "Extract web content",
-              description: "Web pages will be scraped and analyzed for sequential information to build timelines.",
-              sequence: 1,
-              category: "Web Scraping",
-              importance: "medium"
-            }
-          ],
-          totalEvents: 1,
-          categories: ["Web Scraping"]
-        })
-        break
-        
-      default:
-        return Response.json(
-          { message: `Unsupported source type: ${source.type}` },
-          { status: 400 }
-        )
-    }
+  
     
     // Parse the timeline content to get event count
     let eventCount = 0
