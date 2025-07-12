@@ -3,54 +3,23 @@
 import { useState, useCallback, useEffect } from 'react'
 
 // Types
-
-interface DetailedConcept {
-  concept: string;
-  explanation: string;
-  examples?: string[];
-  category?: string;
-}
-
-interface StructuredChunk {
-  id: string;
-  summary: string;               // 1-3 zdania
-  keyIdeas: string[];           // 3-5 głównych konceptów
-  detailedConcepts: DetailedConcept[]; // Rich explanations
-  title?: string;               // Auto-generated chunk title
-  relatedChunks: string[];      // Cross-references  
-  dependencies: string[];       // Prerequisites
-  rawText: string;              // Original content
-  order: number;                // Position in document
-  tokenCount: number;           // Size estimation
-  metadata: {
-    pageRange?: string;         // "45-52"
-    timeRange?: string;         // "05:30-08:15" dla video/audio
-    chapter?: string;           // "Introduction"
-    chunkType?: string;         // "definition" | "example" | "conclusion"
-    importance?: 'low' | 'medium' | 'high'; // Relative importance
-  }
-}
-
-// NEW CODE:
 interface Source {
   id: string;
   name: string;
   type: 'pdf' | 'youtube' | 'text' | 'docx' | 'image' | 'audio' | 'url';
-  status: 'ready' | 'processing' | 'error' | 'structuring'; // Add new status
+  status: 'ready' | 'processing' | 'error';
   size?: string;
   duration?: string;
   pages?: number;
-  extractedText?: string;
+  extractedText?: string; // Extracted content for AI processing
   wordCount?: number;
   processingError?: string;
   subtype?: string;
-  structuredChunks?: StructuredChunk[]; // Add this field
-  processingStage?: 'extracting' | 'structuring' | 'complete'; // Add progress tracking
 }
 
 interface Output {
   id: string;
-  type: 'flashcards' | 'quiz' | 'notes' | 'summary' | 'timeline' | 'knowledge-map';
+  type: 'flashcards' | 'quiz' | 'notes' | 'summary' | 'timeline' | 'mindmap';
   title: string;
   preview: string;
   status: 'ready' | 'generating' | 'error';
@@ -67,8 +36,7 @@ interface Session {
   createdAt: string;
 }
 
-type PlaygroundContent = 'flashcards' | 'quiz' | 'notes' | 'summary' | 'timeline' | 'knowledge-map' | 'chat' | null;
-
+type PlaygroundContent = 'flashcards' | 'quiz' | 'notes' | 'summary' | 'timeline' | 'mindmap' | 'chat' | null;
 
 export function useQuickStudy() {
   // Session management
@@ -506,4 +474,4 @@ function getFileType(file: File): Source['type'] {
   return 'text'
 }
 
-export type { Source, Output, PlaygroundContent, Session, StructuredChunk, DetailedConcept }
+export type { Source, Output, PlaygroundContent, Session }
