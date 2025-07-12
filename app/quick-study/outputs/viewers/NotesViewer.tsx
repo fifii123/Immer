@@ -1,10 +1,15 @@
 "use client"
 
 import React from 'react'
-import { PenTool, Copy, Download } from "lucide-react"
+import { PenTool, Copy, Download, FileText, List, Table } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/components/ui/use-toast"
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 interface Output {
   id: string;
@@ -13,11 +18,45 @@ interface Output {
   content?: string;
   sourceId: string;
   createdAt: Date;
+  noteType?: string; // Add note type to track which type was generated
 }
 
 interface NotesViewerProps {
   output: Output | null;
   selectedSource: any;
+}
+
+const getNoteTypeInfo = (noteType?: string) => {
+  switch (noteType) {
+    case 'key-points':
+      return {
+        title: 'Kluczowe Punkty',
+        description: 'Lista najważniejszych terminów i pojęć',
+        icon: <List className="h-4 w-4" />,
+        color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+      }
+    case 'structured':
+      return {
+        title: 'Strukturalne Notatki',
+        description: 'Hierarchiczna organizacja z tabelami',
+        icon: <FileText className="h-4 w-4" />,
+        color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+      }
+    case 'summary-table':
+      return {
+        title: 'Tabele i Zestawienia',
+        description: 'Informacje w formie tabel',
+        icon: <Table className="h-4 w-4" />,
+        color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+      }
+    default:
+      return {
+        title: 'Ogólne Notatki',
+        description: 'Kompletne notatki studenckie',
+        icon: <PenTool className="h-4 w-4" />,
+        color: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300'
+      }
+  }
 }
 
 export default function NotesViewer({ output, selectedSource }: NotesViewerProps) {
@@ -53,125 +92,6 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
     URL.revokeObjectURL(url)
   }
 
-  const renderMarkdownContent = (content: string) => {
-    const lines = content.split('\n')
-    const elements: React.ReactNode[] = []
-    let codeBlock: string[] = []
-    let inCodeBlock = false
-    let inList = false
-
-    lines.forEach((line, index) => {
-      if (line.trim() === '```') {
-        if (inCodeBlock) {
-          elements.push(
-            <pre key={index} className="bg-muted p-4 rounded mb-4 overflow-auto">
-              <code className="text-xs whitespace-pre-wrap">{codeBlock.join('\n')}</code>
-            </pre>
-          )
-          codeBlock = []
-          inCodeBlock = false
-        } else {
-          inCodeBlock = true
-        }
-        return
-      }
-
-      if (inCodeBlock) {
-        codeBlock.push(line)
-        return
-      }
-
-      // Horizontal rule
-      if (line.trim() === '---') {
-        elements.push(<hr key={index} className="my-6 border-muted" />)
-        return
-      }
-
-      // Blockquote
-      if (line.startsWith('>')) {
-        elements.push(
-          <blockquote key={index} className="border-l-4 border-primary pl-4 italic text-muted-foreground my-4">
-            {line.replace(/^>\s?/, '')}
-          </blockquote>
-        )
-        return
-      }
-
-      // Header levels
-      if (line.startsWith('### ')) {
-        elements.push(<h4 key={index} className="text-base font-semibold mt-5 mb-2">{line.replace('### ', '')}</h4>)
-        return
-      }
-
-      if (line.startsWith('## ')) {
-        elements.push(<h3 key={index} className="text-lg font-semibold mt-6 mb-3">{line.replace('## ', '')}</h3>)
-        return
-      }
-
-      // Checkbox
-      if (line.startsWith('- [ ]')) {
-        elements.push(
-          <div key={index} className="flex items-center gap-2 ml-4 mb-2">
-            <input type="checkbox" disabled />
-            <span>{line.replace('- [ ] ', '')}</span>
-          </div>
-        )
-        return
-      }
-
-      // Bullet or numbered list
-      if (/^(\d+\.|- |\* )/.test(line)) {
-        if (!inList) {
-          elements.push(<ul key={`ul-${index}`} className="list-disc ml-6 mb-2">{
-            <li key={index}>{line.replace(/^(\d+\.)|- |\* /, '')}</li>
-          }</ul>)
-          inList = true
-        } else {
-          elements.push(<li key={index} className="ml-6 mb-1">{line.replace(/^(\d+\.)|- |\* /, '')}</li>)
-        }
-        return
-      } else {
-        inList = false
-      }
-
-      // Table
-      if (line.includes('|') && line.includes('---')) {
-        return // skip the separator row
-      } else if (line.includes('|')) {
-        const cells = line.split('|').map(cell => cell.trim())
-        elements.push(
-          <div key={index} className="grid grid-cols-3 gap-4 bg-muted px-4 py-2 rounded mb-2 text-sm">
-            {cells.map((cell, i) => (
-              <div key={i}>{cell}</div>
-            ))}
-          </div>
-        )
-        return
-      }
-
-      // Bold / Italic / Inline code
-      let formatted = line
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`(.*?)`/g, '<code>$1</code>')
-
-      if (formatted.trim() === '') {
-        elements.push(<br key={index} />)
-        return
-      }
-
-      elements.push(
-        <p
-          key={index}
-          className="mb-2 leading-relaxed text-sm"
-          dangerouslySetInnerHTML={{ __html: formatted }}
-        />
-      )
-    })
-
-    return elements
-  }
-
   if (!output || !output.content) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -190,8 +110,10 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
     )
   }
 
+  const noteTypeInfo = getNoteTypeInfo((output as any).noteType)
+
   return (
-    <article className="h-full flex flex-col p-8">
+    <article className="h-full flex flex-col p-4 md:p-8">
       {/* Header */}
       <header className="text-center mb-8">
         <div className="inline-flex items-center gap-3 mb-4">
@@ -206,6 +128,16 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
               {selectedSource ? `Study notes from ${selectedSource.name}` : 'Study Notes'}
             </p>
           </div>
+        </div>
+
+        {/* Note Type Badge */}
+        <div className="flex justify-center mb-4">
+          <Badge className={`${noteTypeInfo.color} px-3 py-1 text-sm font-medium`}>
+            <span className="flex items-center gap-1">
+              {noteTypeInfo.icon}
+              {noteTypeInfo.title}
+            </span>
+          </Badge>
         </div>
 
         {/* Action buttons */}
@@ -225,8 +157,141 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
       <div className="flex-1 max-w-4xl mx-auto w-full">
         <ScrollArea className="h-full">
           <div className="p-6 rounded-xl bg-muted/50">
-            <div className="text-sm text-foreground space-y-2">
-              {renderMarkdownContent(output.content)}
+            <div className="markdown-content text-sm text-foreground">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  h1: ({ node, ...props }) => (
+                    <h1 className="text-3xl font-bold mb-6 mt-8 pb-3 border-b-2 border-gray-200 dark:border-gray-700 text-foreground" {...props} />
+                  ),
+                  h2: ({ node, ...props }) => (
+                    <h2 className="text-2xl font-bold mb-4 mt-8 text-foreground" {...props} />
+                  ),
+                  h3: ({ node, ...props }) => (
+                    <h3 className="text-xl font-semibold mb-3 mt-6 text-foreground" {...props} />
+                  ),
+                  h4: ({ node, ...props }) => (
+                    <h4 className="text-lg font-semibold mb-3 mt-4 text-foreground border-b border-gray-200 dark:border-gray-700 pb-2" {...props} />
+                  ),
+                  h5: ({ node, ...props }) => (
+                    <h5 className="text-base font-semibold mb-2 mt-3 text-foreground" {...props} />
+                  ),
+                  h6: ({ node, ...props }) => (
+                    <h6 className="text-sm font-semibold mb-2 mt-3 text-foreground" {...props} />
+                  ),
+                  p: ({ node, ...props }) => (
+                    <p className="mb-4 leading-relaxed text-foreground" {...props} />
+                  ),
+                  ul: ({ node, ...props }) => (
+                    <ul className="list-disc list-inside space-y-2 mb-4 ml-4 text-foreground" {...props} />
+                  ),
+                  ol: ({ node, ...props }) => (
+                    <ol className="list-decimal list-inside space-y-2 mb-4 ml-4 text-foreground" {...props} />
+                  ),
+                  li: ({ node, ...props }) => (
+                    <li className="mb-1 leading-relaxed" {...props} />
+                  ),
+                  blockquote: ({ node, ...props }) => (
+                    <blockquote
+                      className="border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-900/20 pl-4 py-3 mb-4 italic text-blue-900 dark:text-blue-100"
+                      {...props}
+                    />
+                  ),
+                  code({ node, inline, className, children, ...props }: any) {
+                    const match = /language-(\w+)/.exec(className || '')
+                    return !inline && match ? (
+                      <div className="mb-6">
+                        <div className="bg-gray-900 dark:bg-gray-950 rounded-lg overflow-hidden">
+                          <div className="bg-gray-800 px-4 py-2 text-sm text-gray-300">
+                            {match[1] || 'Code'}
+                          </div>
+                          <SyntaxHighlighter
+                            style={tomorrow}
+                            language={match[1]}
+                            PreTag="div"
+                            className="!bg-gray-900 !p-4 !m-0 text-sm"
+                            {...props}
+                          >
+                            {String(children).replace(/\n$/, '')}
+                          </SyntaxHighlighter>
+                        </div>
+                      </div>
+                    ) : (
+                      <code
+                        className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-sm font-mono"
+                        {...props}
+                      >
+                        {children}
+                      </code>
+                    )
+                  },
+                  pre: ({ node, ...props }) => (
+                    <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-lg overflow-x-auto mb-6" {...props} />
+                  ),
+                  a: ({ node, ...props }) => (
+                    <a
+                      className="text-blue-600 dark:text-blue-400 hover:underline"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      {...props}
+                    />
+                  ),
+                  table: ({ node, ...props }) => (
+                    <div className="overflow-x-auto mb-6">
+                      <table
+                        className="min-w-full border-collapse border border-gray-300 dark:border-gray-600"
+                        {...props}
+                      />
+                    </div>
+                  ),
+                  thead: ({ node, ...props }) => (
+                    <thead className="bg-gray-50 dark:bg-gray-800" {...props} />
+                  ),
+                  th: ({ node, ...props }) => (
+                    <th
+                      className="border border-gray-300 dark:border-gray-600 px-4 py-3 text-left font-semibold"
+                      {...props}
+                    />
+                  ),
+                  tbody: ({ node, ...props }) => (
+                    <tbody {...props} />
+                  ),
+                  tr: ({ node, ...props }) => (
+                    <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50" {...props} />
+                  ),
+                  td: ({ node, ...props }) => (
+                    <td className="border border-gray-300 dark:border-gray-600 px-4 py-3" {...props} />
+                  ),
+                  hr: ({ node, ...props }) => (
+                    <hr className="my-8 border-gray-300 dark:border-gray-600" {...props} />
+                  ),
+                  strong: ({ node, ...props }) => (
+                    <strong className="font-semibold text-foreground" {...props} />
+                  ),
+                  em: ({ node, ...props }) => (
+                    <em className="italic" {...props} />
+                  ),
+                  del: ({ node, ...props }) => (
+                    <del className="line-through" {...props} />
+                  ),
+                  input: ({ node, ...props }) => (
+                    <input
+                      type="checkbox"
+                      disabled
+                      className="mr-2 accent-primary"
+                      {...props}
+                    />
+                  ),
+                  img: ({ node, ...props }) => (
+                    <img
+                      className="max-w-full h-auto my-4 rounded-lg shadow-md"
+                      {...props}
+                    />
+                  ),
+                }}
+              >
+                {output.content}
+              </ReactMarkdown>
             </div>
           </div>
         </ScrollArea>

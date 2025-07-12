@@ -19,7 +19,7 @@ interface Source {
 
 interface Output {
   id: string;
-  type: 'flashcards' | 'quiz' | 'notes' | 'summary' | 'timeline' | 'mindmap';
+  type: 'flashcards' | 'quiz' | 'notes' | 'summary' | 'timeline' | 'knowledge-map';
   title: string;
   preview: string;
   status: 'ready' | 'generating' | 'error';
@@ -27,6 +27,7 @@ interface Output {
   createdAt: Date;
   count?: number;
   content?: string;
+  noteType?: string; // Add note type tracking
 }
 
 interface Session {
@@ -36,7 +37,7 @@ interface Session {
   createdAt: string;
 }
 
-type PlaygroundContent = 'flashcards' | 'quiz' | 'notes' | 'summary' | 'timeline' | 'mindmap' | 'chat' | null;
+type PlaygroundContent = 'flashcards' | 'quiz' | 'notes' | 'summary' | 'timeline' | 'knowledge-map' | 'chat' | null;
 
 export function useQuickStudy() {
   // Session management
@@ -289,86 +290,107 @@ export function useQuickStudy() {
   const handleSourceSelect = useCallback((source: Source) => {
     setSelectedSource(source)
     setError(null)
-  
-  }, [playgroundContent])
+  }, [])
 
-// Handler - generate content (tile click)
-const handleTileClick = useCallback(async (type: string) => {
-  if (!sessionId) {
-    setError('No active session')
-    return
-  }
-  
-  if (!selectedSource || selectedSource.status !== 'ready') {
-    setError('Please select a ready source first')
-    return
-  }
-  
-  setCurtainVisible(false)
-  setPlaygroundContent(type as PlaygroundContent)
-  setCurrentOutput(null)
-  setIsGenerating(true)
-  setError(null)
-  
-  try {
-    // Prepare settings based on content type
-    let settings = {}
-    
-    if (type === 'quiz') {
-      settings = {
-        questionCount: 10,
-        difficulty: 'mixed',
-        timeLimit: 20 // minutes
-      }
-    } else if (type === 'flashcards') {
-      settings = {
-        cardCount: 20,
-        difficulty: 'mixed',
-        includeCategories: true
-      }
+  // Handler - generate content (tile click) with options support
+  const handleTileClick = useCallback(async (type: string, options?: any) => {
+
+    console.log("🔍 DEBUG: useQuickStudy received type:", type);
+    console.log("🔍 DEBUG: useQuickStudy received options:", options);
+    if (!sessionId) {
+      setError('No active session')
+      return
     }
     
-    const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate/${type}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        sourceId: selectedSource.id,
-        settings: settings
+    if (!selectedSource || selectedSource.status !== 'ready') {
+      setError('Please select a ready source first')
+      return
+    }
+    
+    setCurtainVisible(false)
+    setPlaygroundContent(type as PlaygroundContent)
+    setCurrentOutput(null)
+    setIsGenerating(true)
+    setError(null)
+    
+    try {
+      // Prepare settings based on content type and options
+      let settings = {}
+      
+      if (type === 'quiz') {
+        settings = {
+          questionCount: options?.questionCount || 10,
+          difficulty: options?.difficulty || 'mixed',
+          timeLimit: options?.timeLimit || 20 // minutes
+        }
+      } else if (type === 'flashcards') {
+        settings = {
+          cardCount: options?.cardCount || 20,
+          difficulty: options?.difficulty || 'mixed',
+          includeCategories: options?.includeCategories !== false
+        }
+      } else if (type === 'notes') {
+        settings = {
+          noteType: options?.noteType || 'general'
+        }
+      } else if (type === 'timeline') {
+        settings = {
+          maxEvents: options?.maxEvents || 8
+        }
+      } else if (type === 'knowledge-map') {
+        settings = {
+          maxNodes: options?.maxNodes || 15,
+          includeConnections: options?.includeConnections !== false
+        }
+      }
+      console.log("🔍 DEBUG: Final settings before API call:", settings);
+      const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate/${type}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sourceId: selectedSource.id,
+          settings: settings
+        })
       })
-    })
-    
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.message || 'Generation failed')
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Generation failed')
+      }
+      
+      const newOutput: Output = await response.json()
+      
+      // Add note type to output if it was notes generation
+      if (type === 'notes' && options?.noteType) {
+        newOutput.noteType = options.noteType
+      }
+      
+      setOutputs(prev => [...prev, newOutput])
+      setCurrentOutput(newOutput)
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Generation failed')
+      setCurtainVisible(true)
+      setPlaygroundContent(null)
+    } finally {
+      setIsGenerating(false)
+    }
+  }, [sessionId, selectedSource])
+
+  // Handler - view existing output
+  const handleOutputClick = useCallback((output: Output) => {
+    if (output.status !== 'ready') {
+      setError('Content is still generating')
+      return
     }
     
-    const newOutput: Output = await response.json()
-    setOutputs(prev => [...prev, newOutput])
-    setCurrentOutput(newOutput)
-    
-  } catch (err) {
-    setError(err instanceof Error ? err.message : 'Generation failed')
-    setCurtainVisible(true)
-    setPlaygroundContent(null)
-  } finally {
-    setIsGenerating(false)
-  }
-}, [sessionId, selectedSource])
-
-// Handler - view existing output
-const handleOutputClick = useCallback((output: Output) => {
-  if (output.status !== 'ready') {
-    setError('Content is still generating')
-    return
-  }
-  
-  setCurtainVisible(false)
-  setPlaygroundContent(output.type)
-  setCurrentOutput(output) // Add this line
-  setError(null)
-}, [])
+    setCurtainVisible(false)
+    setPlaygroundContent(output.type)
+    setCurrentOutput(output)
+    setError(null)
+  }, [])
 
   // Handler - show curtain
   const handleShowCurtain = useCallback(() => {

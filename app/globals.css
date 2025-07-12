@@ -247,3 +247,210 @@ body {
 .react-flow__edge {
   transition: all 0.3s ease-in-out;
 }
+/* app/globals.css - dodaj na końcu pliku */
+
+/* Enhanced Markdown Styles for Notes */
+.markdown-content {
+  @apply text-foreground leading-relaxed;
+}
+
+.markdown-content h1 {
+  @apply text-3xl font-bold mb-6 mt-8 pb-3 border-b-2 border-gray-200 dark:border-gray-700;
+}
+
+.markdown-content h2 {
+  @apply text-2xl font-bold mb-4 mt-8 text-foreground;
+}
+
+.markdown-content h3 {
+  @apply text-xl font-semibold mb-3 mt-6 text-foreground;
+}
+
+.markdown-content h4 {
+  @apply text-lg font-semibold mb-3 mt-4 text-foreground border-b border-gray-200 dark:border-gray-700 pb-2;
+}
+
+.markdown-content p {
+  @apply mb-4 leading-relaxed text-foreground;
+}
+
+.markdown-content ul {
+  @apply list-disc list-inside space-y-2 mb-4 ml-4;
+}
+
+.markdown-content ol {
+  @apply list-decimal list-inside space-y-2 mb-4 ml-4;
+}
+
+.markdown-content li {
+  @apply mb-1 leading-relaxed;
+}
+
+.markdown-content li ul,
+.markdown-content li ol {
+  @apply mt-2 ml-6 mb-0;
+}
+
+.markdown-content blockquote {
+  @apply border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-900/20 pl-4 py-3 mb-4 italic;
+}
+
+.markdown-content code {
+  @apply bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-sm font-mono;
+}
+
+.markdown-content pre {
+  @apply bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-lg overflow-x-auto mb-6;
+}
+
+.markdown-content pre code {
+  @apply bg-transparent p-0 text-gray-100;
+}
+
+.markdown-content table {
+  @apply min-w-full border-collapse border border-gray-300 dark:border-gray-600 mb-6;
+}
+
+.markdown-content th {
+  @apply border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 px-4 py-3 text-left font-semibold;
+}
+
+.markdown-content td {
+  @apply border border-gray-300 dark:border-gray-600 px-4 py-3;
+}
+
+.markdown-content tr:hover {
+  @apply bg-gray-50 dark:bg-gray-800/50;
+}
+
+.markdown-content hr {
+  @apply my-8 border-gray-300 dark:border-gray-600;
+}
+
+.markdown-content a {
+  @apply text-blue-600 dark:text-blue-400 hover:underline;
+}
+
+.markdown-content strong {
+  @apply font-semibold text-foreground;
+}
+
+.markdown-content em {
+  @apply italic;
+}
+
+/* Special styling for definition lists */
+.markdown-content .definition-term {
+  @apply font-semibold text-primary mb-1;
+}
+
+.markdown-content .definition-desc {
+  @apply ml-4 mb-3 text-muted-foreground;
+}
+
+/* Styling for note type indicators */
+.markdown-content .note-type-badge {
+  @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary mb-4;
+}
+
+/* Enhanced table styling for summary tables */
+.markdown-content .summary-table {
+  @apply shadow-sm rounded-lg overflow-hidden border-0;
+}
+
+.markdown-content .summary-table th {
+  @apply bg-primary/10 text-primary font-semibold;
+}
+
+.markdown-content .summary-table td {
+  @apply border-t border-gray-200 dark:border-gray-700;
+}
+
+/* Improved blockquote styling for different types */
+.markdown-content .info-block {
+  @apply border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-900/20;
+}
+
+.markdown-content .warning-block {
+  @apply border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20;
+}
+
+.markdown-content .success-block {
+  @apply border-l-4 border-green-500 bg-green-50 dark:bg-green-900/20;
+}
+
+/* Responsive table wrapper */
+.markdown-content .table-wrapper {
+  @apply overflow-x-auto -mx-4 px-4 mb-6;
+}
+
+@media (min-width: 768px) {
+  .markdown-content .table-wrapper {
+    @apply mx-0 px-0;
+  }
+}
+
+/* Print styles for notes */
+@media print {
+  .markdown-content {
+    @apply text-black;
+  }
+  
+  .markdown-content blockquote {
+    @apply border-l-4 border-gray-400 bg-gray-100;
+  }
+  
+  .markdown-content code {
+    @apply bg-gray-200;
+  }
+  
+  .markdown-content pre {
+    @apply bg-gray-100 text-black border border-gray-300;
+  }
+}
+/* Professional Note Type Modal Styles */
+[data-radix-dialog-overlay] {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+}
+
+.note-type-option {
+  transition: all 0.15s ease;
+}
+
+.note-type-option:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.dark .note-type-option:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.note-icon-container {
+  transition: transform 0.15s ease;
+}
+
+.note-type-option:hover .note-icon-container {
+  transform: scale(1.05);
+}
+
+.selection-check {
+  animation: check-appear 0.2s ease-out;
+}
+
+.pro-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+@keyframes check-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
