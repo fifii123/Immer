@@ -25,7 +25,6 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
 
   const handleCopy = async () => {
     if (!output?.content) return
-    
     try {
       await navigator.clipboard.writeText(output.content)
       toast({
@@ -43,7 +42,6 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
 
   const handleDownload = () => {
     if (!output?.content) return
-    
     const blob = new Blob([output.content], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -55,51 +53,123 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
     URL.revokeObjectURL(url)
   }
 
-  // Render markdown-like content
   const renderMarkdownContent = (content: string) => {
-    return content.split('\n').map((line, index) => {
-      // Headers
+    const lines = content.split('\n')
+    const elements: React.ReactNode[] = []
+    let codeBlock: string[] = []
+    let inCodeBlock = false
+    let inList = false
+
+    lines.forEach((line, index) => {
+      if (line.trim() === '```') {
+        if (inCodeBlock) {
+          elements.push(
+            <pre key={index} className="bg-muted p-4 rounded mb-4 overflow-auto">
+              <code className="text-xs whitespace-pre-wrap">{codeBlock.join('\n')}</code>
+            </pre>
+          )
+          codeBlock = []
+          inCodeBlock = false
+        } else {
+          inCodeBlock = true
+        }
+        return
+      }
+
+      if (inCodeBlock) {
+        codeBlock.push(line)
+        return
+      }
+
+      // Horizontal rule
+      if (line.trim() === '---') {
+        elements.push(<hr key={index} className="my-6 border-muted" />)
+        return
+      }
+
+      // Blockquote
+      if (line.startsWith('>')) {
+        elements.push(
+          <blockquote key={index} className="border-l-4 border-primary pl-4 italic text-muted-foreground my-4">
+            {line.replace(/^>\s?/, '')}
+          </blockquote>
+        )
+        return
+      }
+
+      // Header levels
+      if (line.startsWith('### ')) {
+        elements.push(<h4 key={index} className="text-base font-semibold mt-5 mb-2">{line.replace('### ', '')}</h4>)
+        return
+      }
+
       if (line.startsWith('## ')) {
-        return (
-          <h3 key={index} className="text-lg font-semibold mt-6 mb-3 text-foreground">
-            {line.replace('## ', '')}
-          </h3>
+        elements.push(<h3 key={index} className="text-lg font-semibold mt-6 mb-3">{line.replace('## ', '')}</h3>)
+        return
+      }
+
+      // Checkbox
+      if (line.startsWith('- [ ]')) {
+        elements.push(
+          <div key={index} className="flex items-center gap-2 ml-4 mb-2">
+            <input type="checkbox" disabled />
+            <span>{line.replace('- [ ] ', '')}</span>
+          </div>
         )
+        return
       }
-      
-      // Bold text
-      if (line.includes('**')) {
-        const parts = line.split('**')
-        return (
-          <p key={index} className="mb-2 leading-relaxed">
-            {parts.map((part, i) => 
-              i % 2 === 1 ? <strong key={i}>{part}</strong> : part
-            )}
-          </p>
+
+      // Bullet or numbered list
+      if (/^(\d+\.|- |\* )/.test(line)) {
+        if (!inList) {
+          elements.push(<ul key={`ul-${index}`} className="list-disc ml-6 mb-2">{
+            <li key={index}>{line.replace(/^(\d+\.)|- |\* /, '')}</li>
+          }</ul>)
+          inList = true
+        } else {
+          elements.push(<li key={index} className="ml-6 mb-1">{line.replace(/^(\d+\.)|- |\* /, '')}</li>)
+        }
+        return
+      } else {
+        inList = false
+      }
+
+      // Table
+      if (line.includes('|') && line.includes('---')) {
+        return // skip the separator row
+      } else if (line.includes('|')) {
+        const cells = line.split('|').map(cell => cell.trim())
+        elements.push(
+          <div key={index} className="grid grid-cols-3 gap-4 bg-muted px-4 py-2 rounded mb-2 text-sm">
+            {cells.map((cell, i) => (
+              <div key={i}>{cell}</div>
+            ))}
+          </div>
         )
+        return
       }
-      
-      // Bullet points
-      if (line.startsWith('• ') || line.startsWith('- ')) {
-        return (
-          <li key={index} className="mb-1 ml-4">
-            {line.replace(/^[•-] /, '')}
-          </li>
-        )
+
+      // Bold / Italic / Inline code
+      let formatted = line
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code>$1</code>')
+
+      if (formatted.trim() === '') {
+        elements.push(<br key={index} />)
+        return
       }
-      
-      // Empty lines
-      if (line.trim() === '') {
-        return <br key={index} />
-      }
-      
-      // Regular paragraphs
-      return (
-        <p key={index} className="mb-2 leading-relaxed">
-          {line}
-        </p>
+
+      elements.push(
+        <p
+          key={index}
+          className="mb-2 leading-relaxed text-sm"
+          dangerouslySetInnerHTML={{ __html: formatted }}
+        />
       )
     })
+
+    return elements
   }
 
   if (!output || !output.content) {
@@ -137,33 +207,25 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
             </p>
           </div>
         </div>
-        
+
         {/* Action buttons */}
         <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopy}
-          >
+          <Button variant="outline" size="sm" onClick={handleCopy}>
             <Copy className="h-4 w-4 mr-2" />
             Copy
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDownload}
-          >
+          <Button variant="outline" size="sm" onClick={handleDownload}>
             <Download className="h-4 w-4 mr-2" />
             Download
           </Button>
         </div>
       </header>
-      
+
       {/* Content */}
       <div className="flex-1 max-w-4xl mx-auto w-full">
         <ScrollArea className="h-full">
           <div className="p-6 rounded-xl bg-muted/50">
-            <div className="text-sm text-foreground">
+            <div className="text-sm text-foreground space-y-2">
               {renderMarkdownContent(output.content)}
             </div>
           </div>
