@@ -8,6 +8,7 @@ import { AlmaMaterDialog } from './alma-mater-dialog';
 import { LanguageSettingsDialog } from './language-settings-dialog';
 import { usePreferences } from '@/context/preferences-context';
 import { useAuth } from '@/context/auth/AuthContext';
+import { useTheme } from "@/hooks/use-theme"
 import {
   Sidebar,
   SidebarContent,

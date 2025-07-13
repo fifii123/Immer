@@ -3,13 +3,14 @@
 import { useEffect } from "react"
 import { usePreferences } from "@/context/preferences-context"
 import { motion } from "framer-motion"
-
+import { useTheme } from "@/hooks/use-theme"
 // Import czcionki z @fontsource
 import "@fontsource/libre-baskerville/400.css" // normal
 import "@fontsource/libre-baskerville/700.css" // bold
 
 export default function WelcomeHeader() {
   const { displayName, currentGreeting, refreshGreeting } = usePreferences()
+  const theme = useTheme()
 
   useEffect(() => {
     refreshGreeting()
@@ -31,13 +32,13 @@ export default function WelcomeHeader() {
           className="flex items-center gap-2 justify-center"
         >
           <div 
-            className="bg-gradient-to-br from-indigo-600 to-purple-700 text-white px-3 py-1 rounded-lg shadow-lg shadow-indigo-500/25"
+            className={`${theme.getPrimaryClass()} text-white px-3 py-1 rounded-lg shadow-lg ${theme.getShadowClass()}`}
             style={{ fontFamily: "'Libre Baskerville', serif", fontWeight: 400 }}
           >
             <span className="text-lg">Im</span>
           </div>
           <span 
-            className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-700 bg-clip-text text-transparent"
+            className={`text-2xl font-bold ${theme.getPrimaryClass('text')}`}
             style={{ fontFamily: "'Libre Baskerville', serif" }}
           >
             Immer.
@@ -55,7 +56,7 @@ export default function WelcomeHeader() {
           <span className="bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
             {currentGreeting}
           </span>
-          <span className="text-indigo-600 dark:text-indigo-400 ml-2">
+          <span className={`${theme.getPrimaryClass('text')} ml-2`}>
             {displayName}
           </span>
         </motion.h1>

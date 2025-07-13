@@ -10,11 +10,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { usePreferences } from '@/context/preferences-context'
+import { useTheme } from '@/hooks/use-theme'
 import { motion } from "framer-motion"
+
 export default function CreateProjectPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { t, addProject, darkMode } = usePreferences()
+  const theme = useTheme()
   
   const [formData, setFormData] = useState({
     projectName: '',
@@ -71,7 +74,10 @@ export default function CreateProjectPage() {
   }
 
   return (
-    <div className={`min-h-screen ${darkMode ? 'bg-gradient-to-br from-slate-900 to-slate-800' : 'bg-gradient-to-br from-gray-50 to-purple-50/30'}`}>
+    <div className={`min-h-screen ${darkMode 
+      ? 'bg-gradient-to-br from-slate-900 to-slate-800' 
+      : `bg-gradient-to-br from-gray-50 to-gray-100`
+    }`}>
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
         {/* Header */}
         <motion.div 
@@ -99,7 +105,7 @@ export default function CreateProjectPage() {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.1 }}
-              className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 bg-clip-text text-transparent"
+              className={`text-4xl font-bold ${theme.getPrimaryClass('text')}`}
             >
               {t("createNewProject") || "Create New Project"}
             </motion.h1>
@@ -109,7 +115,7 @@ export default function CreateProjectPage() {
               transition={{ duration: 0.5, delay: 0.2 }}
               className="text-gray-600 dark:text-gray-400 text-lg"
             >
-              {t("createProjectDescription") || "Start your learning journey with a new project"}
+              {"Start your learning journey with a new project"}
             </motion.p>
           </div>
         </motion.div>
@@ -123,8 +129,8 @@ export default function CreateProjectPage() {
           <Card className={`
             border-0 shadow-2xl backdrop-blur-xl
             ${darkMode 
-              ? 'bg-gradient-to-br from-slate-800/90 to-slate-900/90 shadow-purple-500/10' 
-              : 'bg-gradient-to-br from-white/90 to-purple-50/90 shadow-purple-500/20'
+              ? 'bg-gradient-to-br from-slate-800/90 to-slate-900/90 shadow-lg' 
+              : `bg-gradient-to-br from-white/90 to-gray-50/90 shadow-xl ${theme.getShadowClass()}`
             }
           `}>
             <CardHeader className="space-y-4 pb-8">
@@ -133,7 +139,7 @@ export default function CreateProjectPage() {
                   initial={{ scale: 0, rotate: -180 }}
                   animate={{ scale: 1, rotate: 0 }}
                   transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.5 }}
-                  className="p-3 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 shadow-lg"
+                  className={`p-3 rounded-xl ${theme.getPrimaryClass()} shadow-lg`}
                 >
                   <FolderPlus className="h-8 w-8 text-white" />
                 </motion.div>
@@ -167,8 +173,8 @@ export default function CreateProjectPage() {
                     className={`
                       h-12 text-lg border-2 transition-all duration-300 focus:scale-[1.01]
                       ${darkMode 
-                        ? 'bg-slate-800/50 border-slate-600 focus:border-purple-500 focus:ring-purple-500/20' 
-                        : 'bg-white/70 border-purple-200 focus:border-purple-500 focus:ring-purple-500/20'
+                        ? `bg-slate-800/50 border-slate-600 hover:border-slate-500 focus:border-${theme.colors.primary.text.replace('text-', '')} focus:ring-${theme.colors.primary.text.replace('text-', '')}/20` 
+                        : `bg-white/70 border-gray-300 hover:border-gray-400 focus:border-${theme.colors.primary.text.replace('text-', '')} focus:ring-${theme.colors.primary.text.replace('text-', '')}/20`
                       }
                     `}
                     required
@@ -192,8 +198,8 @@ export default function CreateProjectPage() {
                     className={`
                       h-12 text-lg border-2 transition-all duration-300 focus:scale-[1.01]
                       ${darkMode 
-                        ? 'bg-slate-800/50 border-slate-600 focus:border-purple-500 focus:ring-purple-500/20' 
-                        : 'bg-white/70 border-purple-200 focus:border-purple-500 focus:ring-purple-500/20'
+                        ? `bg-slate-800/50 border-slate-600 hover:border-slate-500 focus:border-${theme.colors.primary.text.replace('text-', '')} focus:ring-${theme.colors.primary.text.replace('text-', '')}/20` 
+                        : `bg-white/70 border-gray-300 hover:border-gray-400 focus:border-${theme.colors.primary.text.replace('text-', '')} focus:ring-${theme.colors.primary.text.replace('text-', '')}/20`
                       }
                     `}
                   />
@@ -217,8 +223,8 @@ export default function CreateProjectPage() {
                     className={`
                       text-lg border-2 transition-all duration-300 focus:scale-[1.01] resize-none
                       ${darkMode 
-                        ? 'bg-slate-800/50 border-slate-600 focus:border-purple-500 focus:ring-purple-500/20' 
-                        : 'bg-white/70 border-purple-200 focus:border-purple-500 focus:ring-purple-500/20'
+                        ? `bg-slate-800/50 border-slate-600 hover:border-slate-500 focus:border-${theme.colors.primary.text.replace('text-', '')} focus:ring-${theme.colors.primary.text.replace('text-', '')}/20` 
+                        : `bg-white/70 border-gray-300 hover:border-gray-400 focus:border-${theme.colors.primary.text.replace('text-', '')} focus:ring-${theme.colors.primary.text.replace('text-', '')}/20`
                       }
                     `}
                   />
@@ -231,147 +237,119 @@ export default function CreateProjectPage() {
                   className="space-y-4"
                 >
                   <Label className="text-base font-semibold text-gray-900 dark:text-white">
-                    {t("attachFiles") || "Attach Files"} 
-                    <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-2">
-                      (Optional)
-                    </span>
+                    {t("attachFiles") || "Attach Files"} ({t("optional") || "Optional"})
                   </Label>
                   
                   <div className={`
-                    border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 hover:scale-[1.01]
+                    relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 cursor-pointer hover:border-solid
                     ${darkMode 
-                      ? 'border-slate-600 bg-slate-800/30 hover:border-purple-500 hover:bg-slate-700/30' 
-                      : 'border-purple-300 bg-purple-50/30 hover:border-purple-500 hover:bg-purple-100/30'
+                      ? `border-slate-600 hover:border-${theme.colors.primary.text.replace('text-', '')} hover:bg-slate-800/30` 
+                      : `border-gray-300 hover:border-${theme.colors.primary.text.replace('text-', '')} hover:bg-gray-50`
                     }
                   `}>
-                    <motion.div
-                      whileHover={{ scale: 1.05 }}
-                      className="space-y-3"
-                    >
-                      <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 w-fit mx-auto">
-                        <Upload className="h-8 w-8 text-white" />
+                    <input
+                      type="file"
+                      multiple
+                      onChange={handleFileChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <div className="space-y-3">
+                      <div className={`mx-auto w-12 h-12 rounded-full ${theme.getPrimaryClass()} flex items-center justify-center`}>
+                        <Upload className="h-6 w-6 text-white" />
                       </div>
                       <div>
-                        <p className="text-lg font-medium text-gray-900 dark:text-white">
-                          {t("dropFilesHere") || "Drop files here or click to browse"}
+                        <p className={`text-lg font-medium ${theme.getPrimaryClass('text')}`}>
+                          {t("dragAndDropFiles") || "Drag and drop files here"}
                         </p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                          {t("supportedFormats") || "PDF, DOC, DOCX, TXT files supported"}
+                        <p className="text-gray-500 dark:text-gray-400 mt-1">
+                          {t("orClickToUpload") || "or click to upload"}
                         </p>
                       </div>
-                      <Input
-                        type="file"
-                        multiple
-                        onChange={handleFileChange}
-                        className="opacity-0 absolute inset-0 cursor-pointer"
-                        accept=".pdf,.doc,.docx,.txt"
-                      />
-                    </motion.div>
+                    </div>
                   </div>
 
+                  {/* Selected Files */}
                   {files.length > 0 && (
                     <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={`
-                        rounded-xl border p-4 space-y-2
-                        ${darkMode 
-                          ? 'bg-slate-800/50 border-slate-700/50' 
-                          : 'bg-white/70 border-purple-200/50'
-                        }
-                      `}
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      className="space-y-2"
                     >
-                      <p className="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                        {t("selectedFiles") || "Selected Files"} ({files.length})
-                      </p>
-                      {files.map((file, index) => (
-                        <motion.div
-                          key={index}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.1 }}
-                          className={`
-                            flex items-center gap-3 p-3 rounded-lg transition-all
-                            ${darkMode 
-                              ? 'bg-slate-700/50 hover:bg-slate-600/50' 
-                              : 'bg-purple-50/50 hover:bg-purple-100/50'
-                            }
-                          `}
-                        >
-                          <FileText className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                          <span className="text-sm font-medium text-gray-900 dark:text-white flex-1">
-                            {file.name}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setFiles(files.filter((_, i) => i !== index))}
-                            className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {t("attachedFiles") || "Attached Files"} ({files.length})
+                      </Label>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {files.map((file, index) => (
+                          <div
+                            key={index}
+                            className={`
+                              flex items-center gap-3 p-3 rounded-lg border
+                              ${darkMode 
+                                ? 'bg-slate-800/50 border-slate-600' 
+                                : 'bg-gray-50 border-gray-200'
+                              }
+                            `}
                           >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </motion.div>
-                      ))}
+                            <div className={`p-2 rounded ${theme.getPrimaryClass()} bg-opacity-10`}>
+                              <Upload className={`h-4 w-4 ${theme.getPrimaryClass('text')}`} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{file.name}</p>
+                              <p className="text-xs text-gray-500">
+                                {(file.size / 1024 / 1024).toFixed(2)} MB
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </motion.div>
                   )}
                 </motion.div>
 
+                {/* Submit Button */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: 1.0 }}
-                  className="flex gap-4 pt-6"
+                  className="flex items-center gap-4 pt-6"
                 >
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className={`
+                      flex-1 h-12 text-lg font-semibold ${theme.getButtonGradient('primary')} text-white 
+                      hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 
+                      shadow-lg ${theme.getShadowClass()} hover:shadow-xl
+                      disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100
+                    `}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                        {t("creating") || "Creating..."}
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-3 h-5 w-5" />
+                        {t("createProject") || "Create Project"}
+                      </>
+                    )}
+                  </Button>
+                  
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => router.back()}
                     className={`
-                      flex-1 h-12 text-lg border-2 transition-all duration-300 hover:scale-[1.02]
+                      px-8 h-12 border-2 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200
                       ${darkMode 
-                        ? 'border-slate-600 hover:border-slate-500 hover:bg-slate-800' 
-                        : 'border-purple-200 hover:border-purple-300 hover:bg-purple-50'
+                        ? `border-slate-600 hover:border-${theme.colors.primary.text.replace('text-', '')} hover:${theme.colors.primary.textDark}` 
+                        : `border-gray-300 hover:border-${theme.colors.primary.text.replace('text-', '')} hover:${theme.colors.primary.text}`
                       }
                     `}
                   >
                     {t("cancel") || "Cancel"}
                   </Button>
-                  
-                  <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="flex-1"
-                  >
-                    <Button
-                      type="submit"
-                      disabled={isSubmitting || !formData.projectName.trim()}
-                      className="
-                        w-full h-12 text-lg bg-gradient-to-r from-purple-600 to-indigo-600 
-                        hover:from-purple-700 hover:to-indigo-700 text-white shadow-lg 
-                        shadow-purple-500/25 hover:shadow-xl hover:shadow-purple-500/30 
-                        transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed
-                      "
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <motion.div
-                            animate={{ rotate: 360 }}
-                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                            className="mr-2"
-                          >
-                            <Save className="h-5 w-5" />
-                          </motion.div>
-                          {t("creating") || "Creating..."}
-                        </>
-                      ) : (
-                        <>
-                          <Save className="mr-2 h-5 w-5" />
-                          {t("createProject") || "Create Project"}
-                        </>
-                      )}
-                    </Button>
-                  </motion.div>
                 </motion.div>
               </form>
             </CardContent>

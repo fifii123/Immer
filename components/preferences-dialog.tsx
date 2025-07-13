@@ -19,6 +19,9 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/components/ui/use-toast"
 import { usePreferences, type GreetingType } from "@/context/preferences-context"
 import { motion } from "framer-motion"
+import { useTheme } from "@/hooks/use-theme"
+import { HexColorPicker } from "react-colorful"
+import { ColorSettings } from "@/context/preferences-context"
 
 interface PreferencesDialogProps {
   open: boolean
@@ -38,13 +41,19 @@ export function PreferencesDialog({ open, onOpenChange }: PreferencesDialogProps
     setGreetingType,
     refreshGreeting,
     t,
+    colorSettings,
+    setColorSettings,
+
   } = usePreferences()
+
+  const theme = useTheme()
 
   const [formValues, setFormValues] = React.useState({
     displayName: displayName,
     menuDisplay: menuDisplay,
     darkMode: darkMode,
     greetingType: greetingType,
+    colorSettings: colorSettings
   })
 
   // Update form values when context changes or dialog opens
@@ -55,6 +64,7 @@ export function PreferencesDialog({ open, onOpenChange }: PreferencesDialogProps
         menuDisplay,
         darkMode,
         greetingType,
+        colorSettings
       })
     }
   }, [open, displayName, menuDisplay, darkMode, greetingType])
@@ -67,7 +77,7 @@ export function PreferencesDialog({ open, onOpenChange }: PreferencesDialogProps
     setMenuDisplay(formValues.menuDisplay)
     setDarkMode(formValues.darkMode)
     setGreetingType(formValues.greetingType as GreetingType)
-
+    setColorSettings(formValues.colorSettings)
     // Refresh greeting if it's alternating
     if (formValues.greetingType === 'alternating') {
       refreshGreeting()
@@ -303,7 +313,150 @@ export function PreferencesDialog({ open, onOpenChange }: PreferencesDialogProps
               </div>
             </motion.div>
           </motion.div>
+{/* Theme Selection */}
+<div className="space-y-3">
+  <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+    Color Scheme
+  </Label>
+  
+  <div className="grid grid-cols-2 gap-3">
+    {[
+      { id: "indigo-purple", name: "Classic", desc: "Indigo & Purple", colors: ["bg-indigo-500", "bg-purple-600"] },
+      { id: "blue-cyan", name: "Ocean", desc: "Blue & Cyan", colors: ["bg-blue-500", "bg-cyan-500"] },
+      { id: "green-emerald", name: "Nature", desc: "Green & Emerald", colors: ["bg-green-500", "bg-emerald-500"] },
+      { id: "pink-rose", name: "Romantic", desc: "Pink & Rose", colors: ["bg-pink-500", "bg-rose-500"] },
+      { id: "orange-red", name: "Sunset", desc: "Orange & Red", colors: ["bg-orange-500", "bg-red-500"] },
+      { id: "teal-navy", name: "Navy Pro", desc: "Teal & Navy", colors: ["bg-teal-600", "bg-blue-800"] }
+    ].map((themeOption) => (
+      <motion.button
+        key={themeOption.id}
+        type="button"
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        onClick={() => setFormValues(prev => ({ 
+          ...prev, 
+          colorSettings: { ...prev.colorSettings, theme: themeOption.id as any }
+        }))}
+        className={`p-3 rounded-lg border-2 transition-all text-left ${
+          formValues.colorSettings.theme === themeOption.id
+            ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+            : 'border-gray-200 dark:border-slate-600 hover:border-gray-300 dark:hover:border-slate-500'
+        }`}
+      >
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {themeOption.name}
+          </div>
+          <div className="flex gap-1">
+            <div className={`w-3 h-3 rounded-full ${themeOption.colors[0]}`}></div>
+            <div className={`w-3 h-3 rounded-full ${themeOption.colors[1]}`}></div>
+          </div>
+        </div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          {themeOption.desc}
+        </div>
+      </motion.button>
+    ))}
+  </div>
+</div>
 
+{/* Professional Themes Section */}
+<div className="space-y-3">
+  <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+    Professional Themes
+  </Label>
+  
+  <div className="grid grid-cols-1 gap-2">
+    <motion.button
+      type="button"
+      whileHover={{ scale: 1.01 }}
+      whileTap={{ scale: 0.99 }}
+      onClick={() => setFormValues(prev => ({ 
+        ...prev, 
+        colorSettings: { ...prev.colorSettings, theme: "slate-professional" }
+      }))}
+      className={`p-3 rounded-lg border-2 transition-all text-left ${
+        formValues.colorSettings.theme === "slate-professional"
+          ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+          : 'border-gray-200 dark:border-slate-600 hover:border-gray-300 dark:hover:border-slate-500'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            Minimal Professional
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            Clean slate tones for serious work
+          </div>
+        </div>
+        <div className="flex gap-1">
+          <div className="w-3 h-3 rounded-full bg-slate-600"></div>
+          <div className="w-3 h-3 rounded-full bg-slate-700"></div>
+        </div>
+      </div>
+    </motion.button>
+  </div>
+</div>
+ {/* Gradient Toggle */}
+ <div className="flex items-center justify-between">
+    <div className="space-y-1">
+      <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+        Use Gradients
+      </Label>
+      <p className="text-xs text-muted-foreground">
+        Toggle between gradients and solid colors
+      </p>
+    </div>
+    <Switch
+      checked={formValues.colorSettings.useGradients}
+      onCheckedChange={(checked) =>
+        setFormValues((prev) => ({
+          ...prev,
+          colorSettings: { ...prev.colorSettings, useGradients: checked }
+        }))
+      }
+    />
+  </div>
+{/* Live Preview */}
+<div className="mt-4 p-4 rounded-lg border border-gray-200 dark:border-slate-600">
+  <div className="text-xs text-muted-foreground mb-2">Live Preview:</div>
+  <div className="flex items-center gap-2">
+    <div className={`px-3 py-1 rounded text-white text-sm transition-all ${
+      formValues.colorSettings.useGradients 
+        ? formValues.colorSettings.theme === 'indigo-purple' ? 'bg-gradient-to-br from-indigo-600 to-purple-700' :
+          formValues.colorSettings.theme === 'blue-cyan' ? 'bg-gradient-to-br from-blue-600 to-cyan-500' :
+          formValues.colorSettings.theme === 'green-emerald' ? 'bg-gradient-to-br from-green-600 to-emerald-600' :
+          formValues.colorSettings.theme === 'pink-rose' ? 'bg-gradient-to-br from-pink-600 to-rose-600' :
+          formValues.colorSettings.theme === 'orange-red' ? 'bg-gradient-to-br from-orange-600 to-red-600' :
+          formValues.colorSettings.theme === 'teal-navy' ? 'bg-gradient-to-br from-teal-700 to-blue-800' :
+          formValues.colorSettings.theme === 'slate-professional' ? 'bg-gradient-to-br from-slate-700 to-slate-800' :
+          'bg-gradient-to-br from-indigo-600 to-purple-700'
+        : formValues.colorSettings.theme === 'indigo-purple' ? 'bg-indigo-600' :
+          formValues.colorSettings.theme === 'blue-cyan' ? 'bg-blue-600' :
+          formValues.colorSettings.theme === 'green-emerald' ? 'bg-green-600' :
+          formValues.colorSettings.theme === 'pink-rose' ? 'bg-pink-600' :
+          formValues.colorSettings.theme === 'orange-red' ? 'bg-orange-600' :
+          formValues.colorSettings.theme === 'teal-navy' ? 'bg-teal-700' :
+          formValues.colorSettings.theme === 'slate-professional' ? 'bg-slate-700' :
+          'bg-indigo-600'
+    }`}>
+      Button
+    </div>
+    <span className={`text-sm font-medium transition-all ${
+      formValues.colorSettings.theme === 'indigo-purple' ? 'text-indigo-600 dark:text-indigo-400' :
+      formValues.colorSettings.theme === 'blue-cyan' ? 'text-blue-600 dark:text-blue-400' :
+      formValues.colorSettings.theme === 'green-emerald' ? 'text-green-600 dark:text-green-400' :
+      formValues.colorSettings.theme === 'pink-rose' ? 'text-pink-600 dark:text-pink-400' :
+      formValues.colorSettings.theme === 'orange-red' ? 'text-orange-600 dark:text-orange-400' :
+      formValues.colorSettings.theme === 'teal-navy' ? 'text-teal-700 dark:text-teal-300' :
+      formValues.colorSettings.theme === 'slate-professional' ? 'text-slate-700 dark:text-slate-300' :
+      'text-indigo-600 dark:text-indigo-400'
+    }`}>
+      Text Sample
+    </span>
+  </div>
+</div>
           <DialogFooter className="pt-6 border-t border-gray-200/50 dark:border-slate-700/50">
             <div className="flex gap-3 w-full sm:w-auto">
               <Button 

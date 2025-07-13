@@ -5,32 +5,33 @@ import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { usePreferences } from "@/context/preferences-context"
 import { motion } from "framer-motion"
+import { useTheme } from "@/hooks/use-theme"
 
 export default function ActionButtons() {
   const router = useRouter()
   const { t } = usePreferences()
-
+  const theme = useTheme()
   const buttons = [
     {
       icon: Plus,
       label: t("newProject"),
       description: "Start a new learning journey",
-      gradient: "from-indigo-500 to-purple-600",
-      shadow: "shadow-indigo-500/25",
+      gradient: theme.getPrimaryClass(),
+      shadow: theme.getShadowClass(),
       onClick: () => router.push("/create-project")
     },
     {
       icon: Sparkles,
       label: t("quickStudy"),
       description: "Turn your material into instant study power",
-      gradient: "from-purple-500 to-pink-600",
-      shadow: "shadow-purple-500/25",
+      gradient: theme.getPrimaryClass(),
+      shadow: theme.getShadowClass(),
       onClick: () => router.push("/quick-study")
     }
   ]
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto bg-transparent">
       {buttons.map((button, index) => (
         <motion.div
           key={index}
@@ -44,9 +45,9 @@ export default function ActionButtons() {
             onClick={button.onClick}
           >
             <div className="flex flex-col items-center space-y-3">
-              <div className={`p-3 rounded-2xl bg-gradient-to-br ${button.gradient} shadow-lg ${button.shadow} group-hover:shadow-xl transition-all duration-300 group-hover:scale-110`}>
-                <button.icon className="h-8 w-8 text-white" />
-              </div>
+            <div className={`p-3 rounded-2xl ${button.gradient} shadow-lg ${button.shadow} group-hover:shadow-xl transition-all duration-300 group-hover:scale-110`}>
+  <button.icon className="h-8 w-8 text-white" />
+</div>
               <div className="text-center space-y-1">
                 <p className="font-semibold text-lg text-gray-900 dark:text-white">
                   {button.label}
