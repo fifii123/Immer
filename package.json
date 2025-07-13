@@ -58,6 +58,7 @@
     "date-fns": "latest",
     "dotenv": "^16.4.7",
     "embla-carousel-react": "8.5.1",
+    "framer-motion": "^12.23.3",
     "highlight.js": "^11.11.1",
     "i18next": "latest",
     "input-otp": "1.4.1",
