@@ -86,6 +86,7 @@ const translations: Record<Language, Record<string, string>> = {
     statistics: "Statistics",
     newProject: "New Project",
     resources: "Resources",
+    quickStudy: "Quick Study",
 
     // Project list
     allProjects: "All Projects",
@@ -552,7 +553,7 @@ const translations: Record<Language, Record<string, string>> = {
     statistics: "Statystyki",
     newProject: "Nowy Projekt",
     resources: "Zasoby",
-
+    quickStudy: "Szybka Nauka",
     // Project list
     allProjects: "Wszystkie Projekty",
     subjects: "Przedmioty",

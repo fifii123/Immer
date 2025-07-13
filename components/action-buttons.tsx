@@ -20,9 +20,9 @@ export default function ActionButtons() {
       onClick: () => router.push("/create-project")
     },
     {
-      icon: BookOpen,
-      label: t("resources"),
-      description: "Access study materials",
+      icon: Sparkles,
+      label: t("quickStudy"),
+      description: "Turn your material into instant study power",
       gradient: "from-purple-500 to-pink-600",
       shadow: "shadow-purple-500/25",
       onClick: () => router.push("/quick-study")
