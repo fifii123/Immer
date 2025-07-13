@@ -84,12 +84,12 @@ export default function ProjectList() {
         <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {projects.map((project) => (
             <div
-              key={project.project_id}
-              className={`group relative w-full rounded-lg p-4 text-left transition-colors ${
-                darkMode
-                  ? "bg-slate-800 hover:bg-slate-700 border border-slate-700"
-                  : "bg-[#f5f1eb] hover:bg-[#ede9e3]"
-              }`}
+            key={project.project_id}
+            className={`group relative w-full rounded-xl p-6 text-left transition-all duration-300 hover:shadow-xl hover:scale-[1.02] border backdrop-blur-sm ${
+              darkMode 
+                ? "bg-gradient-to-br from-slate-800/90 to-slate-900/90 hover:from-slate-700/90 hover:to-slate-800/90 border-slate-700/50 shadow-lg" 
+                : "bg-gradient-to-br from-white/90 to-gray-50/90 hover:from-gray-50/90 hover:to-white/90 border-gray-200/50 shadow-md"
+            }`}
               onClick={() => handleProjectClick(project.project_id)}
               role="button"
               tabIndex={0}
@@ -99,18 +99,22 @@ export default function ProjectList() {
                 }
               }}
             >
-              <div className="flex items-start gap-3">
-                <Package className="h-5 w-5 mt-1" />
-                <div>
-                  <h3 className="font-medium">{project.subject_name}</h3>
-                  <p className="text-sm text-muted-foreground">{"project.date"}</p>
-                  {project.note_preferences && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t("subject")}: {project.note_preferences}
-                    </p>
-                  )}
-                </div>
-              </div>
+<div className="flex items-start gap-4">
+  <div className={`p-3 rounded-lg ${darkMode ? 'bg-blue-500/20' : 'bg-blue-100'}`}>
+    <Package className={`h-6 w-6 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+  </div>
+  <div className="flex-1">
+    <h3 className="font-semibold text-lg mb-1">{project.subject_name}</h3>
+    <p className="text-sm text-muted-foreground mb-2">{"project.date"}</p>
+    {project.subject_name && (
+      <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+        darkMode ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700'
+      }`}>
+        {t("subject")}: {project.subject_name}
+      </div>
+    )}
+  </div>
+</div>
 
               <div className="absolute right-4 top-4 flex gap-2 opacity-0 transition-opacity group-hover:opacity-100">
                 <Button
