@@ -235,6 +235,56 @@ const getButtonGradient = (variant: 'primary' | 'secondary' | 'accent' = 'primar
   return themeGradients[variant] || themeGradients.primary
 }
 
+const getDashboardBackgroundClass = () => {
+  const backgroundGradients: Record<string, { light: string; dark: string }> = {
+    "indigo-purple": {
+      light: "bg-gradient-to-br from-purple-200 via-indigo-100 to-violet-200",
+      dark: "dark:from-slate-900 dark:via-purple-900 dark:to-violet-900"
+    },
+    "blue-cyan": {
+      light: "bg-gradient-to-br from-cyan-200 via-sky-100 to-blue-200",
+      dark: "dark:from-slate-900 dark:via-cyan-900 dark:to-sky-900"
+    },
+    "green-emerald": {
+      light: "bg-gradient-to-br from-emerald-200 via-teal-100 to-green-200",
+      dark: "dark:from-slate-900 dark:via-emerald-900 dark:to-teal-900"
+    },
+    "pink-rose": {
+      light: "bg-gradient-to-br from-rose-200 via-pink-100 to-pink-200",
+      dark: "dark:from-slate-900 dark:via-rose-900 dark:to-pink-900"
+    },
+    "orange-red": {
+      light: "bg-gradient-to-br from-orange-200 via-red-100 to-red-200",
+      dark: "dark:from-slate-900 dark:via-red-900 dark:to-orange-900"
+    },
+    "teal-navy": {
+      light: "bg-gradient-to-br from-teal-200 via-indigo-100 to-blue-200",
+      dark: "dark:from-slate-900 dark:via-blue-900 dark:to-indigo-900"
+    },
+    "slate-professional": {
+      light: "bg-gradient-to-br from-slate-200 via-gray-100 to-slate-200",
+      dark: "dark:from-slate-900 dark:via-slate-800 dark:to-gray-900"
+    }
+  }
+
+  const themeGradients = backgroundGradients[colorSettings.theme] || backgroundGradients["indigo-purple"]
+  return `${themeGradients.light} ${themeGradients.dark}`
+}
+
+const getDashboardBlurClass = () => {
+  const blurGradients: Record<string, string> = {
+    "indigo-purple": "bg-gradient-to-r from-indigo-500/35 via-purple-500/40 to-rose-500/35",
+    "blue-cyan": "bg-gradient-to-r from-blue-500/35 via-cyan-500/40 to-teal-500/35",
+    "green-emerald": "bg-gradient-to-r from-green-500/35 via-emerald-500/40 to-teal-500/35",
+    "pink-rose": "bg-gradient-to-r from-pink-500/35 via-rose-500/40 to-pink-500/35",
+    "orange-red": "bg-gradient-to-r from-orange-500/35 via-red-500/40 to-orange-500/35",
+    "teal-navy": "bg-gradient-to-r from-teal-500/35 via-blue-500/40 to-indigo-500/35",
+    "slate-professional": "bg-gradient-to-r from-slate-500/35 via-gray-500/40 to-slate-500/35"
+  }
+
+  return blurGradients[colorSettings.theme] || blurGradients["indigo-purple"]
+}
+
 return {
   colors,
   theme: colorSettings.theme,
@@ -244,6 +294,8 @@ return {
   getGradientTextClass,
   getShadowClass,
   getButtonGradient, // Nowa funkcja!
+  getDashboardBackgroundClass, // New function for dashboard background
+  getDashboardBlurClass, // New function for dashboard blur overlay
   isDark: darkMode
 }
 }
