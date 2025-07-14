@@ -11,14 +11,14 @@ const DashboardPage = () => {
   return (     
     <ProtectedRoute>
       <SidebarProvider>         
-        <div className="flex min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 text-foreground">           
+        <div className="flex min-h-screen bg-gradient-to-br from-purple-200 via-blue-100 via-indigo-100 to-violet-200 dark:from-slate-900 dark:via-purple-900 dark:via-indigo-900 dark:to-violet-900 text-foreground">           
           <AppSidebar />           
           <SidebarInset>             
             <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8 w-full">               
               <div className="max-w-7xl mx-auto space-y-8">
                 {/* Header Section */}
                 <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 blur-3xl" />
+                  <div className="absolute top-32 left-0 right-0 h-32 bg-gradient-to-r from-indigo-500/35 via-purple-500/40 via-pink-500/35 to-rose-500/35 blur-[66px]" />
                   <div className="relative">
                     <WelcomeHeader />
                   </div>
