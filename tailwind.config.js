@@ -136,6 +136,21 @@ module.exports = {
     'shadow-orange-500/25',
     'shadow-teal-500/25',
     'shadow-slate-500/25',
+
+    'hover:shadow-indigo-500/25',
+    'hover:shadow-indigo-500/20',
+    'hover:shadow-blue-500/25', 
+    'hover:shadow-blue-500/20',
+    'hover:shadow-green-500/25',
+    'hover:shadow-green-500/20',
+    'hover:shadow-pink-500/25',
+    'hover:shadow-pink-500/20',
+    'hover:shadow-orange-500/25',
+    'hover:shadow-orange-500/20',
+    'hover:shadow-teal-500/25',
+    'hover:shadow-teal-500/20',
+    'hover:shadow-slate-500/25',
+    'hover:shadow-slate-500/20',
   ],
   theme: {
     extend: {

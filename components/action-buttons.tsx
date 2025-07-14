@@ -19,6 +19,7 @@ export default function ActionButtons() {
       description: "Start a new learning journey",
       gradient: theme.getPrimaryClass(),
       shadow: theme.getShadowClass(),
+      hoverShadow: theme.getHoverShadowClass(),
       onClick: () => router.push("/create-project")
     },
     {
@@ -27,6 +28,7 @@ export default function ActionButtons() {
       description: "Turn your material into instant study power",
       gradient: theme.getPrimaryClass(),
       shadow: theme.getShadowClass(),
+      hoverShadow: theme.getHoverShadowClass(),
       onClick: () => router.push("/quick-study")
     }
   ]
@@ -47,8 +49,8 @@ export default function ActionButtons() {
             className={`
               w-full h-auto p-6 group transition-all duration-500 hover:shadow-2xl backdrop-blur-md border-2 relative overflow-hidden rounded-2xl
               ${darkMode 
-                ? 'bg-black/5 border-gray-600/40 hover:border-gray-500/60 hover:bg-black/8 hover:shadow-purple-500/25' 
-                : 'bg-white/5 border-gray-300/50 hover:border-gray-400/70 hover:bg-white/8 hover:shadow-purple-600/20'
+                ? `bg-black/5 border-gray-600/40 hover:border-gray-500/60 hover:bg-black/8 ${button.hoverShadow}/25` 
+                : `bg-white/5 border-gray-300/50 hover:border-gray-400/70 hover:bg-white/8 ${button.hoverShadow}/20`
               }
             `}
             onClick={button.onClick}

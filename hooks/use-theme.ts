@@ -284,7 +284,11 @@ const getDashboardBlurClass = () => {
 
   return blurGradients[colorSettings.theme] || blurGradients["indigo-purple"]
 }
-
+const getHoverShadowClass = () => {
+  // Usuwamy /25 z shadow i zwracamy czysty kolor do hover
+  const baseShadow = colors.primary.shadow.replace('/25', '')
+  return `hover:${baseShadow}`
+}
 return {
   colors,
   theme: colorSettings.theme,
@@ -293,6 +297,7 @@ return {
   getSecondaryClass,
   getGradientTextClass,
   getShadowClass,
+  getHoverShadowClass,
   getButtonGradient, // Nowa funkcja!
   getDashboardBackgroundClass, // New function for dashboard background
   getDashboardBlurClass, // New function for dashboard blur overlay
