@@ -236,22 +236,26 @@ export default function SourcesPanel({
             </div>
           )}
           
-          {/* Upload progress indicator */}
-          {uploadInProgress && (
-            <div className="mt-4 p-3 rounded-lg bg-primary/10">
-              <div className="flex items-center gap-3">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">
-                    Processing...
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    This may take a moment
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+
+{/* Processing progress indicator */}
+{(uploadInProgress || sources.some(s => s.status === 'processing')) && (
+  <div className="mt-4 p-3 rounded-lg bg-primary/10">
+    <div className="flex items-center gap-3">
+      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+      <div className="flex-1">
+        <p className="text-sm font-medium text-foreground">
+          {uploadInProgress ? 'Uploading files...' : 'Processing content...'}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {uploadInProgress 
+            ? 'Files are being uploaded'
+            : 'Content is being extracted and analyzed'
+          }
+        </p>
+      </div>
+    </div>
+  </div>
+)}
         </div>
         
         {/* Footer Actions - tylko gdy są sources */}

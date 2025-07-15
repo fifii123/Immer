@@ -59,11 +59,73 @@ export function useQuickStudy() {
   const [fetchingSources, setFetchingSources] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [initializing, setInitializing] = useState(true)
-
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
   // Initialize session on mount
   useEffect(() => {
     initializeSession()
   }, [])
+
+// Poll for source status updates when there are processing sources
+const pollSourceStatus = useCallback(async () => {
+  if (!sessionId) return
+  
+  try {
+    const response = await fetch(`/api/quick-study/sessions/${sessionId}`)
+    if (response.ok) {
+      const session: Session = await response.json()
+      
+      // Update sources if any status changed
+      setSources(prevSources => {
+        const hasChanges = prevSources.some(prevSource => {
+          const newSource = session.sources.find(s => s.id === prevSource.id)
+          return newSource && newSource.status !== prevSource.status
+        })
+        
+        if (hasChanges) {
+          console.log('📊 Source status updated via polling')
+          
+          // Auto-select first ready source if current selection is still processing
+          if (selectedSource && selectedSource.status === 'processing') {
+            const updatedSelected = session.sources.find(s => s.id === selectedSource.id)
+            if (updatedSelected && updatedSelected.status === 'ready') {
+              setSelectedSource(updatedSelected)
+            }
+          }
+          
+          return session.sources
+        }
+        
+        return prevSources
+      })
+    }
+  } catch (err) {
+    console.error('Polling error:', err)
+  }
+}, [sessionId, selectedSource])
+
+// Start/stop polling based on processing sources
+useEffect(() => {
+  const hasProcessingSources = sources.some(source => source.status === 'processing')
+  
+  if (hasProcessingSources && !pollingInterval) {
+    // Start polling every 2 seconds
+    const interval = setInterval(pollSourceStatus, 500)
+    setPollingInterval(interval)
+    console.log('🔄 Started polling for source updates')
+  } else if (!hasProcessingSources && pollingInterval) {
+    // Stop polling
+    clearInterval(pollingInterval)
+    setPollingInterval(null)
+    console.log('⏹️ Stopped polling - all sources ready')
+  }
+  
+  // Cleanup on unmount
+  return () => {
+    if (pollingInterval) {
+      clearInterval(pollingInterval)
+    }
+  }
+}, [sources, pollingInterval, pollSourceStatus])
 
   // Initialize session - try to restore or create new
   const initializeSession = useCallback(async () => {

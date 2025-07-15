@@ -58,13 +58,14 @@ export default function AddSourceModal({
     onClose()
   }
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files
-    if (files && files.length > 0) {
-      onFileUpload(Array.from(files))
-      // Don't close modal here - let parent handle success/error
-    }
+const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const files = event.target.files
+  if (files && files.length > 0) {
+    onFileUpload(Array.from(files))
+    // Auto-close modal after successful file selection
+    handleClose()
   }
+}
 
   const handleTextSubmit = async () => {
     if (!textContent.trim()) return
@@ -163,22 +164,41 @@ export default function AddSourceModal({
 
           {/* Content Input Based on Selected Type */}
           <div className="space-y-4">
-            {selectedType === 'file' && (
-              <div>
-                <Label className="text-sm font-medium text-foreground">
-                  Select Files
-                </Label>
-                <div className="mt-2">
-                  <input
-                    type="file"
-                    multiple
-                    accept=".pdf,.txt,.docx,.doc,.jpg,.jpeg,.png,.gif,.mp3,.wav,.m4a,.mp4,.avi,.mov"
-                    onChange={handleFileSelect}
-                    className="w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
-                  />
-                </div>
-              </div>
-            )}
+{selectedType === 'file' && (
+  <div className="space-y-4">
+    <div>
+      <Label className="block text-sm font-medium mb-2 text-foreground">
+        Select Files
+      </Label>
+      <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
+        <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
+        <div className="space-y-2">
+          <p className="text-sm text-foreground">
+            Drop files here or click to browse
+          </p>
+          <p className="text-xs text-muted-foreground">
+            PDF, Word, images, audio, video files supported
+          </p>
+        </div>
+        <input
+          type="file"
+          multiple
+          onChange={handleFileSelect}
+          disabled={uploadInProgress}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+          accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.mp3,.wav,.mp4,.avi,.mov"
+        />
+      </div>
+    </div>
+    
+    {uploadInProgress && (
+      <div className="flex items-center gap-2 text-sm text-primary">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Processing files...
+      </div>
+    )}
+  </div>
+)}
 
             {selectedType === 'text' && (
               <div className="space-y-3">
@@ -285,12 +305,6 @@ export default function AddSourceModal({
               </Button>
             )}
             
-            {selectedType === 'file' && uploadInProgress && (
-              <div className="flex items-center gap-2 text-sm text-primary">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Uploading...
-              </div>
-            )}
           </div>
         </div>
       </DialogContent>
