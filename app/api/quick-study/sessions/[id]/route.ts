@@ -48,7 +48,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const sessionId = params.id
+    const { id: sessionId } = await params
     
     console.log(`🔍 Looking for session: ${sessionId}`)
     

@@ -143,7 +143,7 @@ async function streamChatResponse(
     
     // Create streaming completion
     const completion = await openai.chat.completions.create({
-      model: "gpt-4-1106-preview",
+      model: "gpt-4o",
       messages: messages as any,
       temperature: 0.7,
       max_tokens: 1500,

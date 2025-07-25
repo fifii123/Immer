@@ -186,7 +186,7 @@ async function generateKnowledgeMapFromText(extractedText: string, sourceName: s
     const includeConnections = settings?.includeConnections !== false // default true
     
     const response = await openai.chat.completions.create({
-      model: "gpt-4-1106-preview",
+      model: "gpt-4o",
       messages: [
         {
           role: "system",

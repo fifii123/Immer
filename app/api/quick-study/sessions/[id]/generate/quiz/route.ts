@@ -182,7 +182,7 @@ async function generateQuizFromText(extractedText: string, sourceName: string, s
     const timeLimit = settings?.timeLimit || Math.max(questionCount * 2, 10) // 2 minutes per question, min 10
     
     const response = await openai.chat.completions.create({
-      model: "gpt-4-1106-preview",
+      model: "gpt-3.5-turbo",
       messages: [
         {
           role: "system",

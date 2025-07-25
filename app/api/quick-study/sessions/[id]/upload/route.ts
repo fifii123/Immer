@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server'
 import PDFParser from 'pdf2json'
 import * as mammoth from 'mammoth'
 import { OpenAI } from 'openai'
+import { TextOptimizationService } from '@/app/services/TextOptimizationService'
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -19,6 +20,7 @@ interface Source {
   duration?: string;
   pages?: number;
   extractedText?: string;
+  optimizedText?: string;
   wordCount?: number;
   processingError?: string;
   subtype?: string;
@@ -27,6 +29,16 @@ interface Source {
     confidence?: number;
     language?: string;
     apiCost?: number;
+  };
+  optimizationStats?: {
+    originalLength: number;
+    optimizedLength: number;
+    compressionRatio: number;
+    processingCost: number;
+    chunkCount: number;
+    keyTopics: string[];
+    optimizedAt: Date;
+    processingTimeMs: number;
   };
 }
 
@@ -211,12 +223,106 @@ async function processFileContent(file: File, source: Source): Promise<void> {
     }
     
     // Final validation
-    if (!source.extractedText || source.extractedText.length < 10) {
-      throw new Error('No meaningful text content could be extracted from this file')
-    }
+// Final validation
+if (!source.extractedText || source.extractedText.length < 10) {
+  throw new Error('No meaningful text content could be extracted from this file')
+}
+
+source.status = 'ready'
+console.log(`✅ File processing completed successfully: ${file.name}`)
+
+// =================== AUTO-OPTIMIZATION ===================
+console.log(`\n🔍 CHECKING IF OPTIMIZATION IS NEEDED`)
+console.log(`📊 Extracted text length: ${source.extractedText.length} characters`)
+console.log(`📊 Word count: ${source.wordCount || 'unknown'}`)
+
+if (source.extractedText.length > 3000) {
+  console.log(`\n🚀 STARTING AUTO-OPTIMIZATION (text > 3000 chars)`)
+  console.log(`${'='.repeat(60)}`)
+  console.log(`📄 File: ${source.name}`)
+  console.log(`📄 Type: ${source.type}`)
+  console.log(`📄 Original length: ${source.extractedText.length} characters`)
+  console.log(`${'='.repeat(60)}`)
+  
+  const optimizationStartTime = Date.now();
+  
+  try {
+    const optimizationResult = await TextOptimizationService.optimizeText(
+      source.extractedText,
+      source.name
+    );
     
-    source.status = 'ready'
-    console.log(`✅ File processing completed successfully: ${file.name}`)
+    const processingTimeMs = Date.now() - optimizationStartTime;
+    
+    // Store optimization results
+    source.optimizedText = optimizationResult.optimizedText;
+    source.optimizationStats = {
+      originalLength: optimizationResult.originalLength,
+      optimizedLength: optimizationResult.optimizedLength,
+      compressionRatio: optimizationResult.compressionRatio,
+      processingCost: optimizationResult.processingCost,
+      chunkCount: optimizationResult.chunkCount,
+      keyTopics: optimizationResult.keyTopics,
+      optimizedAt: new Date(),
+      processingTimeMs: processingTimeMs
+    };
+    
+    // =================== DETAILED RESULTS LOG ===================
+    console.log(`\n✅ OPTIMIZATION COMPLETED SUCCESSFULLY!`)
+    console.log(`${'='.repeat(60)}`)
+    console.log(`📄 File: ${source.name}`)
+    console.log(`⏱️  Processing time: ${(processingTimeMs / 1000).toFixed(2)}s`)
+    console.log(``)
+    console.log(`📊 COMPRESSION RESULTS:`)
+    console.log(`   Original length: ${optimizationResult.originalLength.toLocaleString()} chars`)
+    console.log(`   Optimized length: ${optimizationResult.optimizedLength.toLocaleString()} chars`)
+    console.log(`   Compression ratio: ${(optimizationResult.compressionRatio * 100).toFixed(1)}%`)
+    console.log(`   Space saved: ${((1 - optimizationResult.compressionRatio) * 100).toFixed(1)}%`)
+    console.log(`   Characters saved: ${(optimizationResult.originalLength - optimizationResult.optimizedLength).toLocaleString()}`)
+    console.log(``)
+    console.log(`💰 COST ANALYSIS:`)
+    console.log(`   Processing cost: $${optimizationResult.processingCost.toFixed(6)}`)
+    console.log(`   Chunks processed: ${optimizationResult.chunkCount}`)
+    console.log(`   Cost per chunk: $${(optimizationResult.processingCost / optimizationResult.chunkCount).toFixed(6)}`)
+    console.log(``)
+    console.log(`🎯 KEY TOPICS IDENTIFIED:`)
+    optimizationResult.keyTopics.slice(0, 8).forEach((topic, index) => {
+      console.log(`   ${index + 1}. ${topic}`)
+    });
+    console.log(``)
+    console.log(`💡 POTENTIAL SAVINGS PER GENERATION:`)
+    const originalTokens = Math.ceil(optimizationResult.originalLength / 4);
+    const optimizedTokens = Math.ceil(optimizationResult.optimizedLength / 4);
+    const tokenSavings = originalTokens - optimizedTokens;
+    const costSavingsPerGeneration = (tokenSavings / 1000) * 0.001; // GPT-3.5 input cost
+    console.log(`   Tokens saved per generation: ${tokenSavings.toLocaleString()}`)
+    console.log(`   Cost saved per generation: $${costSavingsPerGeneration.toFixed(6)}`)
+    console.log(`   Estimated 10 generations savings: $${(costSavingsPerGeneration * 10).toFixed(4)}`)
+    console.log(``)
+    console.log(`📋 QUALITY PREVIEW:`)
+    console.log(`   Original (first 200 chars): "${source.extractedText.substring(0, 200)}..."`)
+    console.log(`   Optimized (first 200 chars): "${optimizationResult.optimizedText.substring(0, 200)}..."`)
+    console.log(`${'='.repeat(60)}\n`)
+    
+  } catch (error) {
+    const processingTimeMs = Date.now() - optimizationStartTime;
+    console.log(`\n❌ OPTIMIZATION FAILED`)
+    console.log(`${'='.repeat(60)}`)
+    console.log(`📄 File: ${source.name}`)
+    console.log(`⏱️  Failed after: ${(processingTimeMs / 1000).toFixed(2)}s`)
+    console.log(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    console.log(`🔄 Will continue with original text for generation`)
+    console.log(`${'='.repeat(60)}\n`)
+  }
+} else {
+  console.log(`\n⏭️  SKIPPING OPTIMIZATION (text < 3000 chars)`)
+  console.log(`📊 Text length: ${source.extractedText.length} characters`)
+  console.log(`💡 Optimization threshold: 3000 characters`)
+  console.log(`✅ Original text will be used directly\n`)
+}
+
+logCompleteSourceStructure(source);
+// =================== END AUTO-OPTIMIZATION ===================
     
   } catch (error) {
     console.error(`❌ Processing failed for ${file.name}:`, error)
@@ -633,4 +739,41 @@ function estimateAudioDuration(sizeBytes: number): number {
 function estimateVideoDuration(sizeBytes: number): number {
   // Rough estimate: 2Mbps video = ~15MB per minute
   return (sizeBytes / 1024 / 1024 / 15) * 60
+}
+
+// Helper function to log complete structure
+function logCompleteSourceStructure(source: any) {
+  console.log(`\n🔍 COMPLETE SOURCE STRUCTURE DUMP:`);
+  console.log(`${'='.repeat(100)}`);
+  
+  const sourceStructure = {
+    id: source.id,
+    name: source.name,
+    type: source.type,
+    status: source.status,
+    size: source.size,
+    duration: source.duration,
+    pages: source.pages,
+    wordCount: source.wordCount,
+    processingError: source.processingError,
+    subtype: source.subtype,
+    metadata: source.metadata,
+    
+    // TEXT CONTENT LENGTHS
+    extractedTextLength: source.extractedText?.length || 0,
+    optimizedTextLength: source.optimizedText?.length || 0,
+    
+    // OPTIMIZATION STATS
+    optimizationStats: source.optimizationStats,
+    
+    // FOR GENERATION ENDPOINTS
+    textThatWillBeUsed: {
+      source: source.optimizedText ? 'optimizedText' : 'extractedText',
+      length: (source.optimizedText || source.extractedText || '').length,
+      preview: (source.optimizedText || source.extractedText || '')
+    }
+  };
+  
+  console.log(JSON.stringify(sourceStructure, null, 2));
+  console.log(`${'='.repeat(100)}\n`);
 }
