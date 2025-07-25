@@ -254,18 +254,19 @@ if (source.extractedText.length > 3000) {
     
     const processingTimeMs = Date.now() - optimizationStartTime;
     
-    // Store optimization results
-    source.optimizedText = optimizationResult.optimizedText;
-    source.optimizationStats = {
-      originalLength: optimizationResult.originalLength,
-      optimizedLength: optimizationResult.optimizedLength,
-      compressionRatio: optimizationResult.compressionRatio,
-      processingCost: optimizationResult.processingCost,
-      chunkCount: optimizationResult.chunkCount,
-      keyTopics: optimizationResult.keyTopics,
-      optimizedAt: new Date(),
-      processingTimeMs: processingTimeMs
-    };
+// Store optimization results
+source.optimizedText = optimizationResult.optimizedText;
+source.optimizationStats = {
+  originalLength: optimizationResult.originalLength,
+  optimizedLength: optimizationResult.optimizedLength,
+  compressionRatio: optimizationResult.compressionRatio,
+  processingCost: optimizationResult.processingCost,
+  chunkCount: optimizationResult.chunkCount,
+  keyTopics: optimizationResult.keyTopics,
+  strategy: optimizationResult.strategy, // 🔧 DODANE - KLUCZOWE!
+  optimizedAt: new Date(),
+  processingTimeMs: processingTimeMs
+};
     
     // =================== DETAILED RESULTS LOG ===================
     console.log(`\n✅ OPTIMIZATION COMPLETED SUCCESSFULLY!`)
