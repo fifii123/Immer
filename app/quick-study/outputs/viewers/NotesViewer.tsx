@@ -1,3 +1,4 @@
+// app/quick-study/outputs/viewers/NotesViewer.tsx
 "use client"
 
 import React from 'react'
@@ -8,8 +9,13 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/components/ui/use-toast"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism'
+
+
+import 'katex/dist/katex.min.css'
 
 interface Output {
   id: string;
@@ -18,7 +24,7 @@ interface Output {
   content?: string;
   sourceId: string;
   createdAt: Date;
-  noteType?: string; // Add note type to track which type was generated
+  noteType?: string;
 }
 
 interface NotesViewerProps {
@@ -68,12 +74,12 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
       await navigator.clipboard.writeText(output.content)
       toast({
         title: "Copied!",
-        description: "Notes copied to clipboard",
+        description: "Notes content copied to clipboard"
       })
     } catch (error) {
       toast({
         title: "Copy failed",
-        description: "Unable to copy to clipboard",
+        description: "Could not copy to clipboard",
         variant: "destructive"
       })
     }
@@ -81,6 +87,7 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
 
   const handleDownload = () => {
     if (!output?.content) return
+    
     const blob = new Blob([output.content], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -92,7 +99,7 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
     URL.revokeObjectURL(url)
   }
 
-  if (!output || !output.content) {
+  if (!output) {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
@@ -100,38 +107,36 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
             <PenTool className="h-8 w-8 text-muted-foreground" />
           </div>
           <h3 className="text-lg font-semibold mb-2 text-foreground">
-            No notes content
+            Notes not available
           </h3>
           <p className="text-sm text-muted-foreground">
-            The notes content is not available
+            Unable to load notes content
           </p>
         </div>
       </div>
     )
   }
 
-  const noteTypeInfo = getNoteTypeInfo((output as any).noteType)
+  const noteTypeInfo = getNoteTypeInfo(output.noteType)
 
   return (
-    <article className="h-full flex flex-col p-4 md:p-8">
+    <article className="h-full flex flex-col">
       {/* Header */}
-      <header className="text-center mb-8">
-        <div className="inline-flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-primary/10">
-            <PenTool className="h-5 w-5 text-primary" />
-          </div>
-          <div className="text-left">
-            <h2 className="text-2xl font-semibold text-foreground">
-              {output.title}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {selectedSource ? `Study notes from ${selectedSource.name}` : 'Study Notes'}
+      <header className="text-center py-6 border-b border-border">
+        <div className="max-w-2xl mx-auto px-6">
+          <h2 className="text-2xl font-bold mb-2 text-foreground">
+            {output.title}
+          </h2>
+          <div className="text-sm text-muted-foreground">
+            <p>
+              {selectedSource ? 
+                `Study notes from ${selectedSource.name}` : 'Study Notes'}
             </p>
           </div>
         </div>
 
         {/* Note Type Badge */}
-        <div className="flex justify-center mb-4">
+        <div className="flex justify-center mt-4 mb-4">
           <Badge className={`${noteTypeInfo.color} px-3 py-1 text-sm font-medium`}>
             <span className="flex items-center gap-1">
               {noteTypeInfo.icon}
@@ -159,7 +164,8 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
           <div className="p-6 rounded-xl bg-muted/50">
             <div className="markdown-content text-sm text-foreground">
               <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex]}
                 components={{
                   h1: ({ node, ...props }) => (
                     <h1 className="text-3xl font-bold mb-6 mt-8 pb-3 border-b-2 border-gray-200 dark:border-gray-700 text-foreground" {...props} />
@@ -183,39 +189,32 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
                     <p className="mb-4 leading-relaxed text-foreground" {...props} />
                   ),
                   ul: ({ node, ...props }) => (
-                    <ul className="list-disc list-inside space-y-2 mb-4 ml-4 text-foreground" {...props} />
+                    <ul className="list-disc list-inside space-y-2 mb-4 ml-4" {...props} />
                   ),
                   ol: ({ node, ...props }) => (
-                    <ol className="list-decimal list-inside space-y-2 mb-4 ml-4 text-foreground" {...props} />
+                    <ol className="list-decimal list-inside space-y-2 mb-4 ml-4" {...props} />
                   ),
                   li: ({ node, ...props }) => (
                     <li className="mb-1 leading-relaxed" {...props} />
                   ),
                   blockquote: ({ node, ...props }) => (
-                    <blockquote
-                      className="border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-900/20 pl-4 py-3 mb-4 italic text-blue-900 dark:text-blue-100"
-                      {...props}
+                    <blockquote 
+                      className="border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-900/20 pl-4 py-3 mb-4 italic rounded-r-md" 
+                      {...props} 
                     />
                   ),
-                  code({ node, inline, className, children, ...props }: any) {
+                  code: ({ node, inline, className, children, ...props }) => {
                     const match = /language-(\w+)/.exec(className || '')
                     return !inline && match ? (
-                      <div className="mb-6">
-                        <div className="bg-gray-900 dark:bg-gray-950 rounded-lg overflow-hidden">
-                          <div className="bg-gray-800 px-4 py-2 text-sm text-gray-300">
-                            {match[1] || 'Code'}
-                          </div>
-                          <SyntaxHighlighter
-                            style={tomorrow}
-                            language={match[1]}
-                            PreTag="div"
-                            className="!bg-gray-900 !p-4 !m-0 text-sm"
-                            {...props}
-                          >
-                            {String(children).replace(/\n$/, '')}
-                          </SyntaxHighlighter>
-                        </div>
-                      </div>
+                      <SyntaxHighlighter
+                        style={tomorrow}
+                        language={match[1]}
+                        PreTag="div"
+                        className="rounded-lg mb-4"
+                        {...props}
+                      >
+                        {String(children).replace(/\n$/, '')}
+                      </SyntaxHighlighter>
                     ) : (
                       <code
                         className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-sm font-mono"
@@ -239,7 +238,7 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
                   table: ({ node, ...props }) => (
                     <div className="overflow-x-auto mb-6">
                       <table
-                        className="min-w-full border-collapse border border-gray-300 dark:border-gray-600"
+                        className="min-w-full border-collapse border border-gray-300 dark:border-gray-600 rounded-lg"
                         {...props}
                       />
                     </div>

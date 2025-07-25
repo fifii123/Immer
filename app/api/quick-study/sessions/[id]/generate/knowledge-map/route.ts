@@ -1,30 +1,18 @@
+// app/api/quick-study/sessions/[id]/generate/knowledge-map/route.ts
 export const runtime = 'nodejs'
 import { NextRequest } from 'next/server'
 import { OpenAI } from 'openai'
+import { QuickStudyTextService } from '@/app/services/QuickStudyTextService'
+import { Source, SessionData } from '@/app/types/QuickStudyTypes'
 
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
 
-// Types
-interface Source {
-  id: string;
-  name: string;
-  type: 'pdf' | 'youtube' | 'text' | 'docx' | 'image' | 'audio' | 'url';
-  status: 'ready' | 'processing' | 'error';
-  size?: string;
-  duration?: string;
-  pages?: number;
-  extractedText?: string;
-  wordCount?: number;
-  processingError?: string;
-  subtype?: string;
-}
-
 interface KnowledgeNode {
   id: string;
-  title: string;
+  title: string; // ← Frontend oczekuje 'title' nie 'label'
   level: number; // 0=main, 1=category, 2=concept
   category?: string;
   description?: string; // Generated on-demand
@@ -39,14 +27,14 @@ interface KnowledgeMap {
   title: string;
   description: string;
   nodes: KnowledgeNode[];
-  edges: { from: string; to: string; type: 'hierarchy' | 'relation' }[];
+  edges: { from: string; to: string; type: 'hierarchy' | 'relation' }[]; // ← Frontend oczekuje 'edges' nie 'connections'
   totalConcepts: number;
   categories: string[];
 }
 
 interface Output {
   id: string;
-  type: 'flashcards' | 'quiz' | 'notes' | 'summary' | 'timeline' | 'knowledge-map';
+  type: 'flashcards' | 'quiz' | 'notes' | 'summary' | 'concepts' | 'mindmap' | 'knowledge-map';
   title: string;
   preview: string;
   status: 'ready' | 'generating' | 'error';
@@ -54,12 +42,6 @@ interface Output {
   createdAt: Date;
   count?: number;
   content?: string;
-}
-
-interface SessionData {
-  sources: Source[]
-  outputs: Output[]
-  createdAt: Date
 }
 
 // Global in-memory store
@@ -77,7 +59,7 @@ export async function POST(
   try {
     const sessionId = params.id
     
-    console.log(`🗺️ Knowledge Map generation request for session: ${sessionId}`)
+    console.log(`🗺️ Enhanced Knowledge Map generation request for session: ${sessionId}`)
     
     // Parse request body
     const body = await request.json()
@@ -117,34 +99,40 @@ export async function POST(
       )
     }
     
-    console.log(`⚡ Processing ${source.name} (type: ${source.type}) for knowledge map`)
+    console.log(`🤖 Processing enhanced knowledge map generation for source: ${source.name}`)
     
-    // Generate content based on source type
-    let generatedContent: string
+    // 🚀 NEW: Get processing statistics for monitoring
+    const processingStats = QuickStudyTextService.getProcessingStats(source, 'concepts') // Using concepts config for knowledge maps
+    console.log(`📊 Processing Stats:`, {
+      textSource: processingStats.textSource,
+      originalLength: processingStats.originalLength,
+      processedLength: processingStats.processedLength,
+      optimizationQuality: processingStats.optimizationQuality,
+      recommended: processingStats.recommendedForTask
+    })
     
- 
-        if (!source.extractedText) {
-          return Response.json(
-            { message: 'No text content available for processing' },
-            { status: 400 }
-          )
-        }
-        generatedContent = await generateKnowledgeMapFromText(source.extractedText, source.name, settings)
-   
-        
-  
+    if (!source.extractedText) {
+      return Response.json(
+        { message: 'No text content available for processing' },
+        { status: 400 }
+      )
+    }
+
+    // 🚀 NEW: Generate enhanced knowledge map using QuickStudyTextService
+    const generatedContent = await generateEnhancedKnowledgeMapFromText(source, settings)
     
-    // Parse the knowledge map content to get concept count
-    let conceptCount = 0
+    // Parse the knowledge map content to get node count
+    let nodeCount = 0
     try {
       const mapData = JSON.parse(generatedContent)
-      conceptCount = mapData.nodes?.length || 0
+      nodeCount = mapData.nodes?.length || 0
     } catch (e) {
       console.error("Cannot parse knowledge map content:", e)
+      console.error("Generated content:", generatedContent.substring(0, 500) + "...")
     }
     
     // Create preview
-    const preview = `${conceptCount} interactive concepts with connections`
+    const preview = `${nodeCount} interactive concepts with connections`
     
     // Create output
     const output: Output = {
@@ -155,20 +143,20 @@ export async function POST(
       status: 'ready',
       sourceId: sourceId,
       createdAt: new Date(),
-      count: conceptCount,
+      count: nodeCount,
       content: generatedContent
     }
     
     // Add to session
     sessionData.outputs.push(output)
     
-    console.log(`✅ Generated knowledge map: ${output.id}`)
+    console.log(`✅ Generated enhanced knowledge map: ${output.id}`)
     console.log(`📊 Session now has ${sessionData.outputs.length} total outputs`)
     
     return Response.json(output)
     
   } catch (error) {
-    console.error('❌ Error generating knowledge map:', error)
+    console.error('❌ Error generating enhanced knowledge map:', error)
     
     return Response.json(
       { message: 'Failed to generate knowledge map' },
@@ -177,20 +165,126 @@ export async function POST(
   }
 }
 
-// Generate knowledge map from text using AI
-async function generateKnowledgeMapFromText(extractedText: string, sourceName: string, settings: any): Promise<string> {
-  console.log(`🤖 Generating AI knowledge map for: ${sourceName}`)
+// Enhanced knowledge map generation using QuickStudyTextService
+async function generateEnhancedKnowledgeMapFromText(source: Source, settings: any): Promise<string> {
+  console.log(`🤖 Generating enhanced AI knowledge map for: ${source.name}`)
   
   try {
-    const maxNodes = settings?.maxNodes || 15
-    const includeConnections = settings?.includeConnections !== false // default true
+    // 🚀 NEW: Create contextual system prompt using QuickStudyTextService
+    const baseSystemPrompt = createKnowledgeMapSystemPrompt(source, settings)
+    const enhancedSystemPrompt = QuickStudyTextService.createContextualPrompt(
+      source, 
+      'concepts', // Using concepts task type for knowledge maps
+      baseSystemPrompt
+    )
     
+    // 🚀 NEW: Get optimal text for processing
+    const textResult = QuickStudyTextService.getProcessingText(source, 'concepts')
+    
+    // Enhanced logging
+    console.log(`📝 Using ${textResult.source} text for knowledge map generation:`)
+    console.log(`   - Length: ${textResult.text.length.toLocaleString()} characters`)
+    if (textResult.stats?.compressionRatio) {
+      console.log(`   - Compression: ${(textResult.stats.compressionRatio * 100).toFixed(1)}%`)
+    }
+    if (textResult.stats?.keyTopics?.length) {
+      console.log(`   - Key topics: ${textResult.stats.keyTopics.slice(0, 5).join(', ')}${textResult.stats.keyTopics.length > 5 ? ` (+${textResult.stats.keyTopics.length - 5} more)` : ''}`)
+    }
+
+    const complexity = settings?.complexity || 'medium' // simple, medium, detailed
+    const includeConnections = settings?.includeConnections !== false // default true
+    const maxNodes = settings?.maxNodes || 20
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "system",
-          content: `Jesteś ekspertem w tworzeniu interaktywnych map wiedzy. Twoim zadaniem jest stworzenie strukturalnej mapy konceptów, która:
+          content: enhancedSystemPrompt
+        },
+        {
+          role: "user",
+          content: `Przeanalizuj poniższy materiał i stwórz mapę wiedzy pokazującą kluczowe pojęcia i ich powiązania.
+
+${textResult.text}
+
+WYMAGANIA:
+- Kompleksowość: ${complexity}
+- Maksymalna liczba węzłów: ${maxNodes}
+- ${includeConnections ? 'Szczegółowe połączenia między pojęciami' : 'Skupienie na hierarchii pojęć'}
+- Wizualna reprezentacja struktury wiedzy
+- Różne poziomy ważności węzłów
+- Kategorie tematyczne dla organizacji`
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 4000,
+      response_format: { type: "json_object" }
+    })
+
+    let content = response.choices[0]?.message?.content || '{}'
+    
+    // 🔧 Clean markdown code blocks if present
+    content = content.replace(/```json\s*|\s*```/g, '').trim()
+    
+    // Validate and enhance JSON structure
+    let parsed = JSON.parse(content)
+    if (!parsed.nodes || !Array.isArray(parsed.nodes)) {
+      throw new Error('Invalid knowledge map format generated by AI')
+    }
+    
+    // Ensure nodes have proper structure that frontend expects
+    parsed.nodes = parsed.nodes.map((node: any, index: number) => ({
+      id: node.id || `node${index + 1}`,
+      title: node.title || `Concept ${index + 1}`, // Frontend oczekuje 'title'
+      level: Math.max(0, Math.min(2, node.level || 0)), // Clamp to 0-2
+      category: node.category || 'General',
+      importance: ['high', 'medium', 'low'].includes(node.importance) ? node.importance : 'medium',
+      connections: Array.isArray(node.connections) ? node.connections : [],
+      x: node.x || 0,
+      y: node.y || 0
+      // description will be generated on-demand by frontend
+    }))
+    
+    // Ensure edges exist and are valid (frontend oczekuje 'edges' nie 'connections')
+    if (!parsed.edges || !Array.isArray(parsed.edges)) {
+      parsed.edges = []
+    }
+    
+    // Validate edges reference existing nodes
+    const nodeIds = new Set(parsed.nodes.map((n: any) => n.id))
+    parsed.edges = parsed.edges.filter((edge: any) => 
+      nodeIds.has(edge.from) && nodeIds.has(edge.to)
+    ).map((edge: any) => ({
+      from: edge.from,
+      to: edge.to,
+      type: ['hierarchy', 'relation'].includes(edge.type) ? edge.type : 'hierarchy'
+    }))
+    
+    // Update counts and categories
+    parsed.totalConcepts = parsed.nodes.length
+    parsed.categories = [...new Set(parsed.nodes.map((node: any) => node.category))]
+    
+    console.log(`✅ Enhanced knowledge map generated successfully`)
+    console.log(`   - Map created from ${textResult.source} text`)
+    console.log(`   - Processing length: ${textResult.text.length} characters`)
+    console.log(`   - Nodes: ${parsed.nodes.length}, Edges: ${parsed.edges.length}`)
+    
+    return JSON.stringify(parsed)
+    
+  } catch (error) {
+    console.error('❌ Error generating enhanced knowledge map:', error)
+    throw error
+  }
+}
+
+// Create knowledge map-specific system prompt
+function createKnowledgeMapSystemPrompt(source: Source, settings: any): string {
+  const complexity = settings?.complexity || 'medium'
+  const includeConnections = settings?.includeConnections !== false
+  const maxNodes = settings?.maxNodes || 20
+
+  return `Jesteś ekspertem w tworzeniu interaktywnych map wiedzy. Twoim zadaniem jest stworzenie strukturalnej mapy konceptów, która:
 
 1. Identyfikuje główne tematy i ich hierarchię (3 poziomy max)
 2. Tworzy logiczne połączenia między konceptami  
@@ -227,74 +321,20 @@ Format odpowiedzi - MUSI być poprawny JSON:
   "categories": ["Kategoria 1", "Kategoria 2"]
 }
 
-Zasady:
+ZASADY TWORZENIA:
 - Maksymalnie ${maxNodes} węzłów
 - Level 0: 1 główny temat
 - Level 1: 3-5 kategorii głównych  
-- Level 2: 8-12 szczegółowych konceptów
+- Level 2: 8-15 szczegółowych konceptów
 - Importance: high = kluczowe koncepty, medium = ważne detale, low = dodatkowe info
-- Connections: max 3 połączenia per węzeł
-- Tytuły: krótkie, jednoznaczne, przyjazne studentom`
-        },
-        {
-          role: "user",
-          content: `Stwórz strukturalną mapę wiedzy na podstawie poniższego tekstu. Skup się na hierarchii konceptów i ich relacjach.
+- ${includeConnections ? 'Connections: max 3 połączenia per węzeł' : 'Minimalne connections, focus na hierarchii'}
+- Tytuły: krótkie, jednoznaczne, przyjazne studentom
+- Edges: hierarchy dla relacji rodzic-dziecko, relation dla powiązań tematycznych
 
-${includeConnections ? 'Uwzględnij połączenia między powiązanymi konceptami.' : 'Skup się głównie na hierarchii.'}
+MATERIAŁ ŹRÓDŁOWY: "${source.name}" (${source.type})
+Typ pliku: ${source.type}
+${source.wordCount ? `Liczba słów: ${source.wordCount.toLocaleString()}` : ''}
+${source.pages ? `Liczba stron: ${source.pages}` : ''}
 
-Materiał z "${sourceName}":
-${extractedText.slice(0, 12000)}`
-        }
-      ],
-      temperature: 0.3, // Lower for more structured output
-      max_tokens: 2500,
-      response_format: { type: "json_object" }
-    })
-    
-    const content = response.choices[0].message.content
-    
-    if (!content) {
-      throw new Error('No content generated by AI')
-    }
-    
-    // Validate JSON structure
-    const parsed = JSON.parse(content)
-    if (!parsed.nodes || !Array.isArray(parsed.nodes)) {
-      throw new Error('Invalid knowledge map format generated by AI')
-    }
-    
-    // Ensure nodes have proper IDs and structure
-    parsed.nodes = parsed.nodes.map((node: any, index: number) => ({
-      id: node.id || `node${index + 1}`,
-      title: node.title || `Concept ${index + 1}`,
-      level: Math.max(0, Math.min(2, node.level || 0)), // Clamp to 0-2
-      category: node.category || 'General',
-      importance: ['high', 'medium', 'low'].includes(node.importance) ? node.importance : 'medium',
-      connections: Array.isArray(node.connections) ? node.connections : [],
-      x: node.x || 0,
-      y: node.y || 0
-    }))
-    
-    // Ensure edges exist and are valid
-    if (!parsed.edges || !Array.isArray(parsed.edges)) {
-      parsed.edges = []
-    }
-    
-    // Validate edges reference existing nodes
-    const nodeIds = new Set(parsed.nodes.map((n: any) => n.id))
-    parsed.edges = parsed.edges.filter((edge: any) => 
-      nodeIds.has(edge.from) && nodeIds.has(edge.to)
-    )
-    
-    // Update counts and categories
-    parsed.totalConcepts = parsed.nodes.length
-    parsed.categories = [...new Set(parsed.nodes.map((node: any) => node.category))]
-    
-    console.log(`✅ AI knowledge map generated successfully with ${parsed.nodes.length} nodes and ${parsed.edges.length} edges`)
-    return JSON.stringify(parsed)
-    
-  } catch (error) {
-    console.error('Error generating knowledge map with AI:', error)
-    throw new Error(`AI generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-  }
+WAŻNE: Bazuj TYLKO na pojęciach i relacjach obecnych w dostarczonym materiale źródłowym.`
 }

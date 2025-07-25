@@ -1,26 +1,14 @@
+// app/api/quick-study/sessions/[id]/generate/flashcards/route.ts
 export const runtime = 'nodejs'
 import { NextRequest } from 'next/server'
 import { OpenAI } from 'openai'
+import { QuickStudyTextService } from '@/app/services/QuickStudyTextService'
+import { Source, SessionData } from '@/app/types/QuickStudyTypes'
 
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
-
-// Types
-interface Source {
-  id: string;
-  name: string;
-  type: 'pdf' | 'youtube' | 'text' | 'docx' | 'image' | 'audio' | 'url';
-  status: 'ready' | 'processing' | 'error';
-  size?: string;
-  duration?: string;
-  pages?: number;
-  extractedText?: string;
-  wordCount?: number;
-  processingError?: string;
-  subtype?: string;
-}
 
 interface Flashcard {
   id: string;
@@ -51,12 +39,6 @@ interface Output {
   content?: string;
 }
 
-interface SessionData {
-  sources: Source[]
-  outputs: Output[]
-  createdAt: Date
-}
-
 // Global in-memory store
 declare global {
   var quickStudySessions: Map<string, SessionData> | undefined
@@ -72,7 +54,7 @@ export async function POST(
   try {
     const sessionId = params.id
     
-    console.log(`🎴 Flashcards generation request for session: ${sessionId}`)
+    console.log(`🎴 Enhanced Flashcards generation request for session: ${sessionId}`)
     
     // Parse request body
     const body = await request.json()
@@ -112,21 +94,28 @@ export async function POST(
       )
     }
     
-    console.log(`⚡ Processing ${source.name} (type: ${source.type}) for flashcards`)
+    console.log(`🤖 Processing enhanced flashcards generation for source: ${source.name}`)
     
-    // Generate content based on source type
-    let generatedContent: string
+    // 🚀 NEW: Get processing statistics for monitoring
+    const processingStats = QuickStudyTextService.getProcessingStats(source, 'flashcards')
+    console.log(`📊 Processing Stats:`, {
+      textSource: processingStats.textSource,
+      originalLength: processingStats.originalLength,
+      processedLength: processingStats.processedLength,
+      optimizationQuality: processingStats.optimizationQuality,
+      recommended: processingStats.recommendedForTask
+    })
     
+    if (!source.extractedText) {
+      return Response.json(
+        { message: 'No text content available for processing' },
+        { status: 400 }
+      )
+    }
 
-        if (!source.extractedText) {
-          return Response.json(
-            { message: 'No text content available for processing' },
-            { status: 400 }
-          )
-        }
-        generatedContent = await generateFlashcardsFromText(source.extractedText, source.name, settings)
- 
-   
+    // 🚀 NEW: Generate enhanced flashcards using QuickStudyTextService
+    const generatedContent = await generateEnhancedFlashcardsFromText(source, settings)
+    
     // Parse the flashcard content to get card count
     let cardCount = 0
     try {
@@ -155,13 +144,13 @@ export async function POST(
     // Add to session
     sessionData.outputs.push(output)
     
-    console.log(`✅ Generated flashcards: ${output.id}`)
+    console.log(`✅ Generated enhanced flashcards: ${output.id}`)
     console.log(`📊 Session now has ${sessionData.outputs.length} total outputs`)
     
     return Response.json(output)
     
   } catch (error) {
-    console.error('❌ Error generating flashcards:', error)
+    console.error('❌ Error generating enhanced flashcards:', error)
     
     return Response.json(
       { message: 'Failed to generate flashcards' },
@@ -170,26 +159,92 @@ export async function POST(
   }
 }
 
-// Generate flashcards from text using AI
-async function generateFlashcardsFromText(extractedText: string, sourceName: string, settings: any): Promise<string> {
-  console.log(`🤖 Generating AI flashcards for: ${sourceName}`)
+// Enhanced flashcards generation using QuickStudyTextService
+async function generateEnhancedFlashcardsFromText(source: Source, settings: any): Promise<string> {
+  console.log(`🤖 Generating enhanced AI flashcards for: ${source.name}`)
   
   try {
+    // 🚀 NEW: Create contextual system prompt using QuickStudyTextService
+    const baseSystemPrompt = createFlashcardsSystemPrompt(source, settings)
+    const enhancedSystemPrompt = QuickStudyTextService.createContextualPrompt(
+      source, 
+      'flashcards', 
+      baseSystemPrompt
+    )
+    
+    // 🚀 NEW: Get optimal text for processing
+    const textResult = QuickStudyTextService.getProcessingText(source, 'flashcards')
+    
+    // Enhanced logging
+    console.log(`📝 Using ${textResult.source} text for flashcards generation:`)
+    console.log(`   - Length: ${textResult.text.length.toLocaleString()} characters`)
+    if (textResult.stats?.compressionRatio) {
+      console.log(`   - Compression: ${(textResult.stats.compressionRatio * 100).toFixed(1)}%`)
+    }
+    if (textResult.stats?.keyTopics?.length) {
+      console.log(`   - Key topics: ${textResult.stats.keyTopics.slice(0, 5).join(', ')}${textResult.stats.keyTopics.length > 5 ? ` (+${textResult.stats.keyTopics.length - 5} more)` : ''}`)
+    }
+
     const cardCount = settings?.cardCount || 20
     const difficulty = settings?.difficulty || 'mixed' // easy, medium, hard, mixed
     const includeCategories = settings?.includeCategories !== false // default true
-    
+
     const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
-          content: `Jesteś ekspertem w tworzeniu flashcards do nauki. Twoim zadaniem jest stworzenie zestawu flashcards, które:
+          content: enhancedSystemPrompt
+        },
+        {
+          role: "user",
+          content: `Przeanalizuj poniższy materiał i stwórz zestaw ${cardCount} flashcards do nauki.
+
+${textResult.text}
+
+WYMAGANIA:
+- Skupienie na kluczowych pojęciach, definicjach i faktach
+- Poziom trudności: ${difficulty}
+- ${includeCategories ? 'Pogrupowanie kart tematycznie' : 'Bez kategoryzacji'}
+- Przód karty: krótkie, konkretne pytanie lub pojęcie
+- Tył karty: kompletna ale zwięzła odpowiedź
+- Optymalizacja dla aktywnego przywoływania wiedzy`
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 3000,
+      response_format: { type: "json_object" }
+    })
+
+    let content = response.choices[0]?.message?.content || '{}'
+    
+    // 🔧 Clean markdown code blocks if present
+    content = content.replace(/```json\s*|\s*```/g, '').trim()
+    
+    console.log(`✅ Enhanced flashcards generated successfully`)
+    console.log(`   - Cards created from ${textResult.source} text`)
+    console.log(`   - Processing length: ${textResult.text.length} characters`)
+    
+    return content
+    
+  } catch (error) {
+    console.error('❌ Error generating enhanced flashcards:', error)
+    throw error
+  }
+}
+
+// Create flashcards-specific system prompt
+function createFlashcardsSystemPrompt(source: Source, settings: any): string {
+  const cardCount = settings?.cardCount || 20
+  const difficulty = settings?.difficulty || 'mixed'
+  const includeCategories = settings?.includeCategories !== false
+
+  return `Jesteś ekspertem w tworzeniu flashcards do nauki. Twoim zadaniem jest stworzenie zestawu flashcards, które:
 
 1. Zawierają kluczowe pojęcia, definicje, fakty i koncepcje
 2. Mają przód (pytanie/pojęcie) i tył (odpowiedź/wyjaśnienie)
 3. Są różnego poziomu trudności
-4. Są pogrupowane tematycznie
+4. ${includeCategories ? 'Są pogrupowane tematycznie' : 'Fokusują się na najważniejszych pojęciach'}
 5. Wykorzystują aktywne przywoływanie wiedzy
 
 Format odpowiedzi - MUSI być poprawny JSON:
@@ -202,69 +257,26 @@ Format odpowiedzi - MUSI być poprawny JSON:
       "front": "Pytanie, pojęcie lub termin",
       "back": "Definicja, wyjaśnienie lub odpowiedź",
       "difficulty": "easy|medium|hard",
-      "category": "Kategoria tematyczna",
+      ${includeCategories ? '"category": "Kategoria tematyczna",' : ''}
       "tags": ["tag1", "tag2"]
     }
   ],
-  "totalCards": ${cardCount},
-  "categories": ["Kategoria 1", "Kategoria 2"]
+  "totalCards": ${cardCount}${includeCategories ? ',\n  "categories": ["Kategoria 1", "Kategoria 2"]' : ''}
 }
 
-Zasady tworzenia flashcards:
-- Przód: krótki, konkretny, jednoznaczny
+ZASADY TWORZENIA FLASHCARDS:
+- Przód: krótki, konkretny, jednoznaczny (max 2-3 wyrazy lub krótkie pytanie)
 - Tył: kompletny ale zwięzły, zawiera kluczowe informacje
 - Unikaj zbyt długich tekstów na przedzie karty
 - Skupiaj się na jednym pojęciu na kartę
 - Używaj jasnego, zrozumiałego języka
-- Dodawaj przykłady gdy to pomocne`
-        },
-        {
-          role: "user",
-          content: `Stwórz zestaw ${cardCount} flashcards na podstawie poniższego tekstu.
+- Dodawaj przykłady gdy to pomocne
+- Priorytet dla definicji, faktów i kluczowych koncepcji
 
-${includeCategories ? 'Pogrupuj karty tematycznie.' : ''}
-Poziom trudności: ${difficulty}
+MATERIAŁ ŹRÓDŁOWY: "${source.name}" (${source.type})
+Typ pliku: ${source.type}
+${source.wordCount ? `Liczba słów: ${source.wordCount.toLocaleString()}` : ''}
+${source.pages ? `Liczba stron: ${source.pages}` : ''}
 
-Materiał źródłowy z "${sourceName}":
-${extractedText.slice(0, 15000)}`
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 3500,
-      response_format: { type: "json_object" }
-    })
-    
-    const content = response.choices[0].message.content
-    
-    if (!content) {
-      throw new Error('No content generated by AI')
-    }
-    
-    // Validate JSON structure
-    const parsed = JSON.parse(content)
-    if (!parsed.cards || !Array.isArray(parsed.cards)) {
-      throw new Error('Invalid flashcards format generated by AI')
-    }
-    
-    // Add unique IDs to cards if missing and ensure all required fields
-    parsed.cards = parsed.cards.map((card: any, index: number) => ({
-      id: card.id || `card${index + 1}`,
-      front: card.front || 'Missing front',
-      back: card.back || 'Missing back',
-      difficulty: card.difficulty || 'medium',
-      category: card.category || 'General',
-      tags: Array.isArray(card.tags) ? card.tags : []
-    }))
-    
-    // Update counts and categories
-    parsed.totalCards = parsed.cards.length
-    parsed.categories = [...new Set(parsed.cards.map((card: any) => card.category))]
-    
-    console.log(`✅ AI flashcards generated successfully with ${parsed.cards.length} cards`)
-    return JSON.stringify(parsed)
-    
-  } catch (error) {
-    console.error('Error generating flashcards with AI:', error)
-    throw new Error(`AI generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-  }
+WAŻNE: Bazuj TYLKO na informacjach z dostarczonego materiału źródłowego.`
 }

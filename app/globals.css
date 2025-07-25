@@ -454,3 +454,35 @@ body {
     transform: scale(1);
   }
 }
+.katex {
+  font-size: 1.1em;
+}
+
+.katex-display {
+  margin: 1rem 0;
+  text-align: center;
+}
+
+.katex-display > .katex {
+  display: inline-block;
+  text-align: initial;
+}
+
+/* Math in tables */
+.markdown-content table .katex {
+  font-size: 0.9em;
+}
+
+/* Math in lists */
+.markdown-content li .katex {
+  font-size: 1em;
+}
+
+/* Dark mode support for math */
+.dark .katex {
+  color: rgb(248 250 252); /* slate-50 */
+}
+
+.dark .katex .base {
+  color: rgb(248 250 252);
+}

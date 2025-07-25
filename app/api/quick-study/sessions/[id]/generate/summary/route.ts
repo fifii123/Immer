@@ -1,26 +1,14 @@
+// app/api/quick-study/sessions/[id]/generate/summary/route.ts
 export const runtime = 'nodejs'
 import { NextRequest } from 'next/server'
 import { OpenAI } from 'openai'
+import { QuickStudyTextService } from '@/app/services/QuickStudyTextService'
+import { Source, SessionData } from '@/app/types/QuickStudyTypes'
 
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
-
-// Types
-interface Source {
-  id: string;
-  name: string;
-  type: 'pdf' | 'youtube' | 'text' | 'docx' | 'image' | 'audio' | 'url';
-  status: 'ready' | 'processing' | 'error';
-  size?: string;
-  duration?: string;
-  pages?: number;
-  extractedText?: string;
-  wordCount?: number;
-  processingError?: string;
-  subtype?: string;
-}
 
 interface Output {
   id: string;
@@ -32,12 +20,6 @@ interface Output {
   createdAt: Date;
   count?: number;
   content?: string;
-}
-
-interface SessionData {
-  sources: Source[]
-  outputs: Output[]
-  createdAt: Date
 }
 
 // Global in-memory store
@@ -55,7 +37,7 @@ export async function POST(
   try {
     const sessionId = params.id
     
-    console.log(`📝 Summary generation request for session: ${sessionId}`)
+    console.log(`📝 Enhanced Summary generation request for session: ${sessionId}`)
     
     // Parse request body
     const body = await request.json()
@@ -95,22 +77,27 @@ export async function POST(
       )
     }
     
-    console.log(`⚡ Processing ${source.name} (type: ${source.type}) for summary`)
+    console.log(`🤖 Processing enhanced summary generation for source: ${source.name}`)
     
-    // Generate content based on source type
-    let generatedContent: string
+    // 🚀 NEW: Get processing statistics for monitoring
+    const processingStats = QuickStudyTextService.getProcessingStats(source, 'summary')
+    console.log(`📊 Processing Stats:`, {
+      textSource: processingStats.textSource,
+      originalLength: processingStats.originalLength,
+      processedLength: processingStats.processedLength,
+      optimizationQuality: processingStats.optimizationQuality,
+      recommended: processingStats.recommendedForTask
+    })
     
+    if (!source.extractedText) {
+      return Response.json(
+        { message: 'No text content available for processing' },
+        { status: 400 }
+      )
+    }
 
-        if (!source.extractedText) {
-          return Response.json(
-            { message: 'No text content available for processing' },
-            { status: 400 }
-          )
-        }
-        generatedContent = await generateSummaryFromText(source.extractedText, source.name)
-  
-        
-   
+    // 🚀 NEW: Generate enhanced summary using QuickStudyTextService
+    const generatedContent = await generateEnhancedSummaryFromText(source, settings)
     
     // Create preview (first line, max 100 chars)
     const preview = generatedContent.split('\n')[0].substring(0, 100) + '...'
@@ -130,13 +117,13 @@ export async function POST(
     // Add to session
     sessionData.outputs.push(output)
     
-    console.log(`✅ Generated summary: ${output.id}`)
+    console.log(`✅ Generated enhanced summary: ${output.id}`)
     console.log(`📊 Session now has ${sessionData.outputs.length} total outputs`)
     
     return Response.json(output)
     
   } catch (error) {
-    console.error('❌ Error generating summary:', error)
+    console.error('❌ Error generating enhanced summary:', error)
     
     return Response.json(
       { message: 'Failed to generate summary' },
@@ -145,52 +132,122 @@ export async function POST(
   }
 }
 
-// Generate summary from text using AI
-async function generateSummaryFromText(extractedText: string, sourceName: string): Promise<string> {
-  console.log(`🤖 Generating AI summary for: ${sourceName}`)
+// Enhanced summary generation using QuickStudyTextService
+async function generateEnhancedSummaryFromText(source: Source, settings: any): Promise<string> {
+  console.log(`🤖 Generating enhanced AI summary for: ${source.name}`)
   
   try {
+    // 🚀 NEW: Create contextual system prompt using QuickStudyTextService
+    const baseSystemPrompt = createSummarySystemPrompt(source, settings)
+    const enhancedSystemPrompt = QuickStudyTextService.createContextualPrompt(
+      source, 
+      'summary', 
+      baseSystemPrompt
+    )
+    
+    // 🚀 NEW: Get optimal text for processing
+    const textResult = QuickStudyTextService.getProcessingText(source, 'summary')
+    
+    // Enhanced logging
+    console.log(`📝 Using ${textResult.source} text for summary generation:`)
+    console.log(`   - Length: ${textResult.text.length.toLocaleString()} characters`)
+    if (textResult.stats?.compressionRatio) {
+      console.log(`   - Compression: ${(textResult.stats.compressionRatio * 100).toFixed(1)}%`)
+    }
+    if (textResult.stats?.keyTopics?.length) {
+      console.log(`   - Key topics: ${textResult.stats.keyTopics.slice(0, 5).join(', ')}${textResult.stats.keyTopics.length > 5 ? ` (+${textResult.stats.keyTopics.length - 5} more)` : ''}`)
+    }
+
+    const length = settings?.length || 'medium' // short, medium, detailed
+    const focus = settings?.focus || 'comprehensive' // key_points, comprehensive, conclusions
+    const includeQuotes = settings?.includeQuotes !== false // default true
+
     const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
-          content: `Jesteś ekspertem w tworzeniu zwięzłych, ale kompletnych streszczeń. Twoim zadaniem jest stworzenie podsumowania, które:
-
-1. Wychwytuje wszystkie kluczowe punkty i główne idee
-2. Jest strukturalne i logiczne
-3. Używa jasnego, zrozumiałego języka
-4. Jest na tyle szczegółowe, żeby dać pełny obraz tematu
-5. Ma 3-5 akapitów w zależności od długości materiału
-
-Format odpowiedzi:
-- Użyj akapitów do organizacji treści
-- Rozpocznij od najważniejszych informacji
-- Zakończ kluczowymi wnioskami lub takeaways
-- Nie używaj nagłówków ani formatowania markdown`
+          content: enhancedSystemPrompt
         },
         {
           role: "user",
-          content: `Stwórz szczegółowe podsumowanie poniższego tekstu. Podsumowanie powinno być kompletne i wychwycić wszystkie główne punkty:
+          content: `Przeanalizuj poniższy materiał i stwórz jego podsumowanie.
 
-${extractedText}`
+${textResult.text}
+
+WYMAGANIA:
+- Długość: ${length}
+- Fokus: ${focus}
+- ${includeQuotes ? 'Zawieraj kluczowe cytaty i odniesienia' : 'Skup się na głównych ideach'}
+- Struktura logiczna z jasnym przepływem
+- Główne wnioski i takeaways
+- Kontekst i znaczenie omawianych zagadnień`
         }
       ],
-      temperature: 0.3, // Lower temperature for more focused summaries
-      max_tokens: 1500
+      temperature: 0.7,
+      max_tokens: 3500
     })
+
+    const content = response.choices[0]?.message?.content || ''
     
-    const content = response.choices[0].message.content
+    console.log(`✅ Enhanced summary generated successfully`)
+    console.log(`   - Summary created from ${textResult.source} text`)
+    console.log(`   - Processing length: ${textResult.text.length} characters`)
     
-    if (!content) {
-      throw new Error('No content generated by AI')
-    }
-    
-    console.log(`✅ AI summary generated successfully`)
-    return content.trim()
+    return content
     
   } catch (error) {
-    console.error('Error generating summary with AI:', error)
-    throw new Error(`AI generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    console.error('❌ Error generating enhanced summary:', error)
+    throw error
   }
+}
+
+// Create summary-specific system prompt
+function createSummarySystemPrompt(source: Source, settings: any): string {
+  const length = settings?.length || 'medium'
+  const focus = settings?.focus || 'comprehensive'
+  const includeQuotes = settings?.includeQuotes !== false
+
+  const lengthGuidance = {
+    short: '2-3 akapity, najważniejsze punkty',
+    medium: '4-6 akapitów, zbalansowane pokrycie',
+    detailed: '6-10 akapitów, szczegółowa analiza'
+  }
+
+  const focusGuidance = {
+    key_points: 'kluczowe punkty i główne argumenty',
+    comprehensive: 'kompleksowy przegląd wszystkich głównych tematów',
+    conclusions: 'wnioski, implikacje i takeaways'
+  }
+
+  return `Jesteś ekspertem w tworzeniu podsumowań edukacyjnych. Twoim zadaniem jest stworzenie ${lengthGuidance[length as keyof typeof lengthGuidance]}, które:
+
+1. Wychwytuje najważniejsze informacje i koncepcje
+2. Organizuje je w logiczną, spójną narrację
+3. Zachowuje kontekst i znaczenie
+4. Pomaga w zrozumieniu głównych idei
+5. ${focusGuidance[focus as keyof typeof focusGuidance]}
+
+STRUKTURA PODSUMOWANIA:
+- **Wprowadzenie**: Główny temat i zakres materiału
+- **Kluczowe punkty**: Najważniejsze koncepcje i argumenty
+- **Szczegóły**: Ważne fakty, dane, przykłady
+- ${includeQuotes ? '- **Kluczowe cytaty**: Istotne wypowiedzi z materiału' : ''}
+- **Wnioski**: Główne takeaways i implikacje
+
+ZASADY TWORZENIA:
+- Używaj jasnego, przystępnego języka
+- Zachowaj proporcje - więcej miejsca na ważniejsze tematy
+- ${includeQuotes ? 'Cytuj kluczowe fragmenty gdy dodają wartość' : 'Parafrazuj główne idee'}
+- Łącz powiązane koncepcje
+- Podkreślaj znaczenie i implikacje
+- Długość: ${length}
+- Fokus: ${focus}
+
+MATERIAŁ ŹRÓDŁOWY: "${source.name}" (${source.type})
+Typ pliku: ${source.type}
+${source.wordCount ? `Liczba słów: ${source.wordCount.toLocaleString()}` : ''}
+${source.pages ? `Liczba stron: ${source.pages}` : ''}
+
+WAŻNE: Bazuj TYLKO na informacjach z dostarczonego materiału źródłowego.`
 }
