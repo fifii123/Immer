@@ -214,9 +214,12 @@ export default function SourcesPanel({
           ) : !fetchingSources && (
             <div className="flex-1 flex items-center justify-center text-center py-12">
               <div>
-                <div className="w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-4 bg-primary/10">
-                  <Plus className="h-8 w-8 text-primary" />
-                </div>
+               <div 
+  className="w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-4 bg-primary/10 cursor-pointer hover:bg-primary/20 transition-colors duration-200"
+  onClick={() => setModalOpen(true)}
+>
+  <Plus className="h-8 w-8 text-primary" />
+</div>
                 <h4 className="text-sm font-semibold mb-2 text-foreground">
                   No sources yet
                 </h4>

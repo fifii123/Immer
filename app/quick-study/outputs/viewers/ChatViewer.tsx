@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { 
   Sparkles, 
   Send, 
@@ -32,10 +32,17 @@ interface Source {
 interface ChatViewerProps {
   sessionId: string | null
   selectedSource?: Source | null
+  initialMessages?: Message[]
+  onMessagesChange?: (sourceId: string, messages: Message[]) => void
 }
 
-export default function ChatViewer({ sessionId, selectedSource = { id: '1', name: 'Sample Document', type: 'pdf', status: 'ready' } }: ChatViewerProps) {
-  const [messages, setMessages] = useState<Message[]>([])
+export default function ChatViewer({ 
+  sessionId, 
+  selectedSource = { id: '1', name: 'Sample Document', type: 'pdf', status: 'ready' },
+  initialMessages = [],
+  onMessagesChange
+}: ChatViewerProps) {
+  const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
@@ -45,10 +52,32 @@ export default function ChatViewer({ sessionId, selectedSource = { id: '1', name
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
+  // Memoized function to update parent with messages
+  const updateParentMessages = useCallback((newMessages: Message[]) => {
+    if (onMessagesChange && selectedSource) {
+      onMessagesChange(selectedSource.id, newMessages)
+    }
+  }, [onMessagesChange, selectedSource?.id])
+
+  // Function to update messages and notify parent
+  const updateMessages = useCallback((newMessages: Message[]) => {
+    setMessages(newMessages)
+    updateParentMessages(newMessages)
+  }, [updateParentMessages])
+
+  // Auto scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
+  // Update local messages when source changes (not on every initialMessages change)
+  useEffect(() => {
+    if (selectedSource && initialMessages !== messages) {
+      setMessages(initialMessages)
+    }
+  }, [selectedSource?.id]) // Only depend on source ID change
+
+  // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
@@ -63,7 +92,8 @@ export default function ChatViewer({ sessionId, selectedSource = { id: '1', name
       timestamp: new Date()
     }
   
-    setMessages(prev => [...prev, userMessage])
+    const newMessagesWithUser = [...messages, userMessage]
+    updateMessages(newMessagesWithUser)
     setInputValue('')
     setIsLoading(true)
     setIsStreaming(true)
@@ -107,7 +137,8 @@ export default function ChatViewer({ sessionId, selectedSource = { id: '1', name
         content: '',
         timestamp: new Date()
       }
-      setMessages(prev => [...prev, initialAssistantMessage])
+      const messagesWithAssistant = [...newMessagesWithUser, initialAssistantMessage]
+      updateMessages(messagesWithAssistant)
   
       // Read the stream
       while (true) {
@@ -135,11 +166,12 @@ export default function ChatViewer({ sessionId, selectedSource = { id: '1', name
                 ))
               } else if (data.type === 'complete') {
                 // Final content update
-                setMessages(prev => prev.map(msg => 
+                const finalMessages = messagesWithAssistant.map(msg => 
                   msg.id === assistantMessageId 
                     ? { ...msg, content: data.fullContent }
                     : msg
-                ))
+                )
+                updateMessages(finalMessages)
                 break
               } else if (data.type === 'error') {
                 throw new Error(data.message)
@@ -161,7 +193,7 @@ export default function ChatViewer({ sessionId, selectedSource = { id: '1', name
         content: 'Przepraszam, wystąpił błąd podczas generowania odpowiedzi. Spróbuj ponownie.',
         timestamp: new Date()
       }
-      setMessages(prev => [...prev, errorMessage])
+      updateMessages([...messages, userMessage, errorMessage])
     } finally {
       setIsLoading(false)
       setIsStreaming(false)
@@ -186,6 +218,10 @@ export default function ChatViewer({ sessionId, selectedSource = { id: '1', name
     inputRef.current?.focus()
   }
 
+  const handleClearConversation = () => {
+    updateMessages([])
+  }
+
   return (
     <div className="h-full flex flex-col bg-background">
       {/* Header */}
@@ -208,7 +244,7 @@ export default function ChatViewer({ sessionId, selectedSource = { id: '1', name
             
             {messages.length > 0 && (
               <button
-                onClick={() => setMessages([])}
+                onClick={handleClearConversation}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 New conversation
@@ -278,7 +314,8 @@ export default function ChatViewer({ sessionId, selectedSource = { id: '1', name
                     ))}
                   </div>
                 </div>
-              </div></div>
+              </div>
+            </div>
           ) : (
             // Messages List
             <div className="py-4 space-y-4">
@@ -327,24 +364,23 @@ export default function ChatViewer({ sessionId, selectedSource = { id: '1', name
               ))}
               
               {/* Typing Indicator */}
-{/* Typing Indicator */}
-
-{isLoading && !isStreaming && (
-  <div className="flex gap-4 justify-start">
-    <div className="flex-shrink-0 mt-1">
-      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md">
-        <Sparkles className="h-4 w-4 text-white" />
-      </div>
-    </div>
-    <div className="bg-card border border-border rounded-2xl px-5 py-3 shadow-sm">
-      <div className="flex items-center gap-1">
-        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-      </div>
-    </div>
-  </div>
-)}     <div ref={messagesEndRef} />
+              {isLoading && !isStreaming && (
+                <div className="flex gap-4 justify-start">
+                  <div className="flex-shrink-0 mt-1">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md">
+                      <Sparkles className="h-4 w-4 text-white" />
+                    </div>
+                  </div>
+                  <div className="bg-card border border-border rounded-2xl px-5 py-3 shadow-sm">
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
             </div>
           )}
         </div>
@@ -373,18 +409,18 @@ export default function ChatViewer({ sessionId, selectedSource = { id: '1', name
               />
               
               <button
-  type="button"
-  onClick={handleSendMessage}
-  disabled={!inputValue.trim() || isLoading}
-  className="flex-shrink-0 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 p-2.5 text-white shadow-lg shadow-indigo-500/25 transition-all hover:shadow-xl hover:shadow-indigo-500/30 disabled:opacity-50 disabled:shadow-none flex items-center justify-center"
-  style={{ height: '44px', width: '44px' }}
->
-  {isLoading ? (
-    <Loader2 className="h-4 w-4 animate-spin" />
-  ) : (
-    <Send className="h-4 w-4" />
-  )}
-</button>
+                type="button"
+                onClick={handleSendMessage}
+                disabled={!inputValue.trim() || isLoading}
+                className="flex-shrink-0 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 p-2.5 text-white shadow-lg shadow-indigo-500/25 transition-all hover:shadow-xl hover:shadow-indigo-500/30 disabled:opacity-50 disabled:shadow-none flex items-center justify-center"
+                style={{ height: '44px', width: '44px' }}
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </button>
             </div>
             
             <div className="flex items-center justify-between mt-2">

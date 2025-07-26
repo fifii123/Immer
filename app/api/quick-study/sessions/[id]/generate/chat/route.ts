@@ -144,14 +144,21 @@ async function streamEnhancedChatResponse(
     }
     
     // Prepare conversation context with enhanced material info
-    const messages = [
-      { role: 'system', content: enhancedSystemPrompt },
-      ...conversationHistory.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      })),
-      { role: 'user', content: userMessage }
-    ]
+const messages = [
+  { role: 'system', content: enhancedSystemPrompt },
+  { 
+    role: 'system', 
+    content: `MATERIAŁ ŹRÓDŁOWY:
+---
+${textResult.text}
+---` 
+  },
+  ...conversationHistory.map(msg => ({
+    role: msg.role,
+    content: msg.content
+  })),
+  { role: 'user', content: userMessage }
+]
     
     console.log(`🔄 Creating enhanced chat completion...`)
     

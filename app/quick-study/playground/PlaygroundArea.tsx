@@ -48,6 +48,8 @@ interface PlaygroundAreaProps {
   selectedSource: Source | null
   isGenerating: boolean
   currentOutput: any
+  sourceConversations: Record<string, any[]>
+  onSourceConversationsChange: (conversations: Record<string, any[]>) => void
   onShowCurtain: () => void
   onTileClick: (type: string, options?: any) => void
   onChatClick: () => void
@@ -124,10 +126,12 @@ export default function PlaygroundArea({
   selectedSource,
   isGenerating,
   currentOutput,
+  sourceConversations,
+  onSourceConversationsChange,
   onShowCurtain,
   onTileClick,
   onChatClick
-}: PlaygroundAreaProps)  {
+}: PlaygroundAreaProps) {
   const [handleVisible, setHandleVisible] = useState(true)
   const [isHovering, setIsHovering] = useState(false)
   const [noteTypeModalOpen, setNoteTypeModalOpen] = useState(false)
@@ -204,8 +208,21 @@ export default function PlaygroundArea({
       case 'notes':
         return <NotesViewer output={currentOutput} selectedSource={selectedSource} />
         
-        case 'chat':
-          return <ChatViewer sessionId={sessionId} selectedSource={selectedSource} />
+case 'chat':
+          const currentMessages = selectedSource ? sourceConversations[selectedSource.id] || [] : []
+          return (
+            <ChatViewer 
+              sessionId={sessionId} 
+              selectedSource={selectedSource}
+              initialMessages={currentMessages}
+              onMessagesChange={(sourceId, messages) => {
+                onSourceConversationsChange({
+                  ...sourceConversations,
+                  [sourceId]: messages
+                })
+              }}
+            />
+          )
         
       case 'quiz':
         return <QuizViewer output={currentOutput} selectedSource={selectedSource} />

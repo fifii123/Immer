@@ -37,6 +37,13 @@ interface Session {
   createdAt: string;
 }
 
+interface Message {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: Date
+}
+
 type PlaygroundContent = 'flashcards' | 'quiz' | 'notes' | 'summary' | 'timeline' | 'knowledge-map' | 'chat' | null;
 
 export function useQuickStudy() {
@@ -47,7 +54,7 @@ export function useQuickStudy() {
   const [sources, setSources] = useState<Source[]>([])
   const [selectedSource, setSelectedSource] = useState<Source | null>(null)
   const [outputs, setOutputs] = useState<Output[]>([])
-  
+  const [sourceConversations, setSourceConversations] = useState<Record<string, Message[]>>({})
   // UI state
   const [curtainVisible, setCurtainVisible] = useState(true)
   const [playgroundContent, setPlaygroundContent] = useState<PlaygroundContent>(null)
@@ -180,43 +187,45 @@ export function useQuickStudy() {
       setSelectedSource(null)
       setCurtainVisible(true)
       setPlaygroundContent(null)
+      setCurrentOutput(null)
       
     } catch (err) {
       throw new Error(err instanceof Error ? err.message : 'Failed to create session')
     }
   }, [])
 
-  // Restore existing session
-  const restoreSession = useCallback(async (sessionId: string): Promise<boolean> => {
+  // Restore session
+  const restoreSession = useCallback(async (id: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/quick-study/sessions/${sessionId}`)
+      console.log(`🔄 Attempting to restore session: ${id}`)
+      
+      const response = await fetch(`/api/quick-study/sessions/${id}`)
       
       if (!response.ok) {
-        if (response.status === 404) {
-          // Session expired/not found, create new one
-          localStorage.removeItem('quickStudySessionId')
-          return false
-        }
-        throw new Error('Failed to restore session')
+        console.log('❌ Session not found or expired')
+        localStorage.removeItem('quickStudySessionId')
+        return false
       }
       
       const session: Session = await response.json()
       
-      // Restore state from session
-      setSessionId(session.id)
+      // Restore state
+      setSessionId(id)
       setSources(session.sources)
       setOutputs(session.outputs)
       
-      // Auto-select first ready source
+      // Auto-select first ready source if any
       const readySources = session.sources.filter(s => s.status === 'ready')
       if (readySources.length > 0) {
         setSelectedSource(readySources[0])
       }
       
+      console.log(`✅ Session restored with ${session.sources.length} sources, ${session.outputs.length} outputs`)
+      
       return true
       
     } catch (err) {
-      console.error('Failed to restore session:', err)
+      console.error('❌ Failed to restore session:', err)
       localStorage.removeItem('quickStudySessionId')
       return false
     }
@@ -229,14 +238,20 @@ export function useQuickStudy() {
       return
     }
     
+    if (files.length === 0) return
+    
     setUploadInProgress(true)
     setError(null)
     
     try {
       const formData = new FormData()
-      files.forEach(file => formData.append('files', file))
       
-      const response = await fetch(`/api/quick-study/sessions/${sessionId}/upload`, {
+      files.forEach(file => {
+        formData.append('files', file)
+      })
+      
+
+const response = await fetch(`/api/quick-study/sessions/${sessionId}/upload`, {
         method: 'POST',
         body: formData
       })
@@ -247,19 +262,20 @@ export function useQuickStudy() {
       }
       
       const newSources: Source[] = await response.json()
+      
       setSources(prev => [...prev, ...newSources])
       
       // Auto-select first uploaded source if none selected
-      if (newSources.length > 0 && !selectedSource) {
-        // Find first source that's ready or will be ready
-        const sourceToSelect = newSources.find(s => s.status === 'ready') || newSources[0]
-        setSelectedSource(sourceToSelect)
+      if (!selectedSource && newSources.length > 0) {
+        const firstReady = newSources.find(s => s.status === 'ready')
+        if (firstReady) {
+          setSelectedSource(firstReady)
+        }
       }
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
-      // FIXED: Simply set uploadInProgress to false since API now waits for processing completion
       setUploadInProgress(false)
     }
   }, [sessionId, selectedSource])
@@ -352,9 +368,13 @@ export function useQuickStudy() {
     }
   }, [sessionId, selectedSource])
 
-  // Handler - source selection
+  // FIXED - Handler - source selection (resetuje stan przy zmianie źródła)
   const handleSourceSelect = useCallback((source: Source) => {
+    // Resetuj stan playground gdy przełączamy źródła
     setSelectedSource(source)
+    setCurtainVisible(true)          // Pokaż kurtynę z wyborem metod
+    setPlaygroundContent(null)       // Wyczyść aktualną metodę  
+    setCurrentOutput(null)           // Wyczyść aktualny output
     setError(null)
   }, [])
 
@@ -453,15 +473,30 @@ export function useQuickStudy() {
     setCurrentOutput(output)
   }, [])
 
-  // Handler - show/hide curtain
+  // FIXED - Handler - show/hide curtain (resetuje stan przy otwieraniu)
   const handleShowCurtain = useCallback(() => {
-    setCurtainVisible(!curtainVisible)
+    if (curtainVisible) {
+      // Jeśli kurtyna już widoczna, po prostu ją zamknij
+      setCurtainVisible(false)
+    } else {
+      // Jeśli kurtyna ukryta, pokaż ją i zresetuj stan contentu
+      setCurtainVisible(true)
+      setPlaygroundContent(null)
+      setCurrentOutput(null)
+    }
   }, [curtainVisible])
 
   // Handler - chat click
   const handleChatClick = useCallback(() => {
     setCurtainVisible(false)
     setPlaygroundContent('chat')
+    setCurrentOutput(null)
+  }, [])
+
+  // NEW - Handler - reset do wyboru metod (zachowuje źródło)
+  const handleResetToMethodSelection = useCallback(() => {
+    setCurtainVisible(true)
+    setPlaygroundContent(null)
     setCurrentOutput(null)
   }, [])
 
@@ -497,7 +532,7 @@ export function useQuickStudy() {
     }
   }, [sessionId, restoreSession, createNewSession])
 
-  return {
+return {
     // Session state
     sessionId,
     initializing,
@@ -505,11 +540,19 @@ export function useQuickStudy() {
     // Core state
     sources,
     selectedSource,
+    outputs,
+    
+    // Chat state
+    sourceConversations,
+    setSourceConversations,
+    
+    // UI state
     curtainVisible,
     playgroundContent,
-    outputs,
     currentOutput,
     isGenerating,
+    
+    // Loading states
     uploadInProgress,
     fetchingSources,
     error,

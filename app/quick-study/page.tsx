@@ -1,3 +1,4 @@
+// app/quick-study/page.tsx
 "use client"
 
 import React from 'react'
@@ -17,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import SourcesPanel from './sources/SourcesPanel'
 import PlaygroundArea from './playground/PlaygroundArea'
 import OutputsPanel from './outputs/OutputsPanel'
+import NavigationBreadcrumb from './components/NavigationBreadcrumb'
 import { useQuickStudy } from './hooks/useQuickStudy'
 
 export default function QuickStudyPage() {
@@ -24,7 +26,7 @@ export default function QuickStudyPage() {
   const { toast } = useToast()
   
   // Główny hook z session management
-  const {
+const {
     sessionId,
     initializing,
     sources,
@@ -37,6 +39,8 @@ export default function QuickStudyPage() {
     uploadInProgress,
     fetchingSources,
     error,
+    sourceConversations,
+    setSourceConversations,
     handleSourceSelect,
     handleTileClick,
     handleOutputClick,
@@ -46,9 +50,13 @@ export default function QuickStudyPage() {
     handleTextSubmit,
     handleUrlSubmit,
     handleStartNewSession,
+    handleResetToMethodSelection,
     refreshSession,
     clearError
   } = useQuickStudy()
+
+  // Handler for resetting viewer to preview state  
+  const handleResetToPreview = handleResetToMethodSelection
 
   // Error handling with toast notifications
   React.useEffect(() => {
@@ -86,6 +94,7 @@ export default function QuickStudyPage() {
       {/* Header */}
       <header className="sticky top-0 z-50 border-b backdrop-blur-xl bg-background/95 border-border">
         <nav className="flex h-14 items-center justify-between px-6">
+          {/* Left side - Back button + title */}
           <div className="flex items-center gap-4">
             <Button 
               variant="ghost" 
@@ -112,6 +121,19 @@ export default function QuickStudyPage() {
             </div>
           </div>
           
+          {/* Center - Navigation Breadcrumb (ukrywa się gdy kurtyna widoczna) */}
+          <div className="flex-1 flex justify-center max-w-lg mx-8 min-h-[32px]">
+            <NavigationBreadcrumb
+              selectedSource={selectedSource}
+              playgroundContent={playgroundContent}
+              currentOutput={currentOutput}
+              curtainVisible={curtainVisible}
+              onOpenCurtain={handleShowCurtain}
+              onResetToPreview={handleResetToPreview}
+            />
+          </div>
+          
+          {/* Right side - Actions */}
           <div className="flex items-center gap-2">
             <Button 
               variant="ghost" 
@@ -123,7 +145,6 @@ export default function QuickStudyPage() {
               <RefreshCw className={`h-4 w-4 ${fetchingSources ? 'animate-spin' : ''}`} />
             </Button>
             
-
             <Button 
               variant="ghost" 
               size="sm"
@@ -154,17 +175,19 @@ export default function QuickStudyPage() {
           />
           
           {/* Middle Panel - Playground + Sliding Curtain */}
-          <PlaygroundArea 
-  sessionId={sessionId}
-  curtainVisible={curtainVisible}
-  playgroundContent={playgroundContent}
-  selectedSource={selectedSource}
-  isGenerating={isGenerating}
-  currentOutput={currentOutput} 
-  onShowCurtain={handleShowCurtain}
-  onTileClick={handleTileClick}
-  onChatClick={handleChatClick}
-/>
+<PlaygroundArea
+              sessionId={sessionId}
+              curtainVisible={curtainVisible}
+              playgroundContent={playgroundContent}
+              selectedSource={selectedSource}
+              isGenerating={isGenerating}
+              currentOutput={currentOutput}
+              sourceConversations={sourceConversations}
+              onSourceConversationsChange={setSourceConversations}
+              onShowCurtain={handleShowCurtain}
+              onTileClick={handleTileClick}
+              onChatClick={handleChatClick}
+            />
           
           {/* Right Panel - Generated Content */}
           <OutputsPanel 

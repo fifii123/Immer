@@ -302,41 +302,44 @@ async function processFileContent(file: File, source: Source): Promise<void> {
 
     console.log(`✅ File content extraction completed: ${file.name}`)
 
-    // =================== AUTO-OPTIMIZATION ===================
-    console.log(`\n🔍 CHECKING IF OPTIMIZATION IS NEEDED`)
-    console.log(`📊 Extracted text length: ${source.extractedText.length} characters`)
-    console.log(`📊 Word count: ${source.wordCount || 'unknown'}`)
 
-    if (source.extractedText.length > 3000) {
-      console.log(`\n🚀 STARTING AUTO-OPTIMIZATION (text > 3000 chars)`)
-      console.log(`${'='.repeat(60)}`)
-      console.log(`📄 File: ${source.name}`)
-      console.log(`📄 Type: ${source.type}`)
-      console.log(`📄 Original length: ${source.extractedText.length} characters`)
-      console.log(`${'='.repeat(60)}`)
-      
-      const optimizationStartTime = Date.now();
-      
-      try {
-        const optimizationResult = await TextOptimizationService.optimizeText(
-          source.extractedText,
-          source.name
-        );
-        
-        const processingTimeMs = Date.now() - optimizationStartTime;
-        
-        // Store optimization results
-        source.optimizedText = optimizationResult.optimizedText;
-        source.optimizationStats = {
-          originalLength: optimizationResult.originalLength,
-          optimizedLength: optimizationResult.optimizedLength,
-          compressionRatio: optimizationResult.compressionRatio,
-          processingCost: optimizationResult.processingCost,
-          chunkCount: optimizationResult.chunkCount,
-          keyTopics: optimizationResult.keyTopics,
-          optimizedAt: new Date(),
-          processingTimeMs: processingTimeMs
-        };
+// =================== AUTO-OPTIMIZATION ===================
+console.log(`\n🚀 STARTING OPTIMIZATION FOR ALL FILES`)
+console.log(`📊 Extracted text length: ${source.extractedText.length} characters`)
+console.log(`📊 Word count: ${source.wordCount || 'unknown'}`)
+
+console.log(`\n🚀 SENDING TO TextOptimizationService`)
+console.log(`${'='.repeat(60)}`)
+console.log(`📄 File: ${source.name}`)
+console.log(`📄 Type: ${source.type}`)
+console.log(`📄 Original length: ${source.extractedText.length} characters`)
+console.log(`${'='.repeat(60)}`)
+
+const optimizationStartTime = Date.now();
+
+try {
+  const optimizationResult = await TextOptimizationService.optimizeText(
+    source.extractedText,
+    source.name
+  );
+  
+  const processingTimeMs = Date.now() - optimizationStartTime;
+  
+  // Store optimization results - WSZYSTKIE POLA
+  source.optimizedText = optimizationResult.optimizedText;
+  source.optimizationStats = {
+    originalLength: optimizationResult.originalLength,
+    optimizedLength: optimizationResult.optimizedLength,
+    compressionRatio: optimizationResult.compressionRatio,
+    processingCost: optimizationResult.processingCost,
+    chunkCount: optimizationResult.chunkCount,
+    processedChunks: optimizationResult.processedChunks, // 🚀 DODANE
+    keyTopics: optimizationResult.keyTopics,
+    strategy: optimizationResult.strategy, // 🚀 DODANE
+    processingStats: optimizationResult.processingStats, // 🚀 DODANE
+    optimizedAt: new Date(),
+    processingTimeMs: processingTimeMs
+  };
         
         // =================== DETAILED RESULTS LOG ===================
         console.log(`\n✅ OPTIMIZATION COMPLETED SUCCESSFULLY!`)
@@ -385,12 +388,7 @@ async function processFileContent(file: File, source: Source): Promise<void> {
         console.log(`🔄 Will continue with original text for generation`)
         console.log(`${'='.repeat(60)}\n`)
       }
-    } else {
-      console.log(`\n⏭️  SKIPPING OPTIMIZATION (text < 3000 chars)`)
-      console.log(`📊 Text length: ${source.extractedText.length} characters`)
-      console.log(`💡 Optimization threshold: 3000 characters`)
-      console.log(`✅ Original text will be used directly\n`)
-    }
+    
 
     logCompleteSourceStructure(source);
     // =================== END AUTO-OPTIMIZATION ===================
