@@ -101,6 +101,7 @@ export async function POST(
     
     // Process each file
     const newSources: Source[] = []
+    const processingPromises: Promise<void>[] = []
     
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
@@ -142,28 +143,42 @@ export async function POST(
         }
       }
       
-      // FIXED: Process file synchronously and wait for completion
-      try {
-        console.log(`🔄 Processing content for ${file.name} synchronously...`)
-        await processFileContent(file, source)
-        console.log(`✅ Successfully processed: ${source.name} (Status: ${source.status})`)
-      } catch (error) {
-        console.error(`❌ Error processing ${file.name}:`, error)
-        source.status = 'error'
-        source.processingError = error instanceof Error ? error.message : 'Processing failed'
-      }
-      
       newSources.push(source)
+      
+      // Create async processing promise
+      const processingPromise = processFileContent(file, source)
+        .then(() => {
+          console.log(`✅ Successfully processed: ${source.name}`)
+        })
+        .catch((error) => {
+          console.error(`❌ Error processing ${file.name}:`, error)
+          source.status = 'error'
+          source.processingError = error instanceof Error ? error.message : 'Processing failed'
+          
+          // Also log the error details for debugging
+          console.error(`Full error details for ${file.name}:`, {
+            name: file.name,
+            type: source.type,
+            size: source.size,
+            error: error instanceof Error ? {
+              message: error.message,
+              stack: error.stack
+            } : error
+          })
+        })
+      
+      processingPromises.push(processingPromise)
     }
     
-    // Add sources to session only after all processing is complete
+    // Add sources to session immediately (with processing status)
     sessionData.sources.push(...newSources)
-    console.log(`📊 Added ${newSources.length} sources to session. Total sources: ${sessionData.sources.length}`)
     
-    // Log final status
-    const readyCount = newSources.filter(s => s.status === 'ready').length
-    const errorCount = newSources.filter(s => s.status === 'error').length
-    console.log(`📊 Upload complete - Ready: ${readyCount}, Error: ${errorCount}`)
+    // Start processing files asynchronously
+    Promise.all(processingPromises).then(() => {
+      console.log(`💾 Completed processing batch of ${newSources.length} files`)
+    })
+    
+    console.log(`📊 Session now has ${sessionData.sources.length} total sources`)
     
     return Response.json(newSources)
     
@@ -208,134 +223,197 @@ async function processFileContent(file: File, source: Source): Promise<void> {
     }
     
     // Final validation
-    if (!source.extractedText || source.extractedText.length < 10) {
-      throw new Error('No meaningful text content could be extracted from this file')
-    }
+// Final validation
+if (!source.extractedText || source.extractedText.length < 10) {
+  throw new Error('No meaningful text content could be extracted from this file')
+}
 
-    // FIXED: Explicitly set status to ready
-    source.status = 'ready'
-    console.log(`✅ File processing completed successfully: ${file.name} - Status set to: ${source.status}`)
+source.status = 'ready'
+console.log(`✅ File processing completed successfully: ${file.name}`)
 
-    // =================== AUTO-OPTIMIZATION ===================
-    console.log(`\n🔍 CHECKING IF OPTIMIZATION IS NEEDED`)
-    console.log(`📊 Extracted text length: ${source.extractedText.length} characters`)
-    console.log(`📊 Word count: ${source.wordCount || 'unknown'}`)
+// =================== AUTO-OPTIMIZATION ===================
+console.log(`\n🔍 CHECKING IF OPTIMIZATION IS NEEDED`)
+console.log(`📊 Extracted text length: ${source.extractedText.length} characters`)
+console.log(`📊 Word count: ${source.wordCount || 'unknown'}`)
+
+if (source.extractedText.length > 3000) {
+  console.log(`\n🚀 STARTING AUTO-OPTIMIZATION (text > 3000 chars)`)
+  console.log(`${'='.repeat(60)}`)
+  console.log(`📄 File: ${source.name}`)
+  console.log(`📄 Type: ${source.type}`)
+  console.log(`📄 Original length: ${source.extractedText.length} characters`)
+  console.log(`${'='.repeat(60)}`)
+  
+  const optimizationStartTime = Date.now();
+  
+  try {
+    const optimizationResult = await TextOptimizationService.optimizeText(
+      source.extractedText,
+      source.name
+    );
     
-    // Check if text optimization is needed (>10k chars)
-    if (source.extractedText.length > 10000) {
-      console.log(`📈 Text is large enough for optimization (${source.extractedText.length} chars)`)
-      console.log(`🤖 Starting text optimization...`)
-      
-      try {
-        const optimizationService = new TextOptimizationService()
-        const optimizationResult = await optimizationService.optimizeText(
-          source.extractedText,
-          source.name,
-          source.type
-        )
-        
-        // Add optimization data to source
-        source.optimizedText = optimizationResult.optimizedText
-        source.optimizationStats = optimizationResult.stats
-        
-        console.log(`✅ Text optimization completed`)
-        console.log(`📊 Original: ${optimizationResult.stats.originalLength} chars → Optimized: ${optimizationResult.stats.optimizedLength} chars`)
-        console.log(`📉 Compression ratio: ${(optimizationResult.stats.compressionRatio * 100).toFixed(1)}%`)
-        console.log(`💰 Processing cost: $${optimizationResult.stats.processingCost.toFixed(4)}`)
-        
-      } catch (optimizationError) {
-        console.warn(`⚠️ Text optimization failed for ${source.name}:`, optimizationError)
-        // Continue without optimization - not a critical failure
-      }
-    } else {
-      console.log(`📝 Text is short enough, skipping optimization (${source.extractedText.length} chars)`)
-    }
+    const processingTimeMs = Date.now() - optimizationStartTime;
     
-    console.log(`${'='.repeat(80)}\n`)
+// Store optimization results
+source.optimizedText = optimizationResult.optimizedText;
+source.optimizationStats = {
+  originalLength: optimizationResult.originalLength,
+  optimizedLength: optimizationResult.optimizedLength,
+  compressionRatio: optimizationResult.compressionRatio,
+  processingCost: optimizationResult.processingCost,
+  chunkCount: optimizationResult.chunkCount,
+  keyTopics: optimizationResult.keyTopics,
+  strategy: optimizationResult.strategy, // 🔧 DODANE - KLUCZOWE!
+  optimizedAt: new Date(),
+  processingTimeMs: processingTimeMs
+};
+    
+    // =================== DETAILED RESULTS LOG ===================
+    console.log(`\n✅ OPTIMIZATION COMPLETED SUCCESSFULLY!`)
+    console.log(`${'='.repeat(60)}`)
+    console.log(`📄 File: ${source.name}`)
+    console.log(`⏱️  Processing time: ${(processingTimeMs / 1000).toFixed(2)}s`)
+    console.log(``)
+    console.log(`📊 COMPRESSION RESULTS:`)
+    console.log(`   Original length: ${optimizationResult.originalLength.toLocaleString()} chars`)
+    console.log(`   Optimized length: ${optimizationResult.optimizedLength.toLocaleString()} chars`)
+    console.log(`   Compression ratio: ${(optimizationResult.compressionRatio * 100).toFixed(1)}%`)
+    console.log(`   Space saved: ${((1 - optimizationResult.compressionRatio) * 100).toFixed(1)}%`)
+    console.log(`   Characters saved: ${(optimizationResult.originalLength - optimizationResult.optimizedLength).toLocaleString()}`)
+    console.log(``)
+    console.log(`💰 COST ANALYSIS:`)
+    console.log(`   Processing cost: $${optimizationResult.processingCost.toFixed(6)}`)
+    console.log(`   Chunks processed: ${optimizationResult.chunkCount}`)
+    console.log(`   Cost per chunk: $${(optimizationResult.processingCost / optimizationResult.chunkCount).toFixed(6)}`)
+    console.log(``)
+    console.log(`🎯 KEY TOPICS IDENTIFIED:`)
+    optimizationResult.keyTopics.slice(0, 8).forEach((topic, index) => {
+      console.log(`   ${index + 1}. ${topic}`)
+    });
+    console.log(``)
+    console.log(`💡 POTENTIAL SAVINGS PER GENERATION:`)
+    const originalTokens = Math.ceil(optimizationResult.originalLength / 4);
+    const optimizedTokens = Math.ceil(optimizationResult.optimizedLength / 4);
+    const tokenSavings = originalTokens - optimizedTokens;
+    const costSavingsPerGeneration = (tokenSavings / 1000) * 0.001; // GPT-3.5 input cost
+    console.log(`   Tokens saved per generation: ${tokenSavings.toLocaleString()}`)
+    console.log(`   Cost saved per generation: $${costSavingsPerGeneration.toFixed(6)}`)
+    console.log(`   Estimated 10 generations savings: $${(costSavingsPerGeneration * 10).toFixed(4)}`)
+    console.log(``)
+    console.log(`📋 QUALITY PREVIEW:`)
+    console.log(`   Original (first 200 chars): "${source.extractedText.substring(0, 200)}..."`)
+    console.log(`   Optimized (first 200 chars): "${optimizationResult.optimizedText.substring(0, 200)}..."`)
+    console.log(`${'='.repeat(60)}\n`)
     
   } catch (error) {
-    console.error(`❌ Error in processFileContent for ${file.name}:`, error)
+    const processingTimeMs = Date.now() - optimizationStartTime;
+    console.log(`\n❌ OPTIMIZATION FAILED`)
+    console.log(`${'='.repeat(60)}`)
+    console.log(`📄 File: ${source.name}`)
+    console.log(`⏱️  Failed after: ${(processingTimeMs / 1000).toFixed(2)}s`)
+    console.log(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    console.log(`🔄 Will continue with original text for generation`)
+    console.log(`${'='.repeat(60)}\n`)
+  }
+} else {
+  console.log(`\n⏭️  SKIPPING OPTIMIZATION (text < 3000 chars)`)
+  console.log(`📊 Text length: ${source.extractedText.length} characters`)
+  console.log(`💡 Optimization threshold: 3000 characters`)
+  console.log(`✅ Original text will be used directly\n`)
+}
+
+logCompleteSourceStructure(source);
+// =================== END AUTO-OPTIMIZATION ===================
+    
+  } catch (error) {
+    console.error(`❌ Processing failed for ${file.name}:`, error)
     source.status = 'error'
     source.processingError = error instanceof Error ? error.message : 'Processing failed'
+    
+    // Re-throw the error so the Promise.catch in the main function can handle it
     throw error
   }
 }
 
-// PDF processing
+// Process PDF files using pdf2json
 async function processPDF(file: File, source: Source): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const pdfParser = new PDFParser()
-    
-    pdfParser.on('pdfParser_dataError', (errData: any) => {
-      console.error('PDF parsing error:', errData.parserError)
-      reject(new Error(`PDF parsing failed: ${errData.parserError}`))
-    })
-    
-    pdfParser.on('pdfParser_dataReady', (pdfData: any) => {
-      try {
-        // Extract text from PDF data
-        const pages = pdfData.Pages || []
-        let extractedText = ''
-        
-        pages.forEach((page: any, pageIndex: number) => {
-          const texts = page.Texts || []
+  console.log(`📄 Processing PDF: ${file.name}`)
+  
+  return new Promise(async (resolve, reject) => {
+    try {
+      const pdfParser = new PDFParser()
+      
+      pdfParser.on('pdfParser_dataError', (errData: any) => {
+        reject(new Error(`Failed to parse PDF: ${errData.parserError}`))
+      })
+      
+      pdfParser.on('pdfParser_dataReady', (pdfData: any) => {
+        try {
+          let fullText = ''
+          let pageCount = 0
           
-          texts.forEach((text: any) => {
-            if (text.R && text.R[0] && text.R[0].T) {
-              const decodedText = decodeURIComponent(text.R[0].T)
-              extractedText += decodedText + ' '
-            }
-          })
-          
-          // Add page break
-          if (pageIndex < pages.length - 1) {
-            extractedText += '\n\n'
+          if (pdfData.Pages && Array.isArray(pdfData.Pages)) {
+            pageCount = pdfData.Pages.length
+            
+            pdfData.Pages.forEach((page: any) => {
+              if (page.Texts && Array.isArray(page.Texts)) {
+                page.Texts.forEach((text: any) => {
+                  if (text.R && Array.isArray(text.R)) {
+                    text.R.forEach((textRun: any) => {
+                      if (textRun.T) {
+                        const decodedText = decodeURIComponent(textRun.T)
+                        fullText += decodedText + ' '
+                      }
+                    })
+                  }
+                })
+                fullText += '\n\n'
+              }
+            })
           }
-        })
-        
-        // Clean and process text
-        const cleanedText = cleanExtractedText(extractedText)
-        
-        if (cleanedText.length < 10) {
-          reject(new Error('PDF appears to be empty or text could not be extracted'))
-          return
+          
+          const extractedText = cleanExtractedText(fullText)
+          
+          if (!extractedText || extractedText.length < 50) {
+            reject(new Error('PDF appears to be empty or contains mostly images without text'))
+            return
+          }
+          
+          source.extractedText = extractedText
+          source.pages = pageCount
+          source.wordCount = countWords(extractedText)
+          source.metadata = {
+            ...source.metadata,
+            processingMethod: 'PDF2JSON parser'
+          }
+          
+          console.log(`✅ PDF processed: ${pageCount} pages, ${source.wordCount} words`)
+          resolve()
+          
+        } catch (error) {
+          reject(new Error(`Failed to extract text: ${error instanceof Error ? error.message : 'Unknown error'}`))
         }
-        
-        // Update source with extracted data
-        source.extractedText = cleanedText
-        source.pages = pages.length
-        source.wordCount = countWords(cleanedText)
-        source.metadata = {
-          ...source.metadata,
-          confidence: calculateTextConfidence(cleanedText),
-          language: detectLanguage(cleanedText)
-        }
-        
-        console.log(`📄 PDF processed: ${pages.length} pages, ${source.wordCount} words`)
-        resolve()
-        
-      } catch (error) {
-        console.error('Error processing PDF data:', error)
-        reject(new Error('Failed to extract text from PDF'))
-      }
-    })
-    
-    // Convert File to Buffer and parse
-    file.arrayBuffer().then(buffer => {
-      pdfParser.parseBuffer(Buffer.from(buffer))
-    }).catch(error => {
-      reject(new Error(`Failed to read PDF file: ${error.message}`))
-    })
+      })
+      
+      const arrayBuffer = await file.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+      pdfParser.parseBuffer(buffer)
+      
+    } catch (error) {
+      reject(new Error(`Failed to process PDF: ${error instanceof Error ? error.message : 'Unknown error'}`))
+    }
   })
 }
 
-// Text file processing
+// Process text files
 async function processTextFile(file: File, source: Source): Promise<void> {
+  console.log(`📝 Processing text file: ${file.name}`)
+  
   try {
     const text = await file.text()
     const cleanedText = cleanExtractedText(text)
     
-    if (cleanedText.length < 10) {
+    if (!cleanedText || cleanedText.length < 10) {
       throw new Error('Text file appears to be empty')
     }
     
@@ -343,59 +421,58 @@ async function processTextFile(file: File, source: Source): Promise<void> {
     source.wordCount = countWords(cleanedText)
     source.metadata = {
       ...source.metadata,
-      confidence: 1.0,
-      language: detectLanguage(cleanedText)
+      processingMethod: 'Direct text reading'
     }
     
-    console.log(`📝 Text file processed: ${source.wordCount} words`)
+    console.log(`✅ Text file processed: ${source.wordCount} words`)
     
   } catch (error) {
     throw new Error(`Failed to process text file: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }
 
-// DOCX processing
+// Process DOCX files using mammoth
 async function processDOCX(file: File, source: Source): Promise<void> {
+  console.log(`📄 Processing DOCX: ${file.name}`)
+  
   try {
     const arrayBuffer = await file.arrayBuffer()
-    const result = await mammoth.extractRawText({ arrayBuffer })
+    const buffer = Buffer.from(arrayBuffer)
     
-    const cleanedText = cleanExtractedText(result.value)
+    const result = await mammoth.extractRawText({ buffer })
+    const extractedText = cleanExtractedText(result.value)
     
-    if (cleanedText.length < 10) {
-      throw new Error('DOCX appears to be empty or text could not be extracted')
+    if (!extractedText || extractedText.length < 50) {
+      throw new Error('DOCX appears to be empty or contains no readable text')
     }
     
-    source.extractedText = cleanedText
-    source.wordCount = countWords(cleanedText)
+    source.extractedText = extractedText
+    source.wordCount = countWords(extractedText)
     source.metadata = {
       ...source.metadata,
-      confidence: 0.95,
-      language: detectLanguage(cleanedText)
+      processingMethod: 'Mammoth DOCX parser'
     }
     
-    if (result.messages.length > 0) {
-      console.log('DOCX conversion messages:', result.messages)
-    }
-    
-    console.log(`📄 DOCX processed: ${source.wordCount} words`)
+    console.log(`✅ DOCX processed: ${source.wordCount} words`)
     
   } catch (error) {
-    throw new Error(`Failed to process DOCX file: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    throw new Error(`Failed to process DOCX: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }
 
-// Image processing with Vision API
+// Process images using OpenAI Vision API
 async function processImageWithVision(file: File, source: Source): Promise<void> {
+  console.log(`🖼️ Processing Image with Vision API: ${file.name}`)
+  
   try {
-    console.log(`👁️ Processing image with Vision API: ${file.name}`)
-    
     // Convert image to base64
     const arrayBuffer = await file.arrayBuffer()
-    const base64 = Buffer.from(arrayBuffer).toString('base64')
+    const base64Image = Buffer.from(arrayBuffer).toString('base64')
     const mimeType = file.type || 'image/jpeg'
     
-    // Call Vision API
+    console.log(`📤 Sending image to Vision API (${formatFileSize(file.size)})`)
+    
+    // Call OpenAI Vision API
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -404,191 +481,218 @@ async function processImageWithVision(file: File, source: Source): Promise<void>
           content: [
             {
               type: "text",
-              text: "Analyze this image and extract all visible text, diagrams, charts, and important visual information. Provide a detailed description that would be useful for studying."
+              text: `Extract all visible text from this image. If the image contains:
+              - Documents: Extract the text content accurately
+              - Screenshots: Extract all readable text
+              - Handwritten notes: Do your best to read the handwriting
+              - Diagrams/Charts: Describe the content and extract any labels/text
+              - Presentations: Extract slide content including titles and bullet points
+              
+              Return only the extracted text content. If there's no readable text, respond with "No readable text found in this image."`
             },
             {
               type: "image_url",
               image_url: {
-                url: `data:${mimeType};base64,${base64}`
+                url: `data:${mimeType};base64,${base64Image}`,
+                detail: "high"
               }
             }
           ]
         }
       ],
-      max_tokens: 2000
+      max_tokens: 4096
     })
     
-    const extractedText = response.choices[0]?.message?.content || ''
+    const extractedText = response.choices[0]?.message?.content?.trim()
     
-    if (extractedText.length < 10) {
-      throw new Error('No meaningful content could be extracted from the image')
+    if (!extractedText || extractedText === "No readable text found in this image.") {
+      throw new Error('No readable text could be extracted from this image')
     }
     
     const cleanedText = cleanExtractedText(extractedText)
     
-    source.extractedText = cleanedText
-    source.wordCount = countWords(cleanedText)
-    source.subtype = 'vision-analyzed'
-    source.metadata = {
-      ...source.metadata,
-      confidence: 0.85,
-      language: detectLanguage(cleanedText),
-      apiCost: (response.usage?.total_tokens || 0) * 0.00001 // Rough estimate
+    if (cleanedText.length < 10) {
+      throw new Error('Only minimal text content was found in this image')
     }
     
-    console.log(`👁️ Image processed: ${source.wordCount} words extracted`)
+    source.extractedText = cleanedText
+    source.wordCount = countWords(cleanedText)
+    source.subtype = file.type?.split('/')[1] || 'unknown'
+    source.metadata = {
+      ...source.metadata,
+      processingMethod: 'OpenAI Vision API',
+      apiCost: 0.01 // Approximate cost
+    }
+    
+    console.log(`✅ Image processed with Vision API: ${source.wordCount} words extracted`)
     
   } catch (error) {
-    throw new Error(`Failed to process image: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    console.error(`❌ Vision API processing failed:`, error)
+    
+    let errorMessage = 'Failed to process image'
+    
+    if (error instanceof Error) {
+      if (error.message.includes('404') || error.message.includes('deprecated')) {
+        errorMessage = 'Vision API model is outdated. Please update the application.'
+      } else if (error.message.includes('401') || error.message.includes('unauthorized')) {
+        errorMessage = 'Invalid OpenAI API key for Vision API'
+      } else if (error.message.includes('429')) {
+        errorMessage = 'OpenAI API rate limit exceeded. Please try again later.'
+      } else if (error.message.includes('400')) {
+        errorMessage = 'Invalid image format or file corrupted'
+      } else {
+        errorMessage = `Vision API error: ${error.message}`
+      }
+    }
+    
+    throw new Error(errorMessage)
   }
 }
 
-// Audio processing with Whisper API
+// Process audio files using OpenAI Whisper API
 async function processAudioWithWhisper(file: File, source: Source): Promise<void> {
+  console.log(`🎵 Processing Audio with Whisper API: ${file.name}`)
+  
   try {
-    console.log(`🎤 Processing audio with Whisper API: ${file.name}`)
+    console.log(`📤 Sending audio to Whisper API (${formatFileSize(file.size)})`)
     
-    // Estimate duration for metadata
-    const estimatedDuration = estimateAudioDuration(file.size)
-    source.duration = formatDuration(estimatedDuration)
+    // Create form data for Whisper API
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('model', 'whisper-1')
+    formData.append('response_format', 'verbose_json')
+    formData.append('language', 'en') // Auto-detect or specify language
     
     // Call Whisper API
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('model', 'whisper-1')
-    formData.append('response_format', 'text')
-    
-    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: formData
+    const response = await openai.audio.transcriptions.create({
+      file: file,
+      model: 'whisper-1',
+      response_format: 'verbose_json',
+      language: 'en' // Can be removed for auto-detection
     })
     
-    if (!response.ok) {
-      throw new Error(`Whisper API error: ${response.status} ${response.statusText}`)
+    if (!response.text || response.text.trim().length < 10) {
+      throw new Error('No speech could be detected in this audio file')
     }
     
-    const extractedText = await response.text()
+    const extractedText = cleanExtractedText(response.text)
+    const duration = response.duration || estimateAudioDuration(file.size)
     
-    if (extractedText.length < 10) {
-      throw new Error('No meaningful speech could be transcribed from the audio')
-    }
-    
-    const cleanedText = cleanExtractedText(extractedText)
-    
-    source.extractedText = cleanedText
-    source.wordCount = countWords(cleanedText)
-    source.subtype = 'transcribed'
+    source.extractedText = extractedText
+    source.wordCount = countWords(extractedText)
+    source.duration = formatDuration(duration)
+    source.subtype = file.type?.split('/')[1] || 'unknown'
     source.metadata = {
       ...source.metadata,
-      confidence: 0.90,
-      language: detectLanguage(cleanedText),
-      apiCost: estimatedDuration * 0.006 / 60 // $0.006 per minute
+      processingMethod: 'OpenAI Whisper API',
+      language: response.language || 'unknown',
+      apiCost: Math.round((duration / 60) * 0.006 * 100) / 100 // $0.006 per minute
     }
     
-    console.log(`🎤 Audio processed: ${source.wordCount} words transcribed from ${source.duration}`)
+    console.log(`✅ Audio processed with Whisper: ${source.duration}, ${source.wordCount} words`)
     
   } catch (error) {
-    throw new Error(`Failed to process audio: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    console.error(`❌ Whisper API processing failed:`, error)
+    
+    let errorMessage = 'Failed to process audio'
+    
+    if (error instanceof Error) {
+      if (error.message.includes('401') || error.message.includes('unauthorized')) {
+        errorMessage = 'Invalid OpenAI API key for Whisper API'
+      } else if (error.message.includes('429')) {
+        errorMessage = 'OpenAI API rate limit exceeded. Please try again later.'
+      } else if (error.message.includes('413') || error.message.includes('too large')) {
+        errorMessage = 'Audio file too large for Whisper API (max 25MB)'
+      } else if (error.message.includes('400')) {
+        errorMessage = 'Invalid audio format. Supported: mp3, wav, m4a, flac, etc.'
+      } else {
+        errorMessage = `Whisper API error: ${error.message}`
+      }
+    }
+    
+    throw new Error(errorMessage)
   }
 }
 
-// Video processing (extract audio and transcribe)
+// Process video files by extracting audio and using Whisper
 async function processVideoWithWhisper(file: File, source: Source): Promise<void> {
+  console.log(`🎬 Processing Video with Whisper API: ${file.name}`)
+  
   try {
-    console.log(`🎬 Processing video (audio extraction) with Whisper API: ${file.name}`)
+    // For now, we'll try to send the video directly to Whisper
+    // Whisper API can handle video files and extract audio automatically
+    console.log(`📤 Sending video to Whisper API (${formatFileSize(file.size)})`)
     
-    // Estimate duration for metadata
-    const estimatedDuration = estimateVideoDuration(file.size)
-    source.duration = formatDuration(estimatedDuration)
-    
-    // For now, try to send video directly to Whisper (it can handle some video formats)
-    // In production, you might want to extract audio first using ffmpeg
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('model', 'whisper-1')
-    formData.append('response_format', 'text')
-    
-    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: formData
+    const response = await openai.audio.transcriptions.create({
+      file: file,
+      model: 'whisper-1',
+      response_format: 'verbose_json'
     })
     
-    if (!response.ok) {
-      throw new Error(`Whisper API error: ${response.status} ${response.statusText}`)
+    if (!response.text || response.text.trim().length < 10) {
+      throw new Error('No speech could be detected in this video file')
     }
     
-    const extractedText = await response.text()
+    const extractedText = cleanExtractedText(response.text)
+    const duration = response.duration || estimateVideoDuration(file.size)
     
-    if (extractedText.length < 10) {
-      throw new Error('No meaningful speech could be transcribed from the video')
-    }
-    
-    const cleanedText = cleanExtractedText(extractedText)
-    
-    source.extractedText = cleanedText
-    source.wordCount = countWords(cleanedText)
-    source.subtype = 'video-transcribed'
+    source.extractedText = extractedText
+    source.wordCount = countWords(extractedText)
+    source.duration = formatDuration(duration)
+    source.subtype = file.type?.split('/')[1] || 'unknown'
     source.metadata = {
       ...source.metadata,
-      confidence: 0.85,
-      language: detectLanguage(cleanedText),
-      apiCost: estimatedDuration * 0.006 / 60 // $0.006 per minute
+      processingMethod: 'OpenAI Whisper API (video)',
+      language: response.language || 'unknown',
+      apiCost: Math.round((duration / 60) * 0.006 * 100) / 100 // $0.006 per minute
     }
     
-    console.log(`🎬 Video processed: ${source.wordCount} words transcribed from ${source.duration}`)
+    console.log(`✅ Video processed with Whisper: ${source.duration}, ${source.wordCount} words`)
     
   } catch (error) {
-    throw new Error(`Failed to process video: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    console.error(`❌ Video Whisper processing failed:`, error)
+    
+    let errorMessage = 'Failed to process video'
+    
+    if (error instanceof Error) {
+      if (error.message.includes('401') || error.message.includes('unauthorized')) {
+        errorMessage = 'Invalid OpenAI API key for Whisper API'
+      } else if (error.message.includes('429')) {
+        errorMessage = 'OpenAI API rate limit exceeded. Please try again later.'
+      } else if (error.message.includes('413') || error.message.includes('too large')) {
+        errorMessage = 'Video file too large for Whisper API (max 100MB)'
+      } else if (error.message.includes('400')) {
+        errorMessage = 'Invalid video format or no audio track found'
+      } else {
+        errorMessage = `Whisper API error: ${error.message}`
+      }
+    }
+    
+    throw new Error(errorMessage)
   }
 }
 
 // Helper functions
 function cleanExtractedText(text: string): string {
+  if (!text) return ''
+  
   return text
     .replace(/\s+/g, ' ')
-    .replace(/\n+/g, '\n')
+    .replace(/[^\w\s\-.,;:!?()[\]{}'"]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
 }
 
 function countWords(text: string): number {
+  if (!text) return 0
   return text.split(/\s+/).filter(word => word.length > 0).length
-}
-
-function calculateTextConfidence(text: string): number {
-  // Simple heuristic: longer text with normal word distribution = higher confidence
-  const words = text.split(/\s+/)
-  const avgWordLength = words.reduce((sum, word) => sum + word.length, 0) / words.length
-  
-  // Normal average word length is around 4-6 characters
-  if (avgWordLength >= 3 && avgWordLength <= 8) {
-    return Math.min(0.95, 0.7 + (text.length / 10000))
-  } else {
-    return 0.6
-  }
-}
-
-function detectLanguage(text: string): string {
-  // Simple language detection - could be enhanced with a proper library
-  const sample = text.substring(0, 1000).toLowerCase()
-  
-  if (/[ąćęłńóśźż]/.test(sample)) return 'pl'
-  if (/[äöüß]/.test(sample)) return 'de'
-  if (/[àáâäçéèêëíîïñóôöúùûü]/.test(sample)) return 'fr'
-  if (/[áéíñóúü]/.test(sample)) return 'es'
-  
-  return 'en' // Default to English
 }
 
 function getFileType(file: File): Source['type'] {
   const mimeType = file.type.toLowerCase()
   const fileName = file.name.toLowerCase()
   
+  // Check by MIME type first
   if (mimeType.includes('pdf')) return 'pdf'
   if (mimeType.includes('text')) return 'text'
   if (mimeType.includes('word') || mimeType.includes('document')) return 'docx'
@@ -596,8 +700,9 @@ function getFileType(file: File): Source['type'] {
   if (mimeType.includes('audio')) return 'audio'
   if (mimeType.includes('video')) return 'youtube'
   
+  // Check by file extension
   if (fileName.endsWith('.pdf')) return 'pdf'
-  if (fileName.endsWith('.txt') || fileName.endsWith('.md')) return 'text'
+  if (fileName.endsWith('.txt')) return 'text'
   if (fileName.endsWith('.doc') || fileName.endsWith('.docx')) return 'docx'
   if (fileName.match(/\.(jpg|jpeg|png|gif|bmp|tiff|webp)$/)) return 'image'
   if (fileName.match(/\.(mp3|wav|m4a|aac|ogg|flac)$/)) return 'audio'
@@ -635,4 +740,41 @@ function estimateAudioDuration(sizeBytes: number): number {
 function estimateVideoDuration(sizeBytes: number): number {
   // Rough estimate: 2Mbps video = ~15MB per minute
   return (sizeBytes / 1024 / 1024 / 15) * 60
+}
+
+// Helper function to log complete structure
+function logCompleteSourceStructure(source: any) {
+  console.log(`\n🔍 COMPLETE SOURCE STRUCTURE DUMP:`);
+  console.log(`${'='.repeat(100)}`);
+  
+  const sourceStructure = {
+    id: source.id,
+    name: source.name,
+    type: source.type,
+    status: source.status,
+    size: source.size,
+    duration: source.duration,
+    pages: source.pages,
+    wordCount: source.wordCount,
+    processingError: source.processingError,
+    subtype: source.subtype,
+    metadata: source.metadata,
+    
+    // TEXT CONTENT LENGTHS
+    extractedTextLength: source.extractedText?.length || 0,
+    optimizedTextLength: source.optimizedText?.length || 0,
+    
+    // OPTIMIZATION STATS
+    optimizationStats: source.optimizationStats,
+    
+    // FOR GENERATION ENDPOINTS
+    textThatWillBeUsed: {
+      source: source.optimizedText ? 'optimizedText' : 'extractedText',
+      length: (source.optimizedText || source.extractedText || '').length,
+      preview: (source.optimizedText || source.extractedText || '')
+    }
+  };
+  
+  console.log(JSON.stringify(sourceStructure, null, 2));
+  console.log(`${'='.repeat(100)}\n`);
 }
