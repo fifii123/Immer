@@ -123,17 +123,7 @@ export default function QuickStudyPage() {
               <RefreshCw className={`h-4 w-4 ${fetchingSources ? 'animate-spin' : ''}`} />
             </Button>
             
-            <Button 
-              variant="outline" 
-              size="sm"
-              className="hover:bg-accent"
-              onClick={() => document.getElementById('file-upload')?.click()}
-              disabled={uploadInProgress || !sessionId}
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              {uploadInProgress ? 'Uploading...' : 'Upload'}
-            </Button>
-            
+
             <Button 
               variant="ghost" 
               size="sm"

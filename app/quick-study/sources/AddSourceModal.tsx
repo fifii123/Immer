@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   Upload,
   FileText,
@@ -46,6 +46,17 @@ export default function AddSourceModal({
   const [title, setTitle] = useState('')
   const [processing, setProcessing] = useState(false)
 
+  // Reset form state when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedType('file')
+      setTextContent('')
+      setUrlContent('')
+      setTitle('')
+      setProcessing(false)
+    }
+  }, [isOpen])
+
   const handleClose = () => {
     if (uploadInProgress || processing) return
     
@@ -58,14 +69,14 @@ export default function AddSourceModal({
     onClose()
   }
 
-const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-  const files = event.target.files
-  if (files && files.length > 0) {
-    onFileUpload(Array.from(files))
-    // Auto-close modal after successful file selection
-    handleClose()
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (files && files.length > 0) {
+      onFileUpload(Array.from(files))
+      // Auto-close modal after successful file selection (like old version)
+      handleClose()
+    }
   }
-}
 
   const handleTextSubmit = async () => {
     if (!textContent.trim()) return
@@ -164,41 +175,42 @@ const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
 
           {/* Content Input Based on Selected Type */}
           <div className="space-y-4">
-{selectedType === 'file' && (
-  <div className="space-y-4">
-    <div>
-      <Label className="block text-sm font-medium mb-2 text-foreground">
-        Select Files
-      </Label>
-      <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
-        <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
-        <div className="space-y-2">
-          <p className="text-sm text-foreground">
-            Drop files here or click to browse
-          </p>
-          <p className="text-xs text-muted-foreground">
-            PDF, Word, images, audio, video files supported
-          </p>
-        </div>
-        <input
-          type="file"
-          multiple
-          onChange={handleFileSelect}
-          disabled={uploadInProgress}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-          accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.mp3,.wav,.mp4,.avi,.mov"
-        />
-      </div>
-    </div>
-    
-    {uploadInProgress && (
-      <div className="flex items-center gap-2 text-sm text-primary">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Processing files...
-      </div>
-    )}
-  </div>
-)}
+            {selectedType === 'file' && (
+              <div className="space-y-4">
+                <div>
+                  <Label className="block text-sm font-medium mb-2 text-foreground">
+                    Select Files
+                  </Label>
+                  <div className="relative border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
+                    <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
+                    <div className="space-y-2">
+                      <p className="text-sm text-foreground">
+                        Drop files here or click to browse
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        PDF, Word, images, audio, video files supported
+                      </p>
+                    </div>
+                    {/* FIXED: Absolute positioned ONLY within this drop zone, not entire modal */}
+                    <input
+                      type="file"
+                      multiple
+                      onChange={handleFileSelect}
+                      disabled={uploadInProgress}
+                      className="absolute inset-0 opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                      accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.mp3,.wav,.mp4,.avi,.mov"
+                    />
+                  </div>
+                </div>
+                
+                {uploadInProgress && (
+                  <div className="flex items-center gap-2 text-sm text-primary">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Processing files...
+                  </div>
+                )}
+              </div>
+            )}
 
             {selectedType === 'text' && (
               <div className="space-y-3">
@@ -304,7 +316,6 @@ const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
                 )}
               </Button>
             )}
-            
           </div>
         </div>
       </DialogContent>
