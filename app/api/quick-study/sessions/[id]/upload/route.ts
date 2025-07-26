@@ -66,6 +66,26 @@ const FILE_SIZE_LIMITS = {
   video: 100 * 1024 * 1024,   // 100MB (will extract audio)
 }
 
+// Determine if file needs external API processing
+function needsExternalAPI(fileType: string, fileSize: number): boolean {
+  switch (fileType) {
+    case 'image':
+    case 'audio': 
+    case 'youtube': // Video files
+      return true // Always need external API (Vision/Whisper)
+      
+    case 'text':
+    case 'pdf':
+    case 'docx':
+      // Check if text optimization will be needed
+      // Large files might need optimization API
+      return fileSize > 1024 * 1024 // Files > 1MB might need optimization
+      
+    default:
+      return false
+  }
+}
+
 // Upload files to session
 export async function POST(
   request: NextRequest,
@@ -131,35 +151,41 @@ export async function POST(
         continue
       }
       
-      // Create source object with initial processing status
+      // 🔧 SMART STATUS: Set initial status based on whether external API is needed
+      const initialStatus = needsExternalAPI(fileType, file.size) ? 'processing' : 'ready'
+      
+      // Create source object
       const source: Source = {
         id: `file-${Date.now()}-${i}`,
         name: file.name,
         type: fileType,
-        status: 'processing',
+        status: 'processing', // 🔧 ALWAYS start with processing for UI
         size: formatFileSize(file.size),
         metadata: {
           processingMethod: `${fileType.toUpperCase()} processor`
         }
       }
       
+      console.log(`📊 Initial status for ${file.name}: processing (External API needed: ${needsExternalAPI(fileType, file.size)})`)
+      
       newSources.push(source)
       
-      // Create async processing promise
-      const processingPromise = processFileContent(file, source)
+      // 🔧 IMPROVED: Create processing promise with better error handling
+      const processingPromise = processFileContentWithStatusUpdate(file, source)
         .then(() => {
-          console.log(`✅ Successfully processed: ${source.name}`)
+          console.log(`✅ Successfully processed: ${source.name} (Final status: ${source.status})`)
         })
         .catch((error) => {
           console.error(`❌ Error processing ${file.name}:`, error)
+          // 🔧 CRITICAL: Always update status on error
           source.status = 'error'
           source.processingError = error instanceof Error ? error.message : 'Processing failed'
           
-          // Also log the error details for debugging
           console.error(`Full error details for ${file.name}:`, {
             name: file.name,
             type: source.type,
             size: source.size,
+            finalStatus: source.status,
             error: error instanceof Error ? {
               message: error.message,
               stack: error.stack
@@ -170,21 +196,68 @@ export async function POST(
       processingPromises.push(processingPromise)
     }
     
-    // Add sources to session immediately (with processing status)
+    // 🔧 INSTANT RESPONSE: Add sources to session immediately with processing status
     sessionData.sources.push(...newSources)
     
-    // Start processing files asynchronously
+    // 🔧 BACKGROUND PROCESSING: Process files asynchronously but with guaranteed status updates
     Promise.all(processingPromises).then(() => {
+      const readyCount = newSources.filter(s => s.status === 'ready').length
+      const errorCount = newSources.filter(s => s.status === 'error').length
+      const stillProcessingCount = newSources.filter(s => s.status === 'processing').length
+      
       console.log(`💾 Completed processing batch of ${newSources.length} files`)
+      console.log(`📊 Final status - Ready: ${readyCount}, Error: ${errorCount}, Still Processing: ${stillProcessingCount}`)
+      
+      if (stillProcessingCount > 0) {
+        console.warn(`⚠️ WARNING: ${stillProcessingCount} files still in processing state after completion!`)
+        // Force update any remaining processing files to error
+        newSources.forEach(source => {
+          if (source.status === 'processing') {
+            source.status = 'error'
+            source.processingError = 'Processing timed out or failed to complete'
+            console.warn(`🔄 Force-updated ${source.name} from processing to error`)
+          }
+        })
+      }
+    }).catch((error) => {
+      console.error(`❌ Critical error in batch processing:`, error)
+      // Force update all processing files to error as fallback
+      newSources.forEach(source => {
+        if (source.status === 'processing') {
+          source.status = 'error'
+          source.processingError = 'Batch processing failed'
+        }
+      })
     })
     
     console.log(`📊 Session now has ${sessionData.sources.length} total sources`)
     
+    // 🔧 RETURN IMMEDIATELY: User sees "processing" status in UI
     return Response.json(newSources)
     
   } catch (error) {
     console.error('❌ Error uploading files:', error)
     return Response.json({ message: 'Failed to upload files' }, { status: 500 })
+  }
+}
+
+// 🔧 NEW: Wrapper function that guarantees status updates
+async function processFileContentWithStatusUpdate(file: File, source: Source): Promise<void> {
+  try {
+    await processFileContent(file, source)
+    
+    // 🔧 GUARANTEE: Always ensure status is set to ready if no error occurred
+    if (source.status === 'processing') {
+      source.status = 'ready'
+      console.log(`🔄 Auto-corrected status for ${source.name}: processing -> ready`)
+    }
+    
+  } catch (error) {
+    // 🔧 GUARANTEE: Always ensure status is set to error on failure
+    source.status = 'error'
+    source.processingError = error instanceof Error ? error.message : 'Processing failed'
+    console.log(`🔄 Set error status for ${source.name}: ${source.processingError}`)
+    throw error // Re-throw for Promise.catch handling
   }
 }
 
@@ -223,114 +296,111 @@ async function processFileContent(file: File, source: Source): Promise<void> {
     }
     
     // Final validation
-// Final validation
-if (!source.extractedText || source.extractedText.length < 10) {
-  throw new Error('No meaningful text content could be extracted from this file')
-}
+    if (!source.extractedText || source.extractedText.length < 10) {
+      throw new Error('No meaningful text content could be extracted from this file')
+    }
 
-source.status = 'ready'
-console.log(`✅ File processing completed successfully: ${file.name}`)
+    console.log(`✅ File content extraction completed: ${file.name}`)
 
-// =================== AUTO-OPTIMIZATION ===================
-console.log(`\n🔍 CHECKING IF OPTIMIZATION IS NEEDED`)
-console.log(`📊 Extracted text length: ${source.extractedText.length} characters`)
-console.log(`📊 Word count: ${source.wordCount || 'unknown'}`)
+    // =================== AUTO-OPTIMIZATION ===================
+    console.log(`\n🔍 CHECKING IF OPTIMIZATION IS NEEDED`)
+    console.log(`📊 Extracted text length: ${source.extractedText.length} characters`)
+    console.log(`📊 Word count: ${source.wordCount || 'unknown'}`)
 
-if (source.extractedText.length > 3000) {
-  console.log(`\n🚀 STARTING AUTO-OPTIMIZATION (text > 3000 chars)`)
-  console.log(`${'='.repeat(60)}`)
-  console.log(`📄 File: ${source.name}`)
-  console.log(`📄 Type: ${source.type}`)
-  console.log(`📄 Original length: ${source.extractedText.length} characters`)
-  console.log(`${'='.repeat(60)}`)
-  
-  const optimizationStartTime = Date.now();
-  
-  try {
-    const optimizationResult = await TextOptimizationService.optimizeText(
-      source.extractedText,
-      source.name
-    );
-    
-    const processingTimeMs = Date.now() - optimizationStartTime;
-    
-// Store optimization results
-source.optimizedText = optimizationResult.optimizedText;
-source.optimizationStats = {
-  originalLength: optimizationResult.originalLength,
-  optimizedLength: optimizationResult.optimizedLength,
-  compressionRatio: optimizationResult.compressionRatio,
-  processingCost: optimizationResult.processingCost,
-  chunkCount: optimizationResult.chunkCount,
-  keyTopics: optimizationResult.keyTopics,
-  strategy: optimizationResult.strategy, // 🔧 DODANE - KLUCZOWE!
-  optimizedAt: new Date(),
-  processingTimeMs: processingTimeMs
-};
-    
-    // =================== DETAILED RESULTS LOG ===================
-    console.log(`\n✅ OPTIMIZATION COMPLETED SUCCESSFULLY!`)
-    console.log(`${'='.repeat(60)}`)
-    console.log(`📄 File: ${source.name}`)
-    console.log(`⏱️  Processing time: ${(processingTimeMs / 1000).toFixed(2)}s`)
-    console.log(``)
-    console.log(`📊 COMPRESSION RESULTS:`)
-    console.log(`   Original length: ${optimizationResult.originalLength.toLocaleString()} chars`)
-    console.log(`   Optimized length: ${optimizationResult.optimizedLength.toLocaleString()} chars`)
-    console.log(`   Compression ratio: ${(optimizationResult.compressionRatio * 100).toFixed(1)}%`)
-    console.log(`   Space saved: ${((1 - optimizationResult.compressionRatio) * 100).toFixed(1)}%`)
-    console.log(`   Characters saved: ${(optimizationResult.originalLength - optimizationResult.optimizedLength).toLocaleString()}`)
-    console.log(``)
-    console.log(`💰 COST ANALYSIS:`)
-    console.log(`   Processing cost: $${optimizationResult.processingCost.toFixed(6)}`)
-    console.log(`   Chunks processed: ${optimizationResult.chunkCount}`)
-    console.log(`   Cost per chunk: $${(optimizationResult.processingCost / optimizationResult.chunkCount).toFixed(6)}`)
-    console.log(``)
-    console.log(`🎯 KEY TOPICS IDENTIFIED:`)
-    optimizationResult.keyTopics.slice(0, 8).forEach((topic, index) => {
-      console.log(`   ${index + 1}. ${topic}`)
-    });
-    console.log(``)
-    console.log(`💡 POTENTIAL SAVINGS PER GENERATION:`)
-    const originalTokens = Math.ceil(optimizationResult.originalLength / 4);
-    const optimizedTokens = Math.ceil(optimizationResult.optimizedLength / 4);
-    const tokenSavings = originalTokens - optimizedTokens;
-    const costSavingsPerGeneration = (tokenSavings / 1000) * 0.001; // GPT-3.5 input cost
-    console.log(`   Tokens saved per generation: ${tokenSavings.toLocaleString()}`)
-    console.log(`   Cost saved per generation: $${costSavingsPerGeneration.toFixed(6)}`)
-    console.log(`   Estimated 10 generations savings: $${(costSavingsPerGeneration * 10).toFixed(4)}`)
-    console.log(``)
-    console.log(`📋 QUALITY PREVIEW:`)
-    console.log(`   Original (first 200 chars): "${source.extractedText.substring(0, 200)}..."`)
-    console.log(`   Optimized (first 200 chars): "${optimizationResult.optimizedText.substring(0, 200)}..."`)
-    console.log(`${'='.repeat(60)}\n`)
-    
-  } catch (error) {
-    const processingTimeMs = Date.now() - optimizationStartTime;
-    console.log(`\n❌ OPTIMIZATION FAILED`)
-    console.log(`${'='.repeat(60)}`)
-    console.log(`📄 File: ${source.name}`)
-    console.log(`⏱️  Failed after: ${(processingTimeMs / 1000).toFixed(2)}s`)
-    console.log(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    console.log(`🔄 Will continue with original text for generation`)
-    console.log(`${'='.repeat(60)}\n`)
-  }
-} else {
-  console.log(`\n⏭️  SKIPPING OPTIMIZATION (text < 3000 chars)`)
-  console.log(`📊 Text length: ${source.extractedText.length} characters`)
-  console.log(`💡 Optimization threshold: 3000 characters`)
-  console.log(`✅ Original text will be used directly\n`)
-}
+    if (source.extractedText.length > 3000) {
+      console.log(`\n🚀 STARTING AUTO-OPTIMIZATION (text > 3000 chars)`)
+      console.log(`${'='.repeat(60)}`)
+      console.log(`📄 File: ${source.name}`)
+      console.log(`📄 Type: ${source.type}`)
+      console.log(`📄 Original length: ${source.extractedText.length} characters`)
+      console.log(`${'='.repeat(60)}`)
+      
+      const optimizationStartTime = Date.now();
+      
+      try {
+        const optimizationResult = await TextOptimizationService.optimizeText(
+          source.extractedText,
+          source.name
+        );
+        
+        const processingTimeMs = Date.now() - optimizationStartTime;
+        
+        // Store optimization results
+        source.optimizedText = optimizationResult.optimizedText;
+        source.optimizationStats = {
+          originalLength: optimizationResult.originalLength,
+          optimizedLength: optimizationResult.optimizedLength,
+          compressionRatio: optimizationResult.compressionRatio,
+          processingCost: optimizationResult.processingCost,
+          chunkCount: optimizationResult.chunkCount,
+          keyTopics: optimizationResult.keyTopics,
+          optimizedAt: new Date(),
+          processingTimeMs: processingTimeMs
+        };
+        
+        // =================== DETAILED RESULTS LOG ===================
+        console.log(`\n✅ OPTIMIZATION COMPLETED SUCCESSFULLY!`)
+        console.log(`${'='.repeat(60)}`)
+        console.log(`📄 File: ${source.name}`)
+        console.log(`⏱️  Processing time: ${(processingTimeMs / 1000).toFixed(2)}s`)
+        console.log(``)
+        console.log(`📊 COMPRESSION RESULTS:`)
+        console.log(`   Original length: ${optimizationResult.originalLength.toLocaleString()} chars`)
+        console.log(`   Optimized length: ${optimizationResult.optimizedLength.toLocaleString()} chars`)
+        console.log(`   Compression ratio: ${(optimizationResult.compressionRatio * 100).toFixed(1)}%`)
+        console.log(`   Space saved: ${((1 - optimizationResult.compressionRatio) * 100).toFixed(1)}%`)
+        console.log(`   Characters saved: ${(optimizationResult.originalLength - optimizationResult.optimizedLength).toLocaleString()}`)
+        console.log(``)
+        console.log(`💰 COST ANALYSIS:`)
+        console.log(`   Processing cost: $${optimizationResult.processingCost.toFixed(6)}`)
+        console.log(`   Chunks processed: ${optimizationResult.chunkCount}`)
+        console.log(`   Cost per chunk: $${(optimizationResult.processingCost / optimizationResult.chunkCount).toFixed(6)}`)
+        console.log(``)
+        console.log(`🎯 KEY TOPICS IDENTIFIED:`)
+        optimizationResult.keyTopics.slice(0, 8).forEach((topic, index) => {
+          console.log(`   ${index + 1}. ${topic}`)
+        });
+        console.log(``)
+        console.log(`💡 POTENTIAL SAVINGS PER GENERATION:`)
+        const originalTokens = Math.ceil(optimizationResult.originalLength / 4);
+        const optimizedTokens = Math.ceil(optimizationResult.optimizedLength / 4);
+        const tokenSavings = originalTokens - optimizedTokens;
+        const costSavingsPerGeneration = (tokenSavings / 1000) * 0.001; // GPT-3.5 input cost
+        console.log(`   Tokens saved per generation: ${tokenSavings.toLocaleString()}`)
+        console.log(`   Cost saved per generation: $${costSavingsPerGeneration.toFixed(6)}`)
+        console.log(`   Estimated 10 generations savings: $${(costSavingsPerGeneration * 10).toFixed(4)}`)
+        console.log(``)
+        console.log(`📋 QUALITY PREVIEW:`)
+        console.log(`   Original (first 200 chars): "${source.extractedText.substring(0, 200)}..."`)
+        console.log(`   Optimized (first 200 chars): "${optimizationResult.optimizedText.substring(0, 200)}..."`)
+        console.log(`${'='.repeat(60)}\n`)
+        
+      } catch (error) {
+        const processingTimeMs = Date.now() - optimizationStartTime;
+        console.log(`\n❌ OPTIMIZATION FAILED`)
+        console.log(`${'='.repeat(60)}`)
+        console.log(`📄 File: ${source.name}`)
+        console.log(`⏱️  Failed after: ${(processingTimeMs / 1000).toFixed(2)}s`)
+        console.log(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        console.log(`🔄 Will continue with original text for generation`)
+        console.log(`${'='.repeat(60)}\n`)
+      }
+    } else {
+      console.log(`\n⏭️  SKIPPING OPTIMIZATION (text < 3000 chars)`)
+      console.log(`📊 Text length: ${source.extractedText.length} characters`)
+      console.log(`💡 Optimization threshold: 3000 characters`)
+      console.log(`✅ Original text will be used directly\n`)
+    }
 
-logCompleteSourceStructure(source);
-// =================== END AUTO-OPTIMIZATION ===================
+    logCompleteSourceStructure(source);
+    // =================== END AUTO-OPTIMIZATION ===================
+    
+    // 🔧 IMPORTANT: Don't set status here - let the wrapper function handle it
+    console.log(`🏁 processFileContent completed for ${file.name}`)
     
   } catch (error) {
     console.error(`❌ Processing failed for ${file.name}:`, error)
-    source.status = 'error'
-    source.processingError = error instanceof Error ? error.message : 'Processing failed'
-    
-    // Re-throw the error so the Promise.catch in the main function can handle it
+    // 🔧 IMPORTANT: Don't set status here - let the wrapper function handle it
     throw error
   }
 }
@@ -555,13 +625,6 @@ async function processAudioWithWhisper(file: File, source: Source): Promise<void
   
   try {
     console.log(`📤 Sending audio to Whisper API (${formatFileSize(file.size)})`)
-    
-    // Create form data for Whisper API
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('model', 'whisper-1')
-    formData.append('response_format', 'verbose_json')
-    formData.append('language', 'en') // Auto-detect or specify language
     
     // Call Whisper API
     const response = await openai.audio.transcriptions.create({
