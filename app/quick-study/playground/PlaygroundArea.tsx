@@ -2,20 +2,13 @@
 
 import React, { useState, useEffect } from 'react'
 import { 
-  ChevronLeft,
   ChevronRight,
   Zap,
   Target,
   PenTool,
   FileCheck,
-  Key,
-  Brain,
   MessageCircle,
   Loader2,
-  Sparkles,
-  Bot,
-  Send,
-  Upload,
   Clock,
   FileText,
   Youtube,
@@ -23,10 +16,10 @@ import {
   Network,
   Mic,
   File,
-  Globe
+  Globe,
+  Sparkles,
+  ArrowLeft
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Source, PlaygroundContent } from '../hooks/useQuickStudy'
 
 // Import note type modal
@@ -132,23 +125,39 @@ export default function PlaygroundArea({
   onTileClick,
   onChatClick
 }: PlaygroundAreaProps) {
-  const [handleVisible, setHandleVisible] = useState(true)
-  const [isHovering, setIsHovering] = useState(false)
   const [noteTypeModalOpen, setNoteTypeModalOpen] = useState(false)
+  const [isHovering, setIsHovering] = useState(false)
+  const [isButtonActive, setIsButtonActive] = useState(true)
 
+  // Handle button intensity - fade after 5 seconds of inactivity
   useEffect(() => {
     if (!curtainVisible) {
       const timer = setTimeout(() => {
-        setHandleVisible(false)
-      }, 2000)
+        setIsButtonActive(false)
+      }, 5000)
       
       return () => clearTimeout(timer)
     } else {
-      // Reset handle visibility when curtain opens
-      setHandleVisible(true)
-      setIsHovering(false)
+      setIsButtonActive(true)
+      setIsHovering(false) // Reset hover state when curtain opens
     }
-  }, [curtainVisible])
+  }, [curtainVisible, isHovering])
+
+  // Reset button activity on mouse interaction
+  const handleMouseEnter = () => {
+    setIsHovering(true)
+    setIsButtonActive(true)
+  }
+
+  const handleMouseLeave = () => {
+    setIsHovering(false)
+    // Start fade timer after hover ends
+    setTimeout(() => {
+      if (!isHovering) {
+        setIsButtonActive(false)
+      }
+    }, 5000)
+  }
 
   // Handle tile click with note type modal for notes
   const handleTileClick = (tileId: string) => {
@@ -208,21 +217,21 @@ export default function PlaygroundArea({
       case 'notes':
         return <NotesViewer output={currentOutput} selectedSource={selectedSource} />
         
-case 'chat':
-          const currentMessages = selectedSource ? sourceConversations[selectedSource.id] || [] : []
-          return (
-            <ChatViewer 
-              sessionId={sessionId} 
-              selectedSource={selectedSource}
-              initialMessages={currentMessages}
-              onMessagesChange={(sourceId, messages) => {
-                onSourceConversationsChange({
-                  ...sourceConversations,
-                  [sourceId]: messages
-                })
-              }}
-            />
-          )
+      case 'chat':
+        const currentMessages = selectedSource ? sourceConversations[selectedSource.id] || [] : []
+        return (
+          <ChatViewer 
+            sessionId={sessionId} 
+            selectedSource={selectedSource}
+            initialMessages={currentMessages}
+            onMessagesChange={(sourceId, messages) => {
+              onSourceConversationsChange({
+                ...sourceConversations,
+                [sourceId]: messages
+              })
+            }}
+          />
+        )
         
       case 'quiz':
         return <QuizViewer output={currentOutput} selectedSource={selectedSource} />
@@ -250,14 +259,8 @@ case 'chat':
 
       {/* Sliding Curtain */}
       <div className={`absolute top-0 bottom-0 transition-all duration-500 ease-out overflow-hidden z-10 ${
-        curtainVisible ? 'left-0 right-0' : 'left-[calc(100%-48px)] right-0'
-      } ${
-        curtainVisible 
-          ? 'bg-card border-border'
-          : (handleVisible || isHovering) 
-            ? 'bg-card border-border'
-            : 'bg-transparent border-transparent'
-      } border-l`}>
+        curtainVisible ? 'left-0 right-0 bg-card border-l border-border' : 'left-full right-0'
+      }`}>
         
         {/* Full curtain content */}
         <div className={`h-full transition-all duration-300 ${
@@ -335,25 +338,107 @@ case 'chat':
             </div>
           </button>
         </div>
-        
-        {/* Collapsed handle */}
-        {!curtainVisible && (
-          <div 
-            className="absolute left-0 top-0 bottom-0 w-12"
-            onMouseEnter={() => setIsHovering(true)}
-            onMouseLeave={() => setIsHovering(false)}
+      </div>
+
+      {/* Professional Handle - Always visible when curtain closed */}
+      {!curtainVisible && (
+        <div className="absolute right-4 top-4 z-20">
+          <div
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
           >
-            <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">
-              <button
-                className="w-8 h-16 rounded-lg flex items-center justify-center transition-all duration-200 backdrop-blur-sm bg-card/95 text-muted-foreground hover:bg-accent hover:text-foreground border border-border/60"
-                onClick={onShowCurtain}
+            <button
+              className="group relative transition-all duration-300 hover:scale-105"
+              onClick={onShowCurtain}
+            >
+              {/* Handle tab */}
+              <div 
+                className={`transition-all duration-300 group-hover:shadow-lg rounded-lg ${
+                  isButtonActive 
+                    ? 'bg-background border border-black shadow-md' 
+                    : 'bg-background border border-gray-400 shadow-sm opacity-60'
+                }`}
+                style={{
+                  width: '40px',
+                  height: '40px'
+                }}
               >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
+                {/* Icon container */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  {/* Single arrow pointing left */}
+                  <ArrowLeft className={`h-5 w-5 transition-colors ${
+                    isButtonActive 
+                      ? 'text-foreground/70 group-hover:text-foreground' 
+                      : 'text-foreground/40 group-hover:text-foreground/70'
+                  }`} />
+                </div>
+              </div>
+            </button>
+            
+            {/* Multi-tooltip system with hover bridge */}
+            <div className={`absolute top-full right-0 transition-all duration-400 ease-out ${
+              isHovering ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-2 scale-95 pointer-events-none'
+            }`}>
+              {/* Invisible bridge - łączy przycisk z tooltipami */}
+              <div className="absolute -top-3 right-0 w-full h-3" />
+              
+              <div className="relative flex flex-col gap-2 mt-3">
+                
+                {/* Primary: Study Methods */}
+                <div className="relative group/tooltip">
+                  <div className="bg-background shadow-sm pl-0 pr-2.5 rounded-full flex items-center h-7 hover:shadow-md transition-shadow cursor-pointer">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center mr-2 shadow-sm">
+                      <Sparkles className="h-3 w-3 text-white" />
+                    </div>
+                    <div className="text-xs font-normal text-gray-600 whitespace-nowrap">Study Methods</div>
+                  </div>
+                  {/* Arrow for primary */}
+                  <div className="absolute bottom-full right-3 transform">
+                    <div className="w-2 h-2 bg-background rotate-45 -mb-1 shadow-sm"></div>
+                  </div>
+                </div>
+
+                {/* Secondary: Edit/Regenerate (context-aware) */}
+                {playgroundContent && playgroundContent !== 'chat' && (
+                  <div className="bg-background shadow-sm pl-0 pr-2.5 rounded-full flex items-center h-7 hover:shadow-md transition-shadow cursor-pointer">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center mr-2 shadow-sm">
+                      <PenTool className="h-3 w-3 text-white" />
+                    </div>
+                    <div className="text-xs font-normal text-gray-600 whitespace-nowrap">
+                      {playgroundContent === 'notes' ? 'Edit Notes' : 
+                       playgroundContent === 'summary' ? 'Edit Summary' :
+                       playgroundContent === 'flashcards' ? 'Edit Cards' :
+                       playgroundContent === 'quiz' ? 'Edit Quiz' :
+                       'Regenerate'}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tertiary: Download/Export */}
+                {playgroundContent && ['notes', 'summary', 'flashcards'].includes(playgroundContent) && (
+                  <div className="bg-background shadow-sm pl-0 pr-2.5 rounded-full flex items-center h-7 hover:shadow-md transition-shadow cursor-pointer">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center mr-2 shadow-sm">
+                      <FileText className="h-3 w-3 text-white" />
+                    </div>
+                    <div className="text-xs font-normal text-gray-600 whitespace-nowrap">Export PDF</div>
+                  </div>
+                )}
+
+                {/* Quaternary: Settings/Options */}
+                {playgroundContent && (
+                  <div className="bg-background shadow-sm pl-0 pr-2.5 rounded-full flex items-center h-7 hover:shadow-md transition-shadow cursor-pointer opacity-75">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center mr-2 shadow-sm">
+                      <Target className="h-3 w-3 text-white" />
+                    </div>
+                    <div className="text-xs font-normal text-gray-600 whitespace-nowrap">Options</div>
+                  </div>
+                )}
+
+              </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Note Type Modal */}
       <NoteTypeModal 
