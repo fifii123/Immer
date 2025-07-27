@@ -20,6 +20,7 @@ interface Output {
   createdAt: Date;
   count?: number;
   content?: string;
+  noteType?: string;
 }
 
 // Global in-memory store
@@ -112,19 +113,35 @@ export async function POST(
     // Count sections for display
     const sectionCount = (generatedContent.match(/^#{1,3}\s/gm) || []).length
     
-    // Create output
-    const output: Output = {
-      id: `output-${Date.now()}`,
-      type: 'notes',
-      title: `Notes - ${source.name.replace(/\.[^/.]+$/, "")}`,
-      preview: preview,
-      status: 'ready',
-      sourceId: sourceId,
-      createdAt: new Date(),
-      count: sectionCount,
-      content: generatedContent
-    }
-    
+// Create dynamic title based on note type
+const getNoteTitleByType = (noteType: string, sourceName: string): string => {
+  const cleanName = sourceName.replace(/\.[^/.]+$/, "")
+  switch (noteType) {
+    case 'key-points':
+      return `Kluczowe punkty - ${cleanName}`
+    case 'structured':
+      return `Notatki strukturalne - ${cleanName}`
+    case 'summary-table':
+      return `Tabele i zestawienia - ${cleanName}`
+    case 'general':
+    default:
+      return `Notatki - ${cleanName}`
+  }
+}
+
+// Create output
+const output: Output = {
+  id: `output-${Date.now()}`,
+  type: 'notes',
+  title: getNoteTitleByType(noteType, source.name),
+  preview: preview,
+  status: 'ready',
+  sourceId: sourceId,
+  createdAt: new Date(),
+  count: sectionCount,
+  content: generatedContent,
+  noteType: noteType // Add noteType to track what was generated
+}
     // Add to session
     sessionData.outputs.push(output)
     

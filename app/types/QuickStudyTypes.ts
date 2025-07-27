@@ -51,6 +51,7 @@ export interface Output {
   createdAt: Date;
   count?: number;
   content?: string;
+  noteType?: string;
 }
 
 export interface SessionData {

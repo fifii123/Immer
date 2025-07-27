@@ -495,29 +495,39 @@ const handleTileClick = useCallback(async (type: string, options?: any) => {
   // Track this generation
   setActiveGenerations(prev => new Set([...prev, generationKey]))
   
-  // 🎯 NEW: Create generating output immediately for better UX
-  const generateTitle = (type: string, sourceName: string): string => {
-    const cleanName = sourceName.replace(/\.[^/.]+$/, "")
-    switch (type) {
-      case 'flashcards': return `Flashcards - ${cleanName}`
-      case 'quiz': return `Quiz - ${cleanName}`
-      case 'notes': return `Notes - ${cleanName}`
-      case 'summary': return `Summary - ${cleanName}`
-      case 'timeline': return `Timeline - ${cleanName}`
-      case 'knowledge-map': return `Knowledge Map - ${cleanName}`
-      default: return `${type} - ${cleanName}`
-    }
+const generateTitle = (type: string, sourceName: string, noteType?: string): string => {
+  const cleanName = sourceName.replace(/\.[^/.]+$/, "")
+  switch (type) {
+    case 'flashcards': return `Flashcards - ${cleanName}`
+    case 'quiz': return `Quiz - ${cleanName}`
+    case 'notes': 
+      if (noteType) {
+        switch (noteType) {
+          case 'key-points': return `Kluczowe punkty - ${cleanName}`
+          case 'structured': return `Notatki strukturalne - ${cleanName}`
+          case 'summary-table': return `Tabele i zestawienia - ${cleanName}`
+          case 'general': 
+          default: return `Notatki - ${cleanName}`
+        }
+      }
+      return `Notes - ${cleanName}`
+    case 'summary': return `Summary - ${cleanName}`
+    case 'timeline': return `Timeline - ${cleanName}`
+    case 'knowledge-map': return `Knowledge Map - ${cleanName}`
+    default: return `${type} - ${cleanName}`
   }
+}
   
-  const generatingOutput: Output = {
-    id: `temp-${generationKey}`,
-    type: type as Output['type'],
-    title: generateTitle(type, selectedSource.name),
-    preview: 'Generating content...',
-    status: 'generating',
-    sourceId: selectedSource.id,
-    createdAt: new Date()
-  }
+const generatingOutput: Output = {
+  id: `temp-${generationKey}`,
+  type: type as Output['type'],
+  title: generateTitle(type, selectedSource.name, options?.noteType),
+  preview: 'Generating content...',
+  status: 'generating',
+  sourceId: selectedSource.id,
+  createdAt: new Date(),
+  noteType: options?.noteType // Track the requested note type
+}
   
   // Add generating output immediately
   setOutputs(prev => [...prev, generatingOutput])
