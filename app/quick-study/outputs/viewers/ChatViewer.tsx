@@ -1,6 +1,96 @@
 "use client"
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeRaw from 'rehype-raw'
+import rehypeSanitize from 'rehype-sanitize'
+import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
+
+// Custom CSS for KaTeX to prevent layout shifts
+const katexStyles = `
+  .katex-display {
+    margin: 1rem 0 !important;
+    min-height: 2.5rem;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  
+  .katex {
+    font-size: 1em !important;
+    line-height: 1.2 !important;
+  }
+  
+  .katex-display .katex {
+    font-size: 1.1em !important;
+  }
+  
+  .markdown-content .katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    contain: layout style paint;
+  }
+  
+  .markdown-content .katex-html {
+    min-height: 1.2em;
+    contain: layout style;
+  }
+  
+  /* Force consistent heights for math elements */
+  .math-display {
+    min-height: 3rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    contain: layout style paint size;
+  }
+  
+  .math-inline {
+    min-height: 1.2rem !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    vertical-align: middle !important;
+    contain: layout style;
+  }
+  
+  /* Prevent reflow during KaTeX rendering */
+  .katex .katex-mathml {
+    position: absolute !important;
+    clip: rect(1px, 1px, 1px, 1px) !important;
+    padding: 0 !important;
+    border: 0 !important;
+    height: 1px !important;
+    width: 1px !important;
+    overflow: hidden !important;
+  }
+  
+  /* Stabilize message container during streaming */
+  .streaming-message {
+    min-height: 2rem;
+    will-change: contents;
+  }
+  
+  /* GPU acceleration for smooth scrolling */
+  .messages-container {
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+  }
+`
+
+// Add styles to document head
+if (typeof document !== 'undefined') {
+  const styleElement = document.createElement('style')
+  styleElement.textContent = katexStyles
+  if (!document.head.querySelector('style[data-katex-custom]')) {
+    styleElement.setAttribute('data-katex-custom', 'true')
+    document.head.appendChild(styleElement)
+  }
+}
+
 import { 
   Sparkles, 
   Send, 
@@ -47,10 +137,13 @@ export default function ChatViewer({
   const [isLoading, setIsLoading] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [streamingMessage, setStreamingMessage] = useState<string>('')
+  const [shouldShowAutoScrollIndicator, setShouldShowAutoScrollIndicator] = useState(true)
   const [isStreaming, setIsStreaming] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const shouldAutoScrollRef = useRef(true)
 
   // Memoized function to update parent with messages
   const updateParentMessages = useCallback((newMessages: Message[]) => {
@@ -65,10 +158,89 @@ export default function ChatViewer({
     updateParentMessages(newMessages)
   }, [updateParentMessages])
 
-  // Auto scroll to bottom when messages change
+  // Simple auto-scroll: enabled until user scrolls manually
+  const scrollToBottom = useCallback(() => {
+    const container = scrollContainerRef.current
+    if (!container || !shouldAutoScrollRef.current) return
+
+    requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight
+    })
+  }, [])
+
+  // Disable auto-scroll when user scrolls manually, enable when back at bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 10
+      
+      if (isAtBottom) {
+        // User scrolled back to bottom - re-enable auto-scroll
+        shouldAutoScrollRef.current = true
+      } else {
+        // User scrolled away from bottom - disable auto-scroll
+        shouldAutoScrollRef.current = false
+      }
+    }
+
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  // Force re-render when shouldAutoScrollRef changes for the indicator
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const handleScrollForIndicator = () => {
+      const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 10
+      
+      shouldAutoScrollRef.current = isAtBottom
+      setShouldShowAutoScrollIndicator(isAtBottom)
+    }
+
+    container.addEventListener('scroll', handleScrollForIndicator, { passive: true })
+    return () => container.removeEventListener('scroll', handleScrollForIndicator)
+  }, [])
+
+  // Auto-scroll for new messages and during streaming
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages, scrollToBottom])
+
+  // Auto-scroll during streaming content updates
+  useEffect(() => {
+    if (!isStreaming) return
+
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    // Handle content changes during streaming
+    const handleContentChange = () => {
+      if (shouldAutoScrollRef.current) {
+        setTimeout(() => {
+          container.scrollTop = container.scrollHeight
+        }, 20)
+      }
+    }
+
+    const mutationObserver = new MutationObserver(handleContentChange)
+    const resizeObserver = new ResizeObserver(handleContentChange)
+
+    mutationObserver.observe(container, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    })
+    resizeObserver.observe(container)
+
+    return () => {
+      mutationObserver.disconnect()
+      resizeObserver.disconnect()
+    }
+  }, [isStreaming])
 
   // Update local messages when source changes (not on every initialMessages change)
   useEffect(() => {
@@ -220,6 +392,9 @@ export default function ChatViewer({
 
   const handleClearConversation = () => {
     updateMessages([])
+    // Re-enable auto-scroll for new conversation
+    shouldAutoScrollRef.current = true
+    setShouldShowAutoScrollIndicator(true)
   }
 
   return (
@@ -255,7 +430,7 @@ export default function ChatViewer({
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" ref={scrollContainerRef}>
         <div className="max-w-4xl mx-auto px-6">
           {messages.length === 0 ? (
             // Welcome State
@@ -318,7 +493,7 @@ export default function ChatViewer({
             </div>
           ) : (
             // Messages List
-            <div className="py-4 space-y-4">
+            <div className="py-4 space-y-4 messages-container">
               {messages.map((message) => (
                 <div
                   key={message.id}
@@ -340,11 +515,79 @@ export default function ChatViewer({
                         message.role === 'user'
                           ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-lg shadow-indigo-500/25'
                           : 'bg-card border border-border shadow-sm'
-                      }`}
+                      } ${isStreaming && message.role === 'assistant' && message.id === messages[messages.length - 1]?.id ? 'streaming-message' : ''}`}
                     >
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                        {message.content}
-                      </p>
+                      {message.role === 'assistant' ? (
+                        <div className="markdown-content text-sm">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkMath]}
+                            rehypePlugins={[
+                              rehypeRaw,
+                              rehypeSanitize,
+                              rehypeHighlight,
+                              [rehypeKatex, {
+                                strict: false,
+                                trust: true,
+                                fleqn: false,
+                                throwOnError: false,
+                                errorColor: '#cc0000',
+                                macros: {
+                                  "\\f": "#1f(#2)"
+                                }
+                              }]
+                            ]}
+                            components={{
+                              h2: ({node, ...props}) => <h2 className="text-lg font-semibold text-blue-600 dark:text-blue-400 mt-4 mb-2" {...props} />,
+                              h3: ({node, ...props}) => <h3 className="text-md font-semibold text-blue-500 dark:text-blue-300 mt-3 mb-2" {...props} />,
+                              ul: ({node, ...props}) => <ul className="list-disc pl-5 my-2" {...props} />,
+                              ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-2" {...props} />,
+                              li: ({node, ...props}) => <li className="my-1" {...props} />,
+                              blockquote: ({node, ...props}) => (
+                                <blockquote className="border-l-4 border-blue-400 dark:border-blue-600 pl-4 py-1 my-2 bg-blue-50 dark:bg-blue-900/20 rounded" {...props} />
+                              ),
+                              code: ({node, inline, className, children, ...props}) => {
+                                if (inline) {
+                                  return <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm font-mono" {...props}>{children}</code>
+                                }
+                                return (
+                                  <div className="my-3">
+                                    <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-3 rounded-lg overflow-x-auto">
+                                      <code {...props}>{children}</code>
+                                    </pre>
+                                  </div>
+                                )
+                              },
+                              table: ({node, ...props}) => (
+                                <div className="overflow-x-auto my-4">
+                                  <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600" {...props} />
+                                </div>
+                              ),
+                              th: ({node, ...props}) => <th className="border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-left font-semibold" {...props} />,
+                              td: ({node, ...props}) => <td className="border border-gray-300 dark:border-gray-600 px-3 py-2" {...props} />,
+                              strong: ({node, ...props}) => <strong className="font-semibold text-gray-900 dark:text-gray-100" {...props} />,
+                              // Custom handling for math elements to prevent layout shifts
+                              div: ({node, className, ...props}) => {
+                                if (className?.includes('math-display')) {
+                                  return <div className={`${className} min-h-[2rem] flex items-center justify-center my-4`} {...props} />
+                                }
+                                return <div className={className} {...props} />
+                              },
+                              span: ({node, className, ...props}) => {
+                                if (className?.includes('math-inline')) {
+                                  return <span className={`${className} inline-block min-h-[1.2rem] align-middle`} {...props} />
+                                }
+                                return <span className={className} {...props} />
+                              }
+                            }}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                          {message.content}
+                        </p>
+                      )}
                     </div>
                     <p className={`text-xs mt-2 ${
                       message.role === 'user' ? 'text-right' : 'text-left'
@@ -380,6 +623,7 @@ export default function ChatViewer({
                   </div>
                 </div>
               )}
+
               <div ref={messagesEndRef} />
             </div>
           )}
@@ -427,9 +671,17 @@ export default function ChatViewer({
               <p className="text-xs text-muted-foreground">
                 <kbd className="px-1.5 py-0.5 text-xs font-medium bg-muted rounded">Enter</kbd> to send, <kbd className="px-1.5 py-0.5 text-xs font-medium bg-muted rounded">Shift + Enter</kbd> for new line
               </p>
-              <div className="flex items-center gap-1">
-                <Command className="h-3 w-3 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">AI-powered responses</span>
+              <div className="flex items-center gap-3">
+                {shouldShowAutoScrollIndicator && (
+                  <div className="flex items-center gap-1 text-green-600">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-xs">Auto-scroll</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1">
+                  <Command className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">AI-powered responses</span>
+                </div>
               </div>
             </div>
           </div>

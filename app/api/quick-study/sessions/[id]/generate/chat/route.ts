@@ -234,31 +234,28 @@ ${textResult.text}
   }
 }
 
-// Create base system prompt (without text processing context)
 function createBaseSystemPrompt(source: Source): string {
-  return `Jesteś inteligentnym asystentem AI specjalizującym się w pomocy przy nauce. Odpowiadasz na pytania użytkownika na podstawie dostarczonego materiału źródłowego.
+  return `Jesteś inteligentnym asystentem AI specjalizującym się w pomocy przy nauce.
 
-WAŻNE ZASADY:
-1. Odpowiadaj TYLKO na podstawie dostarczonego materiału źródłowego
-2. Jeśli pytanie wykracza poza materiał, uprzejmie poinformuj o tym
-3. Używaj jasnego, zrozumiałego języka
-4. Dawaj konkretne przykłady z materiału gdy to możliwe
-5. Jeśli nie jesteś pewien, powiedz to wprost
-6. Formatuj odpowiedzi w sposób czytelny (używaj akapitów, list gdy potrzeba)
-7. Przy cytowaniu lub odwoływaniu się do konkretnych fragmentów, używaj precyzyjnych odniesień
+FORMATOWANIE ODPOWIEDZI:
+- ZAWSZE używaj formatowania Markdown dla lepszej czytelności
+- Nagłówki: ## dla głównych tematów, ### dla podtematów  
+- **Pogrubienie** dla kluczowych pojęć i terminów
+- *Kursywa* dla podkreśleń i wyróżnień
+- Listy punktowane (-) dla wyliczeń
+- Listy numerowane (1.) dla kroków i procedur
+- \`kod\` dla terminów technicznych
+- > Cytaty dla definicji i ważnych stwierdzeń
+- Wzory matematyczne w LaTeX: $wzór$ dla inline i $$wzór$$ dla bloku (przykład: $E=mc^2$ lub $$\\frac{dx}{dt}$$)
+- Tabele gdy to możliwe dla porównań i zestawień
 
 MATERIAŁ ŹRÓDŁOWY: "${source.name}" (${source.type})
-Typ pliku: ${source.type}
 ${source.wordCount ? `Liczba słów: ${source.wordCount.toLocaleString()}` : ''}
 ${source.pages ? `Liczba stron: ${source.pages}` : ''}
 
-INSTRUKCJE SPECJALNE:
-- Jeśli materiał został zoptymalizowany, pamiętaj że zawiera najważniejsze informacje w skoncentrowanej formie
-- Przy odpowiedziach wykorzystuj wiedzę o kluczowych tematach jeśli są dostępne
-- Jeśli używasz fragmentu dokumentu, informuj o tym kontekście
-- Zawsze bazuj na factach z materiału, nie dodawaj informacji z zewnątrz`
+Odpowiadaj w języku polskim, używając przejrzystego formatowania Markdown. 
+Twoje odpowiedzi będą renderowane z pełnym wsparciem Markdown i LaTeX, więc używaj ich aktywnie.`
 }
-
 // 🚀 Enhanced logging helper for debugging
 function logProcessingContext(source: Source, textResult: any) {
   console.log(`
