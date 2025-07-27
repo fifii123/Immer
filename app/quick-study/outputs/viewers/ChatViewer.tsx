@@ -417,14 +417,14 @@ export default function ChatViewer({
               </div>
             </div>
             
-            {messages.length > 0 && (
-              <button
-                onClick={handleClearConversation}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                New conversation
-              </button>
-            )}
+{messages.length > 0 && (
+  <button
+    onClick={handleClearConversation}
+    className="text-xs text-muted-foreground hover:text-foreground transition-colors mr-14"
+  >
+    New conversation
+  </button>
+)}
           </div>
         </div>
       </div>

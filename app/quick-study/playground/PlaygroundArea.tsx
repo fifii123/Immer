@@ -251,7 +251,7 @@ export default function PlaygroundArea({
     <section className="relative h-full overflow-hidden rounded-2xl bg-card border-border border">
       
       {/* Playground Content */}
-      <div className={`absolute inset-0 ${!curtainVisible && playgroundContent === 'chat' ? 'pr-12' : ''}`}>
+<div className="absolute inset-0">
         <div className="h-full overflow-y-auto">
           {renderContent()}
         </div>
@@ -340,9 +340,13 @@ export default function PlaygroundArea({
         </div>
       </div>
 
-      {/* Professional Handle - Always visible when curtain closed */}
-      {!curtainVisible && (
-        <div className="absolute right-4 top-4 z-20">
+{/* Professional Handle - Always visible when curtain closed */}
+{!curtainVisible && (
+  <div className={`absolute z-20 ${
+    playgroundContent === 'chat' 
+      ? 'right-4 top-2'  // Niżej dla chata, pod nagłówkiem
+      : 'right-4 top-2'   // Standardowa pozycja dla innych widoków
+  }`}>
           <div
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
@@ -449,4 +453,4 @@ export default function PlaygroundArea({
       />
     </section>
   )
-}
+} /// todo: back button is ass in chatViewer
