@@ -61,12 +61,13 @@ export function useQuickStudy() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [currentOutput, setCurrentOutput] = useState<Output | null>(null)
   
-  // Loading states
-  const [uploadInProgress, setUploadInProgress] = useState(false)
-  const [fetchingSources, setFetchingSources] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [initializing, setInitializing] = useState(true)
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
+// Loading states
+const [uploadInProgress, setUploadInProgress] = useState(false)
+const [fetchingSources, setFetchingSources] = useState(false)
+const [error, setError] = useState<string | null>(null)
+const [initializing, setInitializing] = useState(true)
+const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
+const [activeGenerations, setActiveGenerations] = useState<Set<string>>(new Set())
   
   // Initialize session on mount
   useEffect(() => {
@@ -74,66 +75,156 @@ export function useQuickStudy() {
   }, [])
 
   // Poll for source status updates when there are processing sources
-  const pollSourceStatus = useCallback(async () => {
-    if (!sessionId) return
-    
-    try {
-      const response = await fetch(`/api/quick-study/sessions/${sessionId}`)
-      if (response.ok) {
-        const session: Session = await response.json()
+// Poll for source and output status updates
+const pollStatus = useCallback(async () => {
+  if (!sessionId) return
+  
+  try {
+    const response = await fetch(`/api/quick-study/sessions/${sessionId}`)
+    if (response.ok) {
+      const session: Session = await response.json()
+      
+      // Update sources if any status changed
+      setSources(prevSources => {
+        const hasChanges = prevSources.some(prevSource => {
+          const newSource = session.sources.find(s => s.id === prevSource.id)
+          return newSource && newSource.status !== prevSource.status
+        })
         
-        // Update sources if any status changed
-        setSources(prevSources => {
-          const hasChanges = prevSources.some(prevSource => {
-            const newSource = session.sources.find(s => s.id === prevSource.id)
-            return newSource && newSource.status !== prevSource.status
-          })
+        if (hasChanges) {
+          console.log('📊 Source status updated via polling')
           
-          if (hasChanges) {
-            console.log('📊 Source status updated via polling')
-            
-            // Auto-select first ready source if current selection is still processing
-            if (selectedSource && selectedSource.status === 'processing') {
-              const updatedSelected = session.sources.find(s => s.id === selectedSource.id)
-              if (updatedSelected && updatedSelected.status === 'ready') {
-                setSelectedSource(updatedSelected)
-              }
+          // Auto-select first ready source if current selection is still processing
+          if (selectedSource && selectedSource.status === 'processing') {
+            const updatedSelected = session.sources.find(s => s.id === selectedSource.id)
+            if (updatedSelected && updatedSelected.status === 'ready') {
+              setSelectedSource(updatedSelected)
             }
+          } else {
+            // Auto-select any newly ready source for better UX
+            const newlyReadySources = session.sources.filter(s => {
+              const prevSource = prevSources.find(prev => prev.id === s.id)
+              return s.status === 'ready' && prevSource && prevSource.status === 'processing'
+            })
             
-            return session.sources
+            if (newlyReadySources.length > 0) {
+              // Select the first newly ready source
+              setSelectedSource(newlyReadySources[0])
+              console.log(`🎯 Auto-selected newly ready source: ${newlyReadySources[0].name}`)
+            }
           }
           
-          return prevSources
-        })
+          return session.sources
+        }
+        
+        return prevSources
+      })
+      
+// Update outputs - handle replacement of temporary outputs with server outputs
+setOutputs(prevOutputs => {
+  let hasChanges = false
+  let newOutputs = [...prevOutputs]
+  
+  // Check for new server outputs that should replace temporary ones
+  session.outputs.forEach(serverOutput => {
+    const existingIndex = newOutputs.findIndex(output => output.id === serverOutput.id)
+    
+    if (existingIndex === -1) {
+      // This is a completely new server output
+      // Check if it should replace a temporary output
+      const tempIndex = newOutputs.findIndex(output => 
+        output.id.startsWith('temp-') &&
+        output.sourceId === serverOutput.sourceId &&
+        output.type === serverOutput.type &&
+        output.status === 'generating'
+      )
+      
+      if (tempIndex !== -1) {
+        // Replace temporary output with server output
+        const tempOutput = newOutputs[tempIndex]
+        newOutputs[tempIndex] = serverOutput
+        hasChanges = true
+        
+        // Update current output if it was the temp one
+        if (currentOutput && currentOutput.id === tempOutput.id) {
+          setCurrentOutput(serverOutput)
+          console.log(`🔄 Replaced temporary output ${tempOutput.id} with server output: ${serverOutput.id}`)
+        }
+      } else {
+        // Add new server output
+        newOutputs.push(serverOutput)
+        hasChanges = true
+        console.log(`📊 Added new server output: ${serverOutput.id}`)
       }
-    } catch (err) {
-      console.error('Polling error:', err)
+    } else {
+      // Update existing output if status changed
+      const existingOutput = newOutputs[existingIndex]
+      if (existingOutput.status !== serverOutput.status) {
+        newOutputs[existingIndex] = serverOutput
+        hasChanges = true
+        
+        // Update current output if it's the one that changed
+        if (currentOutput && currentOutput.id === serverOutput.id) {
+          setCurrentOutput(serverOutput)
+          console.log(`🔄 Updated output status: ${serverOutput.id} -> ${serverOutput.status}`)
+        }
+      }
     }
-  }, [sessionId, selectedSource])
+  })
+  
+  // Remove temporary outputs that have been generating for too long (fallback cleanup)
+  const now = new Date().getTime()
+  const cleanedOutputs = newOutputs.filter(output => {
+    if (output.id.startsWith('temp-') && output.status === 'generating') {
+      const age = now - new Date(output.createdAt).getTime()
+      if (age > 30000) { // 30 seconds timeout
+        console.log(`🧹 Cleaning up old temporary output: ${output.id}`)
+        hasChanges = true
+        return false
+      }
+    }
+    return true
+  })
+  
+  if (hasChanges) {
+    console.log('📊 Output status updated via polling')
+    return cleanedOutputs
+  }
+  
+  return prevOutputs
+})
+    }
+  } catch (err) {
+    console.error('Polling error:', err)
+  }
+}, [sessionId, selectedSource, currentOutput])
 
-  // Start/stop polling based on processing sources
-  useEffect(() => {
-    const hasProcessingSources = sources.some(source => source.status === 'processing')
-    
-    if (hasProcessingSources && !pollingInterval) {
-      // Start polling every 500ms
-      const interval = setInterval(pollSourceStatus, 500)
-      setPollingInterval(interval)
-      console.log('🔄 Started polling for source updates')
-    } else if (!hasProcessingSources && pollingInterval) {
-      // Stop polling when no processing sources
+// Start/stop polling based on processing sources or generating outputs
+useEffect(() => {
+  const hasProcessingSources = sources.some(source => source.status === 'processing')
+  const hasGeneratingOutputs = outputs.some(output => output.status === 'generating')
+  const hasActiveGenerations = activeGenerations.size > 0
+  const needsPolling = hasProcessingSources || hasGeneratingOutputs || hasActiveGenerations
+  
+  if (needsPolling && !pollingInterval) {
+    // Start polling every 500ms
+    const interval = setInterval(pollStatus, 500)
+    setPollingInterval(interval)
+    console.log('🔄 Started polling for status updates')
+  } else if (!needsPolling && pollingInterval) {
+    // Stop polling when nothing is processing
+    clearInterval(pollingInterval)
+    setPollingInterval(null)
+    console.log('⏹️ Stopped polling - all items ready')
+  }
+  
+  // Cleanup on unmount
+  return () => {
+    if (pollingInterval) {
       clearInterval(pollingInterval)
-      setPollingInterval(null)
-      console.log('⏹️ Stopped polling - all sources ready')
     }
-    
-    // Cleanup on unmount
-    return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval)
-      }
-    }
-  }, [sources, pollingInterval, pollSourceStatus])
+  }
+}, [sources, outputs, pollingInterval, pollStatus])
 
   // Initialize session - try to restore or create new
   const initializeSession = useCallback(async () => {
@@ -265,13 +356,18 @@ const response = await fetch(`/api/quick-study/sessions/${sessionId}/upload`, {
       
       setSources(prev => [...prev, ...newSources])
       
-      // Auto-select first uploaded source if none selected
-      if (!selectedSource && newSources.length > 0) {
-        const firstReady = newSources.find(s => s.status === 'ready')
-        if (firstReady) {
-          setSelectedSource(firstReady)
-        }
-      }
+// Auto-select first uploaded source (improve UX by always selecting newly uploaded files)
+if (newSources.length > 0) {
+  const firstReady = newSources.find(s => s.status === 'ready')
+  if (firstReady) {
+    setSelectedSource(firstReady)
+    console.log(`🎯 Auto-selected uploaded ready file: ${firstReady.name}`)
+  } else {
+    // If no ready sources yet, select the first processing one (will auto-select when ready)
+    setSelectedSource(newSources[0])
+    console.log(`🔄 Auto-selected processing file: ${newSources[0].name} (will auto-update when ready)`)
+  }
+}
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
@@ -311,10 +407,9 @@ const response = await fetch(`/api/quick-study/sessions/${sessionId}/upload`, {
       const newSource: Source = await response.json()
       setSources(prev => [...prev, newSource])
       
-      // Auto-select if none selected
-      if (!selectedSource) {
-        setSelectedSource(newSource)
-      }
+// Auto-select newly added text source for better UX
+setSelectedSource(newSource)
+console.log(`🎯 Auto-selected text source: ${newSource.name}`)
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add text')
@@ -355,10 +450,9 @@ const response = await fetch(`/api/quick-study/sessions/${sessionId}/upload`, {
       const newSource: Source = await response.json()
       setSources(prev => [...prev, newSource])
       
-      // Auto-select if none selected
-      if (!selectedSource) {
-        setSelectedSource(newSource)
-      }
+// Auto-select newly added URL source for better UX
+setSelectedSource(newSource)
+console.log(`🎯 Auto-selected URL source: ${newSource.name}`)
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add URL')
@@ -378,93 +472,102 @@ const response = await fetch(`/api/quick-study/sessions/${sessionId}/upload`, {
     setError(null)
   }, [])
 
-  // Handler - generate content (tile click) with options support
-  const handleTileClick = useCallback(async (type: string, options?: any) => {
-    console.log("🔍 DEBUG: useQuickStudy received type:", type);
-    console.log("🔍 DEBUG: useQuickStudy received options:", options);
-    
-    if (!sessionId) {
-      setError('No active session')
-      return
+// Handler - generate content (tile click) with options support
+const handleTileClick = useCallback(async (type: string, options?: any) => {
+  if (!sessionId || !selectedSource) {
+    setError('No session or source selected')
+    return
+  }
+  
+  if (selectedSource.status !== 'ready') {
+    setError('Source is not ready for processing')
+    return
+  }
+  
+  // Create unique generation key for tracking
+  const generationKey = `${selectedSource.id}-${type}-${Date.now()}`
+  
+  setIsGenerating(true)
+  setError(null)
+  setCurtainVisible(false)
+  setPlaygroundContent(type as PlaygroundContent)
+  
+  // Track this generation
+  setActiveGenerations(prev => new Set([...prev, generationKey]))
+  
+  // 🎯 NEW: Create generating output immediately for better UX
+  const generateTitle = (type: string, sourceName: string): string => {
+    const cleanName = sourceName.replace(/\.[^/.]+$/, "")
+    switch (type) {
+      case 'flashcards': return `Flashcards - ${cleanName}`
+      case 'quiz': return `Quiz - ${cleanName}`
+      case 'notes': return `Notes - ${cleanName}`
+      case 'summary': return `Summary - ${cleanName}`
+      case 'timeline': return `Timeline - ${cleanName}`
+      case 'knowledge-map': return `Knowledge Map - ${cleanName}`
+      default: return `${type} - ${cleanName}`
     }
+  }
+  
+  const generatingOutput: Output = {
+    id: `temp-${generationKey}`,
+    type: type as Output['type'],
+    title: generateTitle(type, selectedSource.name),
+    preview: 'Generating content...',
+    status: 'generating',
+    sourceId: selectedSource.id,
+    createdAt: new Date()
+  }
+  
+  // Add generating output immediately
+  setOutputs(prev => [...prev, generatingOutput])
+  setCurrentOutput(generatingOutput)
+  
+  console.log(`🔄 Created temporary generating output: ${generatingOutput.id}`)
+  
+  try {
+    console.log(`🎯 Generating ${type} for source: ${selectedSource.id}`)
     
-    if (!selectedSource || selectedSource.status !== 'ready') {
-      setError('Please select a ready source first')
-      return
-    }
-    
-    setCurtainVisible(false)
-    setPlaygroundContent(type as PlaygroundContent)
-    setCurrentOutput(null)
-    setIsGenerating(true)
-    setError(null)
-    
-    try {
-      // Prepare settings based on content type and options
-      let settings = {}
-      
-      if (type === 'quiz') {
-        settings = {
-          questionCount: options?.questionCount || 10,
-          difficulty: options?.difficulty || 'mixed',
-          timeLimit: options?.timeLimit || 20 // minutes
-        }
-      } else if (type === 'flashcards') {
-        settings = {
-          cardCount: options?.cardCount || 20,
-          difficulty: options?.difficulty || 'mixed',
-          includeCategories: options?.includeCategories !== false
-        }
-      } else if (type === 'notes') {
-        settings = {
-          noteType: options?.noteType || 'general'
-        }
-      } else if (type === 'timeline') {
-        settings = {
-          maxEvents: options?.maxEvents || 8
-        }
-      } else if (type === 'knowledge-map') {
-        settings = {
-          maxNodes: options?.maxNodes || 15,
-          includeConnections: options?.includeConnections !== false
-        }
-      }
-      
-      console.log("🔍 DEBUG: Final settings before API call:", settings);
-      
-      const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate/${type}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          sourceId: selectedSource.id,
-          settings: settings
-        })
+    const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate/${type}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        sourceId: selectedSource.id,
+        type: type,
+        settings: options || {}
       })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Generation failed')
-      }
-      
-      const newOutput: Output = await response.json()
-      
-      // Add note type to output if it was notes generation
-      if (type === 'notes' && options?.noteType) {
-        newOutput.noteType = options.noteType
-      }
-      
-      setOutputs(prev => [...prev, newOutput])
-      setCurrentOutput(newOutput)
-      
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Generation failed')
-      setCurtainVisible(true)
-    } finally {
-      setIsGenerating(false)
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.message || 'Generation failed')
     }
-  }, [sessionId, selectedSource])
+    
+    const newOutput: Output = await response.json()
+    
+    // Don't replace immediately - let polling handle it
+    // This ensures the temporary output stays visible until server confirms
+    console.log(`✅ Generated ${type}:`, newOutput.id)
+    console.log(`🔄 Polling will replace temporary output ${generatingOutput.id}`)
+    
+  } catch (err) {
+    // Remove temporary output on error
+    setOutputs(prev => prev.filter(output => output.id !== generatingOutput.id))
+    setCurrentOutput(null)
+    setError(err instanceof Error ? err.message : 'Generation failed')
+    setCurtainVisible(true)
+  } finally {
+    setIsGenerating(false)
+    // Remove from active generations
+    setActiveGenerations(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(generationKey)
+      return newSet
+    })
+  }
+}, [sessionId, selectedSource])
 
   // Handler - output click
   const handleOutputClick = useCallback((output: Output) => {
