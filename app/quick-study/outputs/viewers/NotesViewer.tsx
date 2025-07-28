@@ -77,7 +77,14 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
   const [hoveredSection, setHoveredSection] = useState<string | null>(null)
   const [hoverTimeouts, setHoverTimeouts] = useState<Map<string, NodeJS.Timeout>>(new Map())
-  const [isTransitioning, setIsTransitioning] = useState<Set<string>>(new Set())
+const [isTransitioning, setIsTransitioning] = useState<Set<string>>(new Set())
+const [debugPanel, setDebugPanel] = useState<{
+  isVisible: boolean;
+  element: HTMLElement | null;
+  content: string;
+  elementType: string;
+  position: { x: number; y: number };
+} | null>(null)
 
   // Cleanup timeouts przy unmount
   React.useEffect(() => {
@@ -222,7 +229,7 @@ const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
     setCollapsedSections(newCollapsed)
   }
 
-  // Style hover dla różnych poziomów nagłówków
+  // Style hover dla nagłówków sekcji
   const getSectionHoverStyles = (level: number) => {
     const intensity = Math.max(0.12 - (level - 1) * 0.02, 0.06)
     const borderIntensity = Math.max(0.4 - (level - 1) * 0.05, 0.2)
@@ -240,47 +247,30 @@ const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
     }
   }
 
-  // Style dla całej sekcji (nagłówek + zawartość)
-  const getSectionContainerHoverStyles = (level: number) => {
-    const intensity = Math.max(0.05 - (level - 1) * 0.01, 0.02)
-    return {
-      backgroundColor: `rgba(59, 130, 246, ${intensity})`,
-      borderRadius: '12px',
-      padding: '12px', // Większy padding dla kontenera
-      margin: '4px 0', // Tylko vertical margin
-      transition: 'all 0.2s ease-in-out',
-      border: `1px solid rgba(59, 130, 246, ${intensity * 4})`
-    }
-  }
-
   const handleSectionHover = (event: React.MouseEvent<HTMLElement>, sectionId: string, level: number) => {
-    // Tylko dla głównych sekcji (h1, h2) - podsekcje będą animowane wewnątrz
-    if (level > 2) return
+    // Tylko dla podsekcji (h3+) - nie dla głównych sekcji (h1, h2)
+    if (level <= 2) return
     
     event.stopPropagation()
     
     const sectionContainer = event.currentTarget.closest('.section-container') as HTMLElement
     if (!sectionContainer) return
     
-    // Anuluj pending timeout dla tego elementu
-    const existingTimeout = hoverTimeouts.get(sectionId)
-    if (existingTimeout) {
-      clearTimeout(existingTimeout)
-      hoverTimeouts.delete(sectionId)
-    }
-    
-    // Sprawdź czy już nie jest w transition
-    if (isTransitioning.has(sectionId)) {
-      return
-    }
-    
     setHoveredSection(sectionId)
     
-    // Aplikuj hover na cały kontener sekcji
-    if (!sectionContainer.classList.contains('section-container-hovered')) {
-      sectionContainer.classList.add('section-container-hovered')
-      Object.assign(sectionContainer.style, getSectionContainerHoverStyles(level))
-    }
+    // Znajdź wszystkie elementy należące do tej sekcji
+    const sectionElements = [
+      sectionContainer.querySelector('.section-heading'),
+      sectionContainer.querySelector('.section-content'),
+      ...Array.from(sectionContainer.querySelectorAll('.subsections-container'))
+    ].filter(Boolean) as HTMLElement[]
+    
+    // Aplikuj hover style na wszystkie elementy sekcji
+    sectionElements.forEach(element => {
+      if (element) {
+        Object.assign(element.style, getSectionHoverStyles(level))
+      }
+    })
   }
 
   const clearSectionHoverStyles = (event: React.MouseEvent<HTMLElement>) => {
@@ -290,54 +280,85 @@ const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
     // Znajdź section ID na podstawie data attribute
     const headingElement = sectionContainer.querySelector('[data-section-id]') as HTMLElement
     const sectionId = headingElement?.getAttribute('data-section-id') || 'unknown'
-    
-    // Tylko dla głównych sekcji
     const level = parseInt(headingElement?.tagName.charAt(1) || '1')
-    if (level > 2) return
     
-    // Anuluj pending hover timeout
-    const existingTimeout = hoverTimeouts.get(sectionId)
-    if (existingTimeout) {
-      clearTimeout(existingTimeout)
-      hoverTimeouts.delete(sectionId)
-    }
-    
-    // Dodaj do transitioning state
-    const newTransitioning = new Set(isTransitioning)
-    newTransitioning.add(sectionId)
-    setIsTransitioning(newTransitioning)
+    // Tylko dla podsekcji
+    if (level <= 2) return
     
     setHoveredSection(null)
     
-    // Debounced cleanup
-    const cleanupTimeout = setTimeout(() => {
-      if (sectionContainer) {
-        sectionContainer.classList.remove('section-container-hovered')
-        Object.assign(sectionContainer.style, {
+    // Znajdź wszystkie elementy należące do tej sekcji i wyczyść style
+    const sectionElements = [
+      sectionContainer.querySelector('.section-heading'),
+      sectionContainer.querySelector('.section-content'),
+      ...Array.from(sectionContainer.querySelectorAll('.subsections-container'))
+    ].filter(Boolean) as HTMLElement[]
+    
+    sectionElements.forEach(element => {
+      if (element) {
+        Object.assign(element.style, {
           backgroundColor: '',
-          border: '',
+          borderLeft: '',
           borderRadius: '',
           padding: '',
           margin: '',
-          transition: 'all 0.2s ease-in-out'
+          boxShadow: '',
+          transform: '',
+          transition: 'all 0.5s ease-in-out'
         })
         
-        // Po zakończeniu animacji usuń transition i transitioning state
+        // Usuń transition po animacji
         setTimeout(() => {
-          if (sectionContainer.style.transition) {
-            sectionContainer.style.transition = ''
+          if (element.style.transition) {
+            element.style.transition = ''
           }
-          
-          // Usuń z transitioning state
-          const updatedTransitioning = new Set(isTransitioning)
-          updatedTransitioning.delete(sectionId)
-          setIsTransitioning(updatedTransitioning)
         }, 200)
       }
-    }, 100)
-    
-    hoverTimeouts.set(sectionId + '-cleanup', cleanupTimeout)
+    })
   }
+// Funkcja do obsługi kliknięcia na element z hover
+const handleElementClick = (event: React.MouseEvent<HTMLElement>, elementType: string) => {
+  event.preventDefault()
+  event.stopPropagation()
+  
+  const element = event.currentTarget
+  const rect = element.getBoundingClientRect()
+  const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+  const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft
+  
+  // Pobierz zawartość elementu
+  const content = element.textContent || element.innerHTML || 'Brak zawartości'
+  
+  setDebugPanel({
+    isVisible: true,
+    element,
+    content: content.trim(),
+    elementType,
+    position: {
+      x: rect.left + scrollLeft + rect.width / 2,
+      y: rect.top + scrollTop - 10
+    }
+  })
+}
+
+// Funkcja do zamykania debug panelu
+const closeDebugPanel = () => {
+  setDebugPanel(null)
+}
+  // Komponenty do renderowania markdown z hover (ulepszony dla zawartości sekcji)
+// Obsługa klawisza Escape dla debug panelu
+  React.useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && debugPanel) {
+        closeDebugPanel()
+      }
+    }
+    
+    if (debugPanel) {
+      document.addEventListener('keydown', handleEscape)
+      return () => document.removeEventListener('keydown', handleEscape)
+    }
+  }, [debugPanel])
 
   // Komponenty do renderowania markdown z hover (ulepszony dla zawartości sekcji)
   const createMarkdownComponents = () => ({
@@ -379,6 +400,7 @@ const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
             }
           }, 150)
         }}
+        onClick={(e) => handleElementClick(e, 'paragraph')}
         {...props}
       >
         {children}
@@ -421,6 +443,7 @@ const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
             }
           }, 150)
         }}
+        onClick={(e) => handleElementClick(e, 'unordered-list')}
         {...props}
       >
         {children}
@@ -462,19 +485,19 @@ const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
             }
           }, 150)
         }}
+        onClick={(e) => handleElementClick(e, 'ordered-list')}
         {...props}
       >
         {children}
       </ol>
     ),
 
-    // Tabele z hover - NAPRAWIONE
+    // Tabele z hover
     table: ({ node, children, ...props }: any) => (
       <div className="overflow-x-auto mb-6">
         <table
           className="min-w-full border-collapse border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer section-content-element"
           onMouseEnter={(e) => {
-            // POPRAWKA: używaj .section-container-hovered zamiast .section-hovered
             const sectionContainer = e.currentTarget.closest('.section-container.section-container-hovered')
             const intensity = sectionContainer ? 0.04 : 0.08
             
@@ -483,7 +506,6 @@ const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
               backgroundColor: `rgba(249, 115, 22, ${intensity})`,
               border: `2px solid rgba(249, 115, 22, ${intensity * 4})`,
               borderRadius: '8px',
-              // POPRAWKA: usuń margin który powoduje wystającą lewą krawędź
               padding: '4px',
               transition: 'all 0.15s ease-in-out'
             })
@@ -508,6 +530,7 @@ const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
               element.style.border = ''
             }, 150)
           }}
+          onClick={(e) => handleElementClick(e, 'table')}
           {...props}
         >
           {children}
@@ -545,6 +568,7 @@ const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
             }
           }, 150)
         }}
+        onClick={(e) => handleElementClick(e, 'blockquote')}
         {...props}
       >
         {children}
@@ -595,7 +619,24 @@ const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
     h5: () => null,
     h6: () => null,
   })
-
+// Funkcja do zbierania całej zawartości sekcji (rekurencyjnie)
+const getSectionContent = (section: ParsedSection): string => {
+  let content = `# ${section.title}\n\n`
+  
+  // Dodaj zawartość sekcji
+  section.content.forEach(contentItem => {
+    if (contentItem.trim()) {
+      content += contentItem + '\n\n'
+    }
+  })
+  
+  // Dodaj zawartość podsekcji (rekurencyjnie)
+  section.children.forEach(childSection => {
+    content += getSectionContent(childSection)
+  })
+  
+  return content
+}
   // Komponent do renderowania hierarchicznej sekcji
   const renderSection = (section: ParsedSection, depth: number = 0) => {
     const isCollapsed = collapsedSections.has(section.id)
@@ -613,63 +654,70 @@ const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
       }
     }
 
-    // Rozróżnienie między głównymi sekcjami (h1, h2) a podsekcjami
-    const isMainSection = section.level <= 2
-    const shouldHaveContainerHover = isMainSection
+    // Tylko podsekcje (h3+) mają hover effect
+    const shouldHaveHover = section.level > 2
 
     return (
       <div 
         key={section.id} 
-        className={`section-container relative ${shouldHaveContainerHover ? 'main-section' : 'sub-section'}`} 
+        className="section-container relative" 
         style={{ marginLeft: `${depth * 20}px` }}
-        {...(shouldHaveContainerHover && {
+        {...(shouldHaveHover && {
           onMouseEnter: (e) => handleSectionHover(e, section.id, section.level),
           onMouseLeave: clearSectionHoverStyles
         })}
       >
-        {/* Nagłówek sekcji */}
-        <HeadingTag
-          className={`${getHeadingClasses(section.level)} text-foreground group flex items-center gap-3 select-none cursor-pointer relative z-10 section-heading`}
-          data-section-id={section.id}
-          onClick={() => toggleSection(section.id)}
-          {...(!shouldHaveContainerHover && {
-            // Tylko podsekcje (h3+) mają hover na nagłówku
-            onMouseEnter: (e) => {
-              const element = e.currentTarget
-              Object.assign(element.style, {
-                backgroundColor: `rgba(59, 130, 246, 0.08)`,
-                borderRadius: '6px',
-                padding: '6px 10px',
-                margin: '2px -10px',
-                transition: 'all 0.15s ease-in-out'
-              })
-            },
-            onMouseLeave: (e) => {
-              const element = e.currentTarget
-              Object.assign(element.style, {
-                backgroundColor: '',
-                borderRadius: '',
-                padding: '',
-                margin: '',
-                transition: 'all 0.15s ease-in-out'
-              })
-              setTimeout(() => {
-                if (element.style.transition) {
-                  element.style.transition = ''
-                }
-              }, 150)
-            }
-          })}
-        >
-          <button className="flex items-center gap-2 flex-1 text-left">
-            {isCollapsed ? (
-              <ChevronRight className="h-4 w-4 text-blue-500 flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-blue-500 flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
-            )}
-            <span className="flex-1">{section.title}</span>
-          </button>
-        </HeadingTag>
+<HeadingTag
+  className={`${getHeadingClasses(section.level)} text-foreground group flex items-center gap-3 select-none cursor-pointer relative z-10 section-heading`}
+  data-section-id={section.id}
+  onClick={(e) => {
+    // Sprawdź czy kliknięto w przycisk strzałki
+    const target = e.target as HTMLElement
+    if (target.closest('.toggle-button')) {
+      return // Nie rób nic, button handler się zajmie
+    } else {
+      // Kliknięto w obszar tytułu - wyślij całą sekcję do debug panelu
+      e.preventDefault()
+      e.stopPropagation()
+      
+      // Zbierz całą zawartość sekcji (tytuł + content + dzieci)
+      const sectionContent = getSectionContent(section)
+      
+      const rect = e.currentTarget.getBoundingClientRect()
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+      const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft
+      
+      setDebugPanel({
+        isVisible: true,
+        element: e.currentTarget,
+        content: sectionContent.trim(),
+        elementType: `complete-section-${section.level}`,
+        position: {
+          x: rect.left + scrollLeft + rect.width / 2,
+          y: rect.top + scrollTop - 10
+        }
+      })
+    }
+  }}
+>
+  {/* Przycisk strzałki - teraz z klasą toggle-button */}
+  <button 
+    className="toggle-button flex-shrink-0 p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+    onClick={(e) => {
+      e.stopPropagation() // Zapobiegaj propagacji do parent
+      toggleSection(section.id)
+    }}
+  >
+    {isCollapsed ? (
+      <ChevronRight className="h-4 w-4 text-blue-500 opacity-70 hover:opacity-100 transition-opacity" />
+    ) : (
+      <ChevronDown className="h-4 w-4 text-blue-500 opacity-70 hover:opacity-100 transition-opacity" />
+    )}
+  </button>
+  
+  {/* Tytuł sekcji */}
+  <span className="flex-1">{section.title}</span>
+</HeadingTag>
 
         {/* Zawartość sekcji */}
         {!isCollapsed && (
@@ -689,9 +737,13 @@ const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
               )
             ))}
 
-            {/* Renderuj podsekcje - będą animowane wewnątrz głównej sekcji */}
-            {section.children.map(childSection => 
-              renderSection(childSection, depth + 1)
+            {/* Renderuj podsekcje */}
+            {section.children.length > 0 && (
+              <div className="subsections-container">
+                {section.children.map(childSection => 
+                  renderSection(childSection, depth + 1)
+                )}
+              </div>
             )}
           </div>
         )}
@@ -766,6 +818,82 @@ const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
           </div>
         </ScrollArea>
       </div>
+
+      {/* Debug Panel Popup */}
+      {debugPanel && (
+        <>
+          {/* Overlay */}
+          <div 
+            className="fixed inset-0 bg-black/20 z-[9998]"
+            onClick={closeDebugPanel}
+          />
+          
+          {/* Debug Panel */}
+          <div
+            className="fixed z-[9999] bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-4 max-w-md w-80"
+            style={{
+              left: `${Math.min(debugPanel.position.x - 160, window.innerWidth - 320)}px`,
+              top: `${Math.max(debugPanel.position.y - 200, 10)}px`,
+            }}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  Debug Panel
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Element: {debugPanel.elementType}
+                </p>
+              </div>
+              <button
+                onClick={closeDebugPanel}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
+              >
+                <span className="sr-only">Zamknij</span>
+                ✕
+              </button>
+            </div>
+            
+            {/* Content */}
+            <div className="space-y-3">
+              <div>
+                <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Zawartość:
+                </h4>
+                <div className="bg-gray-50 dark:bg-gray-800 p-2 rounded text-xs text-gray-800 dark:text-gray-200 max-h-32 overflow-y-auto">
+                  {debugPanel.content}
+                </div>
+              </div>
+              
+              <div>
+                <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Informacje techniczne:
+                </h4>
+                <div className="bg-gray-50 dark:bg-gray-800 p-2 rounded text-xs text-gray-600 dark:text-gray-400">
+                  <div>Typ: {debugPanel.elementType}</div>
+                  <div>Długość: {debugPanel.content.length} znaków</div>
+                  <div>Pozycja: x:{Math.round(debugPanel.position.x)}, y:{Math.round(debugPanel.position.y)}</div>
+                </div>
+              </div>
+              
+              {/* Przycisk kopiowania */}
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(debugPanel.content)
+                  toast({
+                    title: "Skopiowano!",
+                    description: "Zawartość elementu została skopiowana do schowka"
+                  })
+                }}
+                className="w-full bg-blue-500 hover:bg-blue-600 text-white text-xs py-2 px-3 rounded transition-colors"
+              >
+                Kopiuj zawartość
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </article>
   )
 }
