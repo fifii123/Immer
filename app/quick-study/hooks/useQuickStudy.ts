@@ -131,7 +131,7 @@ setOutputs(prevOutputs => {
     
     if (existingIndex === -1) {
       // This is a completely new server output
-      // Check if it should replace a temporary output
+      // Check if it should replace a temporary output - improved matching logic
       const tempIndex = newOutputs.findIndex(output => 
         output.id.startsWith('temp-') &&
         output.sourceId === serverOutput.sourceId &&
@@ -142,31 +142,53 @@ setOutputs(prevOutputs => {
       if (tempIndex !== -1) {
         // Replace temporary output with server output
         const tempOutput = newOutputs[tempIndex]
-        newOutputs[tempIndex] = serverOutput
+        newOutputs[tempIndex] = {
+          ...serverOutput,
+          // Ensure the server output has all necessary fields
+          status: 'ready',
+          content: serverOutput.content || ''
+        }
         hasChanges = true
         
         // Update current output if it was the temp one
         if (currentOutput && currentOutput.id === tempOutput.id) {
-          setCurrentOutput(serverOutput)
+          setCurrentOutput(newOutputs[tempIndex])
           console.log(`🔄 Replaced temporary output ${tempOutput.id} with server output: ${serverOutput.id}`)
         }
+        
+        // Clear the generation tracking
+        setActiveGenerations(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(`${serverOutput.sourceId}-${serverOutput.type}`)
+          return newSet
+        })
       } else {
-        // Add new server output
-        newOutputs.push(serverOutput)
+        // Add new server output with validation
+        const validatedOutput = {
+          ...serverOutput,
+          status: 'ready' as const,
+          content: serverOutput.content || ''
+        }
+        newOutputs.push(validatedOutput)
         hasChanges = true
         console.log(`📊 Added new server output: ${serverOutput.id}`)
       }
     } else {
-      // Update existing output if status changed
+      // Update existing output if status or content changed
       const existingOutput = newOutputs[existingIndex]
-      if (existingOutput.status !== serverOutput.status) {
-        newOutputs[existingIndex] = serverOutput
+      if (existingOutput.status !== serverOutput.status || 
+          existingOutput.content !== serverOutput.content) {
+        newOutputs[existingIndex] = {
+          ...serverOutput,
+          status: 'ready',
+          content: serverOutput.content || ''
+        }
         hasChanges = true
         
         // Update current output if it's the one that changed
         if (currentOutput && currentOutput.id === serverOutput.id) {
-          setCurrentOutput(serverOutput)
-          console.log(`🔄 Updated output status: ${serverOutput.id} -> ${serverOutput.status}`)
+          setCurrentOutput(newOutputs[existingIndex])
+          console.log(`🔄 Updated output: ${serverOutput.id} -> ${serverOutput.status}`)
         }
       }
     }
@@ -177,7 +199,7 @@ setOutputs(prevOutputs => {
   const cleanedOutputs = newOutputs.filter(output => {
     if (output.id.startsWith('temp-') && output.status === 'generating') {
       const age = now - new Date(output.createdAt).getTime()
-      if (age > 30000) { // 30 seconds timeout
+      if (age > 50000) { // 30 seconds timeout
         console.log(`🧹 Cleaning up old temporary output: ${output.id}`)
         hasChanges = true
         return false
@@ -535,40 +557,73 @@ const generatingOutput: Output = {
   
   console.log(`🔄 Created temporary generating output: ${generatingOutput.id}`)
   
-  try {
-    console.log(`🎯 Generating ${type} for source: ${selectedSource.id}`)
-    
-    const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate/${type}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        sourceId: selectedSource.id,
-        type: type,
-        settings: options || {}
-      })
+try {
+  console.log(`🎯 Generating ${type} for source: ${selectedSource.id}`)
+  
+  const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate/${type}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      sourceId: selectedSource.id,
+      type: type,
+      settings: options || {}
     })
-    
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.message || 'Generation failed')
+  })
+  
+  if (!response.ok) {
+    const errorData = await response.json()
+    throw new Error(errorData.message || 'Generation failed')
+  }
+  
+  const newOutput: Output = await response.json()
+  
+  // Immediately replace the temporary output with the server response
+  // This ensures proper synchronization
+  setOutputs(prev => {
+    const tempIndex = prev.findIndex(output => output.id === generatingOutput.id)
+    if (tempIndex !== -1) {
+      const updatedOutputs = [...prev]
+      updatedOutputs[tempIndex] = {
+        ...newOutput,
+        status: 'ready',
+        content: newOutput.content || ''
+      }
+      console.log(`🔄 Immediately replaced temporary output ${generatingOutput.id} with ${newOutput.id}`)
+      return updatedOutputs
     }
-    
-    const newOutput: Output = await response.json()
-    
-    // Don't replace immediately - let polling handle it
-    // This ensures the temporary output stays visible until server confirms
-    console.log(`✅ Generated ${type}:`, newOutput.id)
-    console.log(`🔄 Polling will replace temporary output ${generatingOutput.id}`)
-    
-  } catch (err) {
-    // Remove temporary output on error
-    setOutputs(prev => prev.filter(output => output.id !== generatingOutput.id))
-    setCurrentOutput(null)
-    setError(err instanceof Error ? err.message : 'Generation failed')
-    setCurtainVisible(true)
-  } finally {
+    return prev
+  })
+  
+  // Update current output
+  setCurrentOutput({
+    ...newOutput,
+    status: 'ready',
+    content: newOutput.content || ''
+  })
+  
+  // Clear generation tracking
+  setActiveGenerations(prev => {
+    const newSet = new Set(prev)
+    newSet.delete(generationKey)
+    return newSet
+  })
+  
+  console.log(`✅ Generated ${type}:`, newOutput.id)
+  
+} catch (err) {
+  // Remove temporary output on error
+  setOutputs(prev => prev.filter(output => output.id !== generatingOutput.id))
+  setCurrentOutput(null)
+  setActiveGenerations(prev => {
+    const newSet = new Set(prev)
+    newSet.delete(generationKey)
+    return newSet
+  })
+  setError(err instanceof Error ? err.message : 'Generation failed')
+  console.error(`❌ Generation failed for ${type}:`, err)
+} finally {
     setIsGenerating(false)
     // Remove from active generations
     setActiveGenerations(prev => {

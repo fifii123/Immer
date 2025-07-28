@@ -166,19 +166,50 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
     }
   }
 
-  const handleDownload = () => {
-    if (!output?.content) return
-    
-    const blob = new Blob([output.content], { type: 'text/markdown' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${output.title}.md`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
+  if (!output?.content) return;
+
+  if (format === 'md') {
+    // Pobieranie jako Markdown
+    const blob = new Blob([output.content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${output.title}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } else {
+    // Pobieranie jako PDF z zachowaniem struktury tekstu
+    try {
+      const { default: html2pdf } = await import('html2pdf.js');
+
+      const notesElement = document.querySelector('.markdown-content');
+      if (!notesElement) return;
+
+      const opt = {
+        margin:       10,
+        filename:     `${output.title}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+      };
+
+      // Renderuj PDF
+      await html2pdf().set(opt).from(notesElement).save();
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast({
+        title: "PDF generation failed",
+        description: "Could not generate PDF",
+        variant: "destructive"
+      });
+    }
   }
+}
 
   // Toggle collapse sekcji
   const toggleSection = (sectionId: string) => {
