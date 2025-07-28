@@ -420,7 +420,7 @@ export default function ChatViewer({
 {messages.length > 0 && (
   <button
     onClick={handleClearConversation}
-    className="text-xs text-muted-foreground hover:text-foreground transition-colors mr-14"
+    className="text-xs text-muted-foreground hover:text-foreground transition-colors mr-28"
   >
     New conversation
   </button>

@@ -18,7 +18,8 @@ import {
   File,
   Globe,
   Sparkles,
-  ArrowLeft
+  ArrowLeft,
+  Settings
 } from "lucide-react"
 import { Source, PlaygroundContent } from '../hooks/useQuickStudy'
 
@@ -340,109 +341,134 @@ export default function PlaygroundArea({
         </div>
       </div>
 
-{/* Professional Handle - Always visible when curtain closed */}
 {!curtainVisible && (
-  <div className={`absolute z-20 ${
-    playgroundContent === 'chat' 
-      ? 'right-4 top-2'  // Niżej dla chata, pod nagłówkiem
-      : 'right-4 top-2'   // Standardowa pozycja dla innych widoków
-  }`}>
-          <div
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-          >
-            <button
-              className="group relative transition-all duration-300 hover:scale-105"
-              onClick={onShowCurtain}
-            >
-              {/* Handle tab */}
-              <div 
-                className={`transition-all duration-300 group-hover:shadow-lg rounded-lg ${
-                  isButtonActive 
-                    ? 'bg-background border border-black shadow-md' 
-                    : 'bg-background border border-gray-400 shadow-sm opacity-60'
-                }`}
-                style={{
-                  width: '40px',
-                  height: '40px'
-                }}
-              >
-                {/* Icon container */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  {/* Single arrow pointing left */}
-                  <ArrowLeft className={`h-5 w-5 transition-colors ${
-                    isButtonActive 
-                      ? 'text-foreground/70 group-hover:text-foreground' 
-                      : 'text-foreground/40 group-hover:text-foreground/70'
-                  }`} />
-                </div>
+  <div
+    className={`absolute z-20 flex gap-2 ${
+      playgroundContent === 'chat'
+        ? 'right-4 top-2'
+        : 'right-4 top-2'
+    }`}
+  >
+    {/* Back Button */}
+    <button
+      className="group relative flex items-center justify-center transition-all duration-300 hover:scale-105"
+      onClick={onShowCurtain}
+    >
+      <div
+        className={`flex items-center justify-center rounded-lg transition-all duration-300 group-hover:shadow-lg ${
+          isButtonActive
+            ? 'bg-background border border-black shadow-md'
+            : 'bg-background border border-gray-400 shadow-sm opacity-60'
+        }`}
+        style={{ width: '40px', height: '40px' }}
+      >
+        <ArrowLeft
+          className={`w-5 h-5 transition-colors ${
+            isButtonActive
+              ? 'text-foreground/70 group-hover:text-foreground'
+              : 'text-foreground/40 group-hover:text-foreground/70'
+          }`}
+        />
+      </div>
+    </button>
+
+    {/* Settings Button */}
+    <div onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+      <button className="group relative flex items-center justify-center transition-all duration-300 hover:scale-105">
+        <div
+          className={`flex items-center justify-center rounded-lg transition-all duration-300 group-hover:shadow-lg ${
+            isButtonActive
+              ? 'bg-background border border-black shadow-md'
+              : 'bg-background border border-gray-400 shadow-sm opacity-60'
+          }`}
+          style={{ width: '40px', height: '40px' }}
+        >
+          <Settings
+            className={`w-5 h-5 transition-colors ${
+              isButtonActive
+                ? 'text-foreground/70 group-hover:text-foreground'
+                : 'text-foreground/40 group-hover:text-foreground/70'
+            }`}
+          />
+        </div>
+      </button>
+
+      {/* Tooltip */}
+      <div
+        className={`absolute top-full right-0 transition-all duration-400 ease-out ${
+          isHovering
+            ? 'opacity-100 translate-y-0 scale-100'
+            : 'opacity-0 -translate-y-2 scale-95 pointer-events-none'
+        }`}
+      >
+        <div className="absolute -top-3 right-0 w-full h-3" />
+        <div className="relative flex flex-col gap-2 mt-3">
+          {/* Primary: Study Methods */}
+          <div className="relative group/tooltip">
+            <div className="bg-background shadow-sm pl-0 pr-2.5 rounded-full flex items-center h-7 hover:shadow-md transition-shadow cursor-pointer">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center mr-2 shadow-sm">
+                <Sparkles className="h-3 w-3 text-white" />
               </div>
-            </button>
-            
-            {/* Multi-tooltip system with hover bridge */}
-            <div className={`absolute top-full right-0 transition-all duration-400 ease-out ${
-              isHovering ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-2 scale-95 pointer-events-none'
-            }`}>
-              {/* Invisible bridge - łączy przycisk z tooltipami */}
-              <div className="absolute -top-3 right-0 w-full h-3" />
-              
-              <div className="relative flex flex-col gap-2 mt-3">
-                
-                {/* Primary: Study Methods */}
-                <div className="relative group/tooltip">
-                  <div className="bg-background shadow-sm pl-0 pr-2.5 rounded-full flex items-center h-7 hover:shadow-md transition-shadow cursor-pointer">
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center mr-2 shadow-sm">
-                      <Sparkles className="h-3 w-3 text-white" />
-                    </div>
-                    <div className="text-xs font-normal text-gray-600 whitespace-nowrap">Study Methods</div>
-                  </div>
-                  {/* Arrow for primary */}
-                  <div className="absolute bottom-full right-3 transform">
-                    <div className="w-2 h-2 bg-background rotate-45 -mb-1 shadow-sm"></div>
-                  </div>
-                </div>
-
-                {/* Secondary: Edit/Regenerate (context-aware) */}
-                {playgroundContent && playgroundContent !== 'chat' && (
-                  <div className="bg-background shadow-sm pl-0 pr-2.5 rounded-full flex items-center h-7 hover:shadow-md transition-shadow cursor-pointer">
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center mr-2 shadow-sm">
-                      <PenTool className="h-3 w-3 text-white" />
-                    </div>
-                    <div className="text-xs font-normal text-gray-600 whitespace-nowrap">
-                      {playgroundContent === 'notes' ? 'Edit Notes' : 
-                       playgroundContent === 'summary' ? 'Edit Summary' :
-                       playgroundContent === 'flashcards' ? 'Edit Cards' :
-                       playgroundContent === 'quiz' ? 'Edit Quiz' :
-                       'Regenerate'}
-                    </div>
-                  </div>
-                )}
-
-                {/* Tertiary: Download/Export */}
-                {playgroundContent && ['notes', 'summary', 'flashcards'].includes(playgroundContent) && (
-                  <div className="bg-background shadow-sm pl-0 pr-2.5 rounded-full flex items-center h-7 hover:shadow-md transition-shadow cursor-pointer">
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center mr-2 shadow-sm">
-                      <FileText className="h-3 w-3 text-white" />
-                    </div>
-                    <div className="text-xs font-normal text-gray-600 whitespace-nowrap">Export PDF</div>
-                  </div>
-                )}
-
-                {/* Quaternary: Settings/Options */}
-                {playgroundContent && (
-                  <div className="bg-background shadow-sm pl-0 pr-2.5 rounded-full flex items-center h-7 hover:shadow-md transition-shadow cursor-pointer opacity-75">
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center mr-2 shadow-sm">
-                      <Target className="h-3 w-3 text-white" />
-                    </div>
-                    <div className="text-xs font-normal text-gray-600 whitespace-nowrap">Options</div>
-                  </div>
-                )}
-
+              <div className="text-xs font-normal text-gray-600 whitespace-nowrap">
+                Study Methods
               </div>
             </div>
+            <div className="absolute bottom-full right-3 transform">
+              <div className="w-2 h-2 bg-background rotate-45 -mb-1 shadow-sm" />
+            </div>
           </div>
+
+          {/* Secondary: Edit/Regenerate */}
+          {playgroundContent && playgroundContent !== 'chat' && (
+            <div className="bg-background shadow-sm pl-0 pr-2.5 rounded-full flex items-center h-7 hover:shadow-md transition-shadow cursor-pointer">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center mr-2 shadow-sm">
+                <PenTool className="h-3 w-3 text-white" />
+              </div>
+              <div className="text-xs font-normal text-gray-600 whitespace-nowrap">
+                {playgroundContent === 'notes'
+                  ? 'Edit Notes'
+                  : playgroundContent === 'summary'
+                  ? 'Edit Summary'
+                  : playgroundContent === 'flashcards'
+                  ? 'Edit Cards'
+                  : playgroundContent === 'quiz'
+                  ? 'Edit Quiz'
+                  : 'Regenerate'}
+              </div>
+            </div>
+          )}
+
+          {/* Tertiary: Export */}
+          {playgroundContent &&
+            ['notes', 'summary', 'flashcards'].includes(playgroundContent) && (
+              <div className="bg-background shadow-sm pl-0 pr-2.5 rounded-full flex items-center h-7 hover:shadow-md transition-shadow cursor-pointer">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center mr-2 shadow-sm">
+                  <FileText className="h-3 w-3 text-white" />
+                </div>
+                <div className="text-xs font-normal text-gray-600 whitespace-nowrap">
+                  Export PDF
+                </div>
+              </div>
+            )}
+
+          {/* Quaternary: Options */}
+          {playgroundContent && (
+            <div className="bg-background shadow-sm pl-0 pr-2.5 rounded-full flex items-center h-7 hover:shadow-md transition-shadow cursor-pointer opacity-75">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center mr-2 shadow-sm">
+                <Target className="h-3 w-3 text-white" />
+              </div>
+              <div className="text-xs font-normal text-gray-600 whitespace-nowrap">
+                Options
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
+    </div>
+  </div>
+)}
+
+
 
       {/* Note Type Modal */}
       <NoteTypeModal 
@@ -453,4 +479,4 @@ export default function PlaygroundArea({
       />
     </section>
   )
-} /// todo: back button is ass in chatViewer
+} 
