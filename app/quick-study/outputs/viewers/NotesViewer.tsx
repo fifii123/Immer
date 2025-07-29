@@ -1,4 +1,4 @@
-// app/quick-study/outputs/viewers/NotesViewer.tsx - REFACTORED VERSION
+// app/quick-study/outputs/viewers/NotesViewer.tsx - WITH EDIT MODAL
 "use client" 
 
 import React, { useState, useMemo, useCallback } from 'react'
@@ -12,9 +12,8 @@ import { useToast } from "@/components/ui/use-toast"
 
 // Import our extracted components and hooks
 import { useNotesHover } from './hooks/useNotesHover'
-import { useActionPanel } from './hooks/useActionPanel'
-import { AIActionPanelComponent } from './components/AIActionPanel'
 import { MarkdownRenderer } from './components/MarkdownRenderer'
+import { EditModalProvider } from './components/EditModalProvider'
 
 interface Output {
   id: string;
@@ -77,21 +76,7 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
   const [isAnimating, setIsAnimating] = useState(false)
 
-  // Use our extracted hooks
-  const {
-    actionPanel,
-    handleElementClick,
-    closeActionPanel,
-    updateDetailLevel,
-    handleTransformation
-  } = useActionPanel({ isAnimating, setIsAnimating })
-
-  const hoverHandlers = useNotesHover({
-    isAnimating,
-    onElementClick: handleElementClick
-  })
-
-  // Parsowanie markdown - memoized (FIXED)
+  // Parsowanie markdown - memoized (IMPROVED LOGIC FROM PASTE2)
   const parsedSections = useMemo(() => {
     if (!output?.content) return []
     
@@ -158,7 +143,7 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
     return sections
   }, [output?.content])
 
-  // Memoized section content collector
+  // Memoized section content collector (UNCHANGED)
   const getSectionContent = useCallback((section: ParsedSection): string => {
     let content = `# ${section.title}\n\n`
     
@@ -175,7 +160,61 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
     return content
   }, [])
 
-  // Section handlers
+  // Handler dla wszystkich elementów - teraz jako callback dla hoverHandlers
+  const handleElementEdit = useCallback((event: React.MouseEvent<HTMLElement>, elementType: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+    
+    const element = event.currentTarget
+    const openEditModal = (window as any).currentOpenEditModal
+    
+    if (!openEditModal) return
+    
+    // Get content from data attribute or textContent
+    let content = element.getAttribute('data-content') || element.textContent || ''
+    
+    // If no data-content, try to extract content based on element type
+    if (!element.getAttribute('data-content')) {
+      if (elementType.startsWith('complete-section')) {
+        // For sections, we need to get the full section content
+        const sectionId = element.getAttribute('data-section-id')
+        if (sectionId) {
+          // Find the section in parsedSections and get its content
+          const findSection = (sections: ParsedSection[], id: string): ParsedSection | null => {
+            for (const section of sections) {
+              if (section.id === id) return section
+              const found = findSection(section.children, id)
+              if (found) return found
+            }
+            return null
+          }
+          const section = findSection(parsedSections, sectionId)
+          if (section) {
+            content = getSectionContent(section)
+          }
+        }
+      } else {
+        // For other elements, use textContent or innerHTML
+        content = element.textContent || element.innerHTML || ''
+      }
+    }
+    
+    const actualElementType = element.getAttribute('data-element-type') || elementType
+    
+    const clickPosition = {
+      x: event.clientX,
+      y: event.clientY
+    }
+    
+    openEditModal(content, actualElementType, element, clickPosition)
+  }, [parsedSections, getSectionContent])
+
+  const hoverHandlers = useNotesHover({
+    isAnimating,
+    onElementClick: handleElementEdit // Use handleElementEdit for all clicks
+  })
+
+  // Section handlers (UNCHANGED)
   const toggleSection = useCallback((sectionId: string) => {
     setCollapsedSections(prev => {
       const newSet = new Set(prev)
@@ -188,25 +227,7 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
     })
   }, [])
 
-  // Handler for section title click - opens AI panel with full section content
-  const handleSectionClick = useCallback((e: React.MouseEvent<HTMLElement>, section: ParsedSection) => {
-    const content = getSectionContent(section)
-    
-    // Create a temporary element with the section content
-    const tempElement = document.createElement('div')
-    tempElement.textContent = content
-    
-    // Create event-like object that handleElementClick expects
-    const eventLikeObject = {
-      preventDefault: () => {},
-      stopPropagation: () => {},
-      currentTarget: tempElement
-    } as any
-    
-    handleElementClick(eventLikeObject, 'section')
-  }, [handleElementClick, getSectionContent])
-
-  // Copy and download handlers
+  // Copy and download handlers (UNCHANGED)
   const handleCopy = useCallback(async () => {
     if (!output?.content) return
     
@@ -244,8 +265,17 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
     })
   }, [output, toast])
 
-// Zaktualizowana funkcja renderSection z lepszą obsługą hover
-const renderSection = useCallback((section: ParsedSection): React.ReactNode => {
+  // Helper to detect content type (same logic as before)
+  const getContentType = useCallback((content: string) => {
+    if (content.includes('|') && content.split('\n').filter(line => line.includes('|')).length > 1) return 'table'
+    if (/^[\s]*[-*+]\s/.test(content)) return 'unordered-list'
+    if (/^[\s]*\d+\.\s/.test(content)) return 'ordered-list'  
+    if (content.startsWith('>')) return 'blockquote'
+    return 'paragraph'
+  }, [])
+
+// Modified renderSection - teraz używa hoverHandlers dla wszystkich elementów
+const renderSection = useCallback((section: ParsedSection, openEditModal: any): React.ReactNode => {
   const isCollapsed = collapsedSections.has(section.id)
   const HeadingTag = `h${Math.min(section.level, 6)}` as keyof JSX.IntrinsicElements
   const headingId = `heading-${section.id}`
@@ -293,13 +323,20 @@ const renderSection = useCallback((section: ParsedSection): React.ReactNode => {
         {/* Spacer dla sekcji bez zawartości */}
         {!hasContent && <div className="w-6 h-6 shrink-0" />}
         
-        {/* Section Title - clickable for AI panel */}
+        {/* Section Title - clickable for EditModal, używa hoverHandlers */}
         <HeadingTag
           id={headingId}
           data-section-id={section.id}
+          data-content={getSectionContent(section)}
+          data-element-type={`complete-section-${section.level}`}
           className={`${getHeadingClasses(section.level)} text-foreground cursor-pointer hover:text-primary transition-colors flex-1 leading-6 flex items-center px-2 py-1 -mx-2 -my-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20`}
           style={{ marginBottom: 0, marginTop: 0 }}
-          onClick={(e) => handleSectionClick(e, section)}
+          onClick={(e) => {
+            // Store openEditModal globally for handleElementEdit
+            (window as any).currentOpenEditModal = openEditModal
+            // Call handleElementEdit directly
+            handleElementEdit(e, `complete-section-${section.level}`)
+          }}
           onMouseEnter={(e) => hoverHandlers.applySectionHoverStyles(e, section.id, section.level)}
           onMouseLeave={hoverHandlers.clearSectionHoverStyles}
         >
@@ -310,7 +347,7 @@ const renderSection = useCallback((section: ParsedSection): React.ReactNode => {
       {/* Zawartość sekcji - pokazuj tylko gdy nie jest zwinięta */}
       {!isCollapsed && hasContent && (
         <div className="section-content pl-4">
-          {/* Section content - render each content item */}
+          {/* Section content - każdy element używa hoverHandlers */}
           {section.content.map((contentItem, index) => (
             contentItem.trim() && (
               <div key={index} className="mb-4">
@@ -325,14 +362,14 @@ const renderSection = useCallback((section: ParsedSection): React.ReactNode => {
           {/* Child sections */}
           {section.children.length > 0 && (
             <div className="subsections-container">
-              {section.children.map(childSection => renderSection(childSection))}
+              {section.children.map(childSection => renderSection(childSection, openEditModal))}
             </div>
           )}
         </div>
       )}
     </div>
   )
-}, [collapsedSections, toggleSection, hoverHandlers, handleSectionClick])
+}, [collapsedSections, toggleSection, hoverHandlers, getSectionContent, handleElementEdit])
 
   if (!output) {
     return (
@@ -345,51 +382,44 @@ const renderSection = useCallback((section: ParsedSection): React.ReactNode => {
   const noteTypeInfo = getNoteTypeInfo(output.noteType)
 
   return (
-    <div className="h-full flex flex-col bg-background">
-      {/* Header */}
-      <header className="flex-shrink-0 p-4 border-b border-border bg-muted/30">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              {noteTypeInfo.icon}
-              <span className="text-sm font-medium">
-                {"Tip: Click to edit"}
-              </span>
+    <EditModalProvider>
+      {(openEditModal) => (
+        <div className="h-full flex flex-col bg-background">
+          {/* Header (UNCHANGED) */}
+          <header className="flex-shrink-0 p-4 border-b border-border bg-muted/30">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  {noteTypeInfo.icon}
+                  <span className="text-sm font-medium">
+                    {"Tip: Click to edit"}
+                  </span>
+                </div>
+              </div>
             </div>
+
+            <div className="flex justify-center mt-4 mb-4">
+              <Badge className={`${noteTypeInfo.color} px-3 py-1 text-sm font-medium`}>
+                <span className="flex items-center gap-1">
+                  {noteTypeInfo.icon}
+                  {noteTypeInfo.title}
+                </span>
+              </Badge>
+            </div>
+          </header>
+
+          {/* Content with Hierarchical Sections */}
+          <div className="flex-1 max-w-4xl mx-auto w-full">
+            <ScrollArea className="h-full">
+              <div className="p-6 rounded-xl bg-muted/50">
+                <div className="space-y-6">
+                  {parsedSections.map(section => renderSection(section, openEditModal))}
+                </div>
+              </div>
+            </ScrollArea>
           </div>
         </div>
-
-        <div className="flex justify-center mt-4 mb-4">
-          <Badge className={`${noteTypeInfo.color} px-3 py-1 text-sm font-medium`}>
-            <span className="flex items-center gap-1">
-              {noteTypeInfo.icon}
-              {noteTypeInfo.title}
-            </span>
-          </Badge>
-        </div>
-      </header>
-
-      {/* Content with Hierarchical Sections */}
-      <div className="flex-1 max-w-4xl mx-auto w-full">
-        <ScrollArea className="h-full">
-          <div className="p-6 rounded-xl bg-muted/50">
-            <div className="space-y-6">
-              {parsedSections.map(section => renderSection(section))}
-            </div>
-          </div>
-        </ScrollArea>
-      </div>
-
-      {/* AI Action Panel */}
-      {actionPanel && (
-        <AIActionPanelComponent
-          actionPanel={actionPanel}
-          isAnimating={isAnimating}
-          onClose={closeActionPanel}
-          onDetailLevelChange={updateDetailLevel}
-          onTransformation={handleTransformation}
-        />
       )}
-    </div>
+    </EditModalProvider>
   )
 }
