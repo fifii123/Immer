@@ -403,7 +403,7 @@ export default function PlaygroundArea({
       >
         <div className="absolute -top-3 right-0 w-full h-3" />
         <div className="relative flex flex-col gap-2 mt-3">
-          {/* Primary: Study Methods */}
+          {/* Primary: Study Methods
           <div className="relative group/tooltip">
             <div className="bg-background shadow-sm pl-0 pr-2.5 rounded-full flex items-center h-7 hover:shadow-md transition-shadow cursor-pointer">
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center mr-2 shadow-sm">
@@ -416,7 +416,7 @@ export default function PlaygroundArea({
             <div className="absolute bottom-full right-3 transform">
               <div className="w-2 h-2 bg-background rotate-45 -mb-1 shadow-sm" />
             </div>
-          </div>
+          </div> */}
 
           {/* Secondary: Edit/Regenerate */}
           {playgroundContent && playgroundContent !== 'chat' && (
