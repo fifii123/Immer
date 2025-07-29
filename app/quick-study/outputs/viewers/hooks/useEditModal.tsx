@@ -1,151 +1,149 @@
-// app/quick-study/outputs/viewers/hooks/useEditModal.tsx
-import { useState, useCallback, useRef, useEffect } from 'react'
+// app/quick-study/outputs/viewers/hooks/useEditModal.ts
+import { useState, useCallback } from 'react'
 
 export interface EditModalState {
   isOpen: boolean
   content: string
   originalContent: string
   elementType: string
-  position: { x: number; y: number }
   sourceElement: HTMLElement | null
+  clickPosition: { x: number; y: number } | null
+  visualPreview?: HTMLElement | null
 }
 
-interface UseEditModalReturn {
-  editModal: EditModalState | null
-  openEditModal: (
-    content: string, 
-    elementType: string, 
-    sourceElement: HTMLElement,
-    clickPosition: { x: number; y: number }
-  ) => void
-  closeEditModal: () => void
-  updateContent: (content: string) => void
-  saveChanges: () => void
-  hasChanges: () => boolean
-  resetContent: () => void
-}
-
-export function useEditModal(): UseEditModalReturn {
+export function useEditModal() {
   const [editModal, setEditModal] = useState<EditModalState | null>(null)
-  const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (animationTimeoutRef.current) {
-        clearTimeout(animationTimeoutRef.current)
-      }
-    }
-  }, [])
-
-  // Handle Escape key
-  useEffect(() => {
-    if (!editModal?.isOpen) return
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closeEditModal()
-      }
-      // Ctrl+S for save
-      if (event.ctrlKey && event.key === 's') {
-        event.preventDefault()
-        saveChanges()
-      }
-    }
-
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-  }, [editModal?.isOpen])
 
   const openEditModal = useCallback((
     content: string,
     elementType: string,
     sourceElement: HTMLElement,
-    clickPosition: { x: number; y: number }
+    clickPosition: { x: number; y: number },
+    visualPreview?: HTMLElement
   ) => {
-    // Clean content - remove markdown and extra whitespace
-    const cleanContent = content.replace(/[#*_`]/g, '').trim()
+    // Create a clean visual preview if provided
+    let cleanedPreview: HTMLElement | undefined = undefined
     
-    console.group(`🖊️ Edit Modal Opening`)
-    console.log('Content:', cleanContent)
-    console.log('Element Type:', elementType)
-    console.log('Position:', clickPosition)
-    console.log('Source Element:', sourceElement)
-    console.groupEnd()
+    if (visualPreview) {
+      cleanedPreview = visualPreview.cloneNode(true) as HTMLElement
+      
+      // Clean up the preview element
+      cleanedPreview.style.pointerEvents = 'none'
+      cleanedPreview.style.userSelect = 'none'
+      cleanedPreview.removeAttribute('onclick')
+      cleanedPreview.removeAttribute('onmouseenter')
+      cleanedPreview.removeAttribute('onmouseleave')
+      cleanedPreview.removeAttribute('data-content')
+      cleanedPreview.removeAttribute('data-element-type')
+      cleanedPreview.removeAttribute('data-section-id')
+      
+      // Remove interactive elements more thoroughly
+      const interactiveElements = cleanedPreview.querySelectorAll('button, [onclick], [onmouseenter], [onmouseleave], [data-content], [data-element-type]')
+      interactiveElements.forEach(el => {
+        if (el.tagName.toLowerCase() === 'button') {
+          el.remove()
+        } else {
+          el.removeAttribute('onclick')
+          el.removeAttribute('onmouseenter') 
+          el.removeAttribute('onmouseleave')
+          el.removeAttribute('data-content')
+          el.removeAttribute('data-element-type')
+          el.removeAttribute('data-section-id')
+        }
+      })
+      
+      // Remove cursor pointer from all elements
+      const allElements = [cleanedPreview, ...Array.from(cleanedPreview.querySelectorAll('*'))]
+      allElements.forEach(el => {
+        if (el instanceof HTMLElement) {
+          el.classList.remove('cursor-pointer')
+          el.classList.add('cursor-default')
+          el.style.pointerEvents = 'none'
+        }
+      })
+      
+      // Special cleanup for sections
+      if (elementType.startsWith('complete-section')) {
+        // Remove only buttons, not the entire container
+        const buttons = cleanedPreview.querySelectorAll('button')
+        buttons.forEach(button => button.remove())
+        
+        // Remove spacer divs
+        const spacers = cleanedPreview.querySelectorAll('div.w-6.h-6.shrink-0')
+        spacers.forEach(spacer => spacer.remove())
+        
+        // Ensure all section content is visible (expand collapsed sections)
+        const sectionContents = cleanedPreview.querySelectorAll('.section-content')
+        sectionContents.forEach(content => {
+          content.style.display = 'block'
+          content.style.visibility = 'visible'
+        })
+        
+        // Clean up interactive styling from all headings in the section
+        const headings = cleanedPreview.querySelectorAll('h1, h2, h3, h4, h5, h6')
+        headings.forEach(heading => {
+          heading.classList.remove('cursor-pointer', 'hover:text-primary')
+          heading.classList.add('cursor-default')
+          
+          const hoverClasses = ['hover:bg-blue-50', 'dark:hover:bg-blue-900/20']
+          hoverClasses.forEach(cls => heading.classList.remove(cls))
+        })
+      }
+      
+      // For content elements, remove hover effects
+      if (!elementType.startsWith('complete-section')) {
+        const allElements = [cleanedPreview, ...Array.from(cleanedPreview.querySelectorAll('*'))]
+        allElements.forEach(el => {
+          if (el instanceof HTMLElement) {
+            el.classList.remove('cursor-pointer')
+            el.classList.add('cursor-default')
+          }
+        })
+      }
+    }
 
     setEditModal({
       isOpen: true,
-      content: cleanContent,
-      originalContent: cleanContent,
+      content,
+      originalContent: content,
       elementType,
-      position: clickPosition,
-      sourceElement
+      sourceElement,
+      clickPosition,
+      visualPreview: cleanedPreview
     })
-
-    // Add visual feedback to source element
-    sourceElement.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-    sourceElement.style.transform = 'scale(1.02) translateZ(0)'
-    sourceElement.style.opacity = '0.7'
-    sourceElement.style.boxShadow = '0 8px 32px rgba(59, 130, 246, 0.2)'
   }, [])
 
   const closeEditModal = useCallback(() => {
-    if (!editModal) return
-
-    // Restore source element
-    if (editModal.sourceElement) {
-      const el = editModal.sourceElement
-      el.style.transform = 'scale(1) translateZ(0)'
-      el.style.opacity = '1'
-      el.style.boxShadow = 'none'
-      
-      // Clean up styles after animation
-      animationTimeoutRef.current = setTimeout(() => {
-        el.style.transition = ''
-        el.style.transform = ''
-        el.style.opacity = ''
-        el.style.boxShadow = ''
-      }, 300)
-    }
-
     setEditModal(null)
-  }, [editModal])
+  }, [])
 
-  const updateContent = useCallback((content: string) => {
-    if (!editModal) return
-    
-    setEditModal(prev => prev ? {
-      ...prev,
-      content
-    } : null)
-  }, [editModal])
+  const updateContent = useCallback((newContent: string) => {
+    setEditModal(prev => prev ? { ...prev, content: newContent } : null)
+  }, [])
 
   const saveChanges = useCallback(() => {
-    if (!editModal) return
-    
-    console.group(`💾 Saving Changes`)
-    console.log('Original:', editModal.originalContent)
-    console.log('New:', editModal.content)
-    console.log('Element Type:', editModal.elementType)
-    console.groupEnd()
-
-    // TODO: Implement actual save logic here
-    // For now, just close the modal
-    closeEditModal()
+    if (editModal) {
+      // Here you would typically update the actual content in your data store
+      // For now, we'll just log it
+      console.log('Saving changes:', {
+        content: editModal.content,
+        elementType: editModal.elementType,
+        sourceElement: editModal.sourceElement
+      })
+      
+      // You could emit an event or call a callback to update the content
+      // Example: updateNotesContent(editModal.sourceElement, editModal.content)
+      
+      closeEditModal()
+    }
   }, [editModal, closeEditModal])
 
-  const hasChanges = useCallback(() => {
-    if (!editModal) return false
-    return editModal.content !== editModal.originalContent
-  }, [editModal])
-
   const resetContent = useCallback(() => {
-    if (!editModal) return
-    
-    setEditModal(prev => prev ? {
-      ...prev,
-      content: prev.originalContent
-    } : null)
+    setEditModal(prev => prev ? { ...prev, content: prev.originalContent } : null)
+  }, [])
+
+  const hasChanges = useCallback(() => {
+    return editModal ? editModal.content !== editModal.originalContent : false
   }, [editModal])
 
   return {

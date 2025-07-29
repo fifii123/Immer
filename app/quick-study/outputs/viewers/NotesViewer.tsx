@@ -160,58 +160,28 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
     return content
   }, [])
 
-  // Handler dla wszystkich elementów - teraz jako callback dla hoverHandlers
-  const handleElementEdit = useCallback((event: React.MouseEvent<HTMLElement>, elementType: string) => {
+  // Handler for hoverHandlers - needs access to openEditModal from render context
+  const handleHoverClick = useCallback((event: React.MouseEvent<HTMLElement>, elementType: string) => {
+    // Get openEditModal from the current render context
+    const openEditModal = (window as any).currentOpenEditModalForHover
+    if (!openEditModal) return
+    
     event.preventDefault()
     event.stopPropagation()
     
     const element = event.currentTarget
-    const openEditModal = (window as any).currentOpenEditModal
+    const content = element.textContent || element.innerHTML || ''
+    const visualPreview = element.cloneNode(true) as HTMLElement
     
-    if (!openEditModal) return
-    
-    // Get content from data attribute or textContent
-    let content = element.getAttribute('data-content') || element.textContent || ''
-    
-    // If no data-content, try to extract content based on element type
-    if (!element.getAttribute('data-content')) {
-      if (elementType.startsWith('complete-section')) {
-        // For sections, we need to get the full section content
-        const sectionId = element.getAttribute('data-section-id')
-        if (sectionId) {
-          // Find the section in parsedSections and get its content
-          const findSection = (sections: ParsedSection[], id: string): ParsedSection | null => {
-            for (const section of sections) {
-              if (section.id === id) return section
-              const found = findSection(section.children, id)
-              if (found) return found
-            }
-            return null
-          }
-          const section = findSection(parsedSections, sectionId)
-          if (section) {
-            content = getSectionContent(section)
-          }
-        }
-      } else {
-        // For other elements, use textContent or innerHTML
-        content = element.textContent || element.innerHTML || ''
-      }
-    }
-    
-    const actualElementType = element.getAttribute('data-element-type') || elementType
-    
-    const clickPosition = {
+    openEditModal(content, elementType, element, {
       x: event.clientX,
       y: event.clientY
-    }
-    
-    openEditModal(content, actualElementType, element, clickPosition)
-  }, [parsedSections, getSectionContent])
+    }, visualPreview)
+  }, [])
 
   const hoverHandlers = useNotesHover({
     isAnimating,
-    onElementClick: handleElementEdit // Use handleElementEdit for all clicks
+    onElementClick: handleHoverClick
   })
 
   // Section handlers (UNCHANGED)
@@ -280,6 +250,11 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
   const HeadingTag = `h${Math.min(section.level, 6)}` as keyof JSX.IntrinsicElements
   const headingId = `heading-${section.id}`
   
+  // Make openEditModal available for hoverHandlers
+  React.useEffect(() => {
+    (window as any).currentOpenEditModalForHover = openEditModal
+  }, [openEditModal])
+  
   const getHeadingClasses = (level: number) => {
     switch (level) {
       case 1: return "text-3xl font-bold border-b-2 border-gray-200 dark:border-gray-700 pb-3"
@@ -329,16 +304,50 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
           data-section-id={section.id}
           data-content={getSectionContent(section)}
           data-element-type={`complete-section-${section.level}`}
-          className={`${getHeadingClasses(section.level)} text-foreground cursor-pointer hover:text-primary transition-colors flex-1 leading-6 flex items-center px-2 py-1 -mx-2 -my-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20`}
-          style={{ marginBottom: 0, marginTop: 0 }}
-          onClick={(e) => {
-            // Store openEditModal globally for handleElementEdit
-            (window as any).currentOpenEditModal = openEditModal
-            // Call handleElementEdit directly
-            handleElementEdit(e, `complete-section-${section.level}`)
+          className={`${getHeadingClasses(section.level)} text-foreground cursor-pointer hover:text-primary transition-colors flex-1 leading-6 flex items-center px-2 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20`}
+          style={{ 
+            marginBottom: 0, 
+            marginTop: 0,
+            willChange: 'background-color, color',
+            backfaceVisibility: 'hidden',
+            contain: 'layout style',
+            position: 'relative'
           }}
-          onMouseEnter={(e) => hoverHandlers.applySectionHoverStyles(e, section.id, section.level)}
-          onMouseLeave={hoverHandlers.clearSectionHoverStyles}
+          onClick={(e) => {
+            // Call handleElementEdit directly with section data
+            const sectionContainer = e.currentTarget.closest('.section-container') as HTMLElement
+            const fullContent = getSectionContent(section)
+            
+            // Create visual preview from entire section container
+            const visualPreview = sectionContainer ? sectionContainer.cloneNode(true) as HTMLElement : e.currentTarget.cloneNode(true) as HTMLElement
+            
+            openEditModal(fullContent, `complete-section-${section.level}`, e.currentTarget, {
+              x: e.clientX,
+              y: e.clientY
+            }, visualPreview)
+          }}
+onMouseEnter={(e) => {
+  console.log("jack")
+
+  // Zapowiedź transformacji: GPU layer
+  e.currentTarget.style.willChange = 'transform'
+
+  // Ewentualnie lokalny efekt bez zmiany layoutu
+  e.currentTarget.style.transform = 'translateZ(0)' // lub scale(1.02), jeśli robisz animacje
+
+  hoverHandlers.applySectionHoverStyles(e, section.id, section.level)
+}}
+
+onMouseLeave={(e) => {
+  console.log("off")
+
+  // Natychmiastowa czystość bez opóźnienia
+  e.currentTarget.style.transform = 'translateZ(0)'
+  e.currentTarget.style.willChange = 'auto'
+
+  hoverHandlers.clearSectionHoverStyles(e)
+}}
+
         >
           {section.title}
         </HeadingTag>
@@ -346,11 +355,25 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
 
       {/* Zawartość sekcji - pokazuj tylko gdy nie jest zwinięta */}
       {!isCollapsed && hasContent && (
-        <div className="section-content pl-4">
-          {/* Section content - każdy element używa hoverHandlers */}
+        <div className="section-content pl-4" style={{ overflow: 'visible', contain: 'none' }}>
+          {/* Section content - każdy element ma własną obsługę kliknięcia */}
           {section.content.map((contentItem, index) => (
             contentItem.trim() && (
-              <div key={index} className="mb-4">
+              <div 
+                key={index} 
+                className="mb-4 cursor-pointer"
+                style={{ overflow: 'visible', minWidth: '0' }}
+                onClick={(e) => {
+                  // Backup click handler in case hoverHandlers don't work
+                  const contentType = getContentType(contentItem)
+                  const visualPreview = e.currentTarget.cloneNode(true) as HTMLElement
+                  
+                  openEditModal(contentItem, contentType, e.currentTarget, {
+                    x: e.clientX,
+                    y: e.clientY
+                  }, visualPreview)
+                }}
+              >
                 <MarkdownRenderer 
                   content={contentItem}
                   hoverHandlers={hoverHandlers}
@@ -361,7 +384,7 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
           
           {/* Child sections */}
           {section.children.length > 0 && (
-            <div className="subsections-container">
+            <div className="subsections-container" style={{ overflow: 'visible' }}>
               {section.children.map(childSection => renderSection(childSection, openEditModal))}
             </div>
           )}
@@ -369,7 +392,7 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
       )}
     </div>
   )
-}, [collapsedSections, toggleSection, hoverHandlers, getSectionContent, handleElementEdit])
+}, [collapsedSections, toggleSection, hoverHandlers, getSectionContent, getContentType])
 
   if (!output) {
     return (
@@ -409,10 +432,10 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
           </header>
 
           {/* Content with Hierarchical Sections */}
-          <div className="flex-1 max-w-4xl mx-auto w-full">
-            <ScrollArea className="h-full">
-              <div className="p-6 rounded-xl bg-muted/50">
-                <div className="space-y-6">
+          <div className="flex-1 w-full flex justify-center">
+            <ScrollArea className="h-full w-full max-w-6xl" style={{ overflow: 'auto' }}>
+              <div className="p-6 rounded-xl bg-muted/50 w-full" style={{ overflow: 'visible', minWidth: 'fit-content' }}>
+                <div className="space-y-6 w-full" style={{ overflow: 'visible' }}>
                   {parsedSections.map(section => renderSection(section, openEditModal))}
                 </div>
               </div>

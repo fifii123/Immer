@@ -1,3 +1,4 @@
+// app/quick-study/outputs/viewers/components/EditModalProvider.tsx
 import React from 'react'
 import { useEditModal } from '../hooks/useEditModal'
 import { EditModalOverlay } from './EditModalOverlay'
@@ -7,7 +8,8 @@ interface EditModalProviderProps {
     content: string,
     elementType: string,
     sourceElement: HTMLElement,
-    clickPosition: { x: number; y: number }
+    clickPosition: { x: number; y: number },
+    visualPreview?: HTMLElement
   ) => void) => React.ReactNode
 }
 

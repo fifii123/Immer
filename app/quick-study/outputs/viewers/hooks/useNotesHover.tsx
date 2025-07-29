@@ -220,15 +220,13 @@ onMouseOver: (e: React.MouseEvent<HTMLElement>) => {
       const prevElement = document.querySelector(`[data-section-id="${lastHoveredRef.current}"]`)
       const prevContainer = prevElement?.closest('.section-container') as HTMLElement
       if (prevContainer) {
-        Object.assign(prevContainer.style, {
-          backgroundColor: '',
-          borderLeft: '',
-          borderRadius: '',
-          padding: '',
-          margin: '',
-          boxShadow: '',
-          transition: ''
-        })
+      Object.assign(sectionContainer.style, {
+  backgroundColor: `rgba(59, 130, 246, 0.08)`,
+  borderRadius: '8px',
+  transform: 'scale(1.01)', // lub translateY, zamiast margin/padding
+  boxShadow: `inset 3px 0 0 rgba(59, 130, 246, 0.3), 0 1px 3px rgba(59, 130, 246, 0.1)`,
+  transition: 'all 0.15s ease-in-out'
+})
       }
     }
 
@@ -269,8 +267,7 @@ onMouseOver: (e: React.MouseEvent<HTMLElement>) => {
       backgroundColor: '',
       borderLeft: '',
       borderRadius: '',
-      padding: '',
-      margin: '',
+      transform: '',
       boxShadow: '',
       transition: 'all 0.15s ease-in-out'
     })
