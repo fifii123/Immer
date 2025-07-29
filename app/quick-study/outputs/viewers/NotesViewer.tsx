@@ -1,11 +1,16 @@
-// app/quick-study/outputs/viewers/NotesViewer.tsx - Hierarchical Expandable Sections
-"use client"
+// app/quick-study/outputs/viewers/NotesViewer.tsx - Optimized AI Action Panel
+"use client" 
 
-import React, { useState, useMemo } from 'react'
-import { PenTool, Copy, Download, FileText, List, Table, ChevronDown, ChevronRight } from "lucide-react"
+import React, { useState, useMemo, useCallback, useRef } from 'react'
+import { 
+  PenTool, Copy, Download, FileText, List, Table, ChevronDown, ChevronRight,
+  Edit3, Sparkles, Eye, Zap, BookOpen, MessageSquare, Brain, Sliders, 
+  RotateCcw, Type, HelpCircle, X, Lightbulb
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
+import { Slider } from "@/components/ui/slider"
 import { useToast } from "@/components/ui/use-toast"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -37,6 +42,15 @@ interface ParsedSection {
   title: string;
   content: string[];
   children: ParsedSection[];
+}
+
+interface AIActionPanel {
+  isVisible: boolean;
+  element: HTMLElement | null;
+  content: string;
+  elementType: string;
+  position: { x: number; y: number };
+  detailLevel: number;
 }
 
 const getNoteTypeInfo = (noteType?: string) => {
@@ -72,28 +86,78 @@ const getNoteTypeInfo = (noteType?: string) => {
   }
 }
 
+// Smart Suggestions - memoized for performance
+const getSmartSuggestion = (elementType: string, content: string): string => {
+  const wordCount = content?.split(/\s+/).length || 0
+  
+  switch (elementType) {
+    case 'paragraph':
+      if (wordCount > 50) return "📝 Break into bullet points for better readability"
+      if (wordCount < 10) return "🔍 Add more details and examples"
+      return "✨ Add visual formatting (bold key terms)"
+    
+    case 'unordered-list':
+    case 'ordered-list':
+      if (wordCount < 20) return "📋 Add sub-items for more structure"
+      return "🎯 Convert to numbered steps or action items"
+    
+    case 'table':
+      return "📊 Add summary row or highlight key data"
+    
+    case 'blockquote':
+      return "🔗 Add source attribution or expand context"
+    
+    case 'complete-section-1':
+    case 'complete-section-2':
+      return "🏗️ Break into smaller subsections"
+    
+    case 'complete-section-3':
+    case 'complete-section-4':
+    case 'complete-section-5':
+    case 'complete-section-6':
+      return "🎨 Add visual elements (diagrams, examples)"
+    
+    default:
+      return "🚀 Enhance with AI-powered improvements"
+  }
+}
+
 export default function NotesViewer({ output, selectedSource }: NotesViewerProps) {
   const { toast } = useToast()
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
-  const [hoveredSection, setHoveredSection] = useState<string | null>(null)
-  const [hoverTimeouts, setHoverTimeouts] = useState<Map<string, NodeJS.Timeout>>(new Map())
-const [isTransitioning, setIsTransitioning] = useState<Set<string>>(new Set())
-const [debugPanel, setDebugPanel] = useState<{
-  isVisible: boolean;
-  element: HTMLElement | null;
-  content: string;
-  elementType: string;
-  position: { x: number; y: number };
-} | null>(null)
+  
+  // Optimized state management
+  const [actionPanel, setActionPanel] = useState<AIActionPanel | null>(null)
+  const [isAnimating, setIsAnimating] = useState(false)
+  
+  // Refs for performance
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastHoveredRef = useRef<string | null>(null)
 
   // Cleanup timeouts przy unmount
   React.useEffect(() => {
     return () => {
-      hoverTimeouts.forEach(timeout => clearTimeout(timeout))
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+      if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current)
     }
   }, [])
 
-  // Parsowanie markdown do hierarchicznej struktury
+  // Obsługa klawisza Escape - optimized
+  React.useEffect(() => {
+    if (!actionPanel) return
+    
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeActionPanel()
+      }
+    }
+    
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [actionPanel?.isVisible])
+
+  // Parsowanie markdown - memoized
   const parsedSections = useMemo(() => {
     if (!output?.content) return []
     
@@ -134,7 +198,6 @@ const [debugPanel, setDebugPanel] = useState<{
           children: []
         }
 
-        // Znajdź odpowiednie miejsce w hierarchii
         while (stack.length > 0 && stack[stack.length - 1].level >= level) {
           stack.pop()
         }
@@ -147,7 +210,6 @@ const [debugPanel, setDebugPanel] = useState<{
 
         stack.push(section)
       } else {
-        // Dodaj linię do aktualnej zawartości
         currentContent.push(line)
       }
     }
@@ -156,7 +218,8 @@ const [debugPanel, setDebugPanel] = useState<{
     return sections
   }, [output?.content])
 
-  const handleCopy = async () => {
+  // Optimized handlers
+  const handleCopy = useCallback(async () => {
     if (!output?.content) return
     try {
       await navigator.clipboard.writeText(output.content)
@@ -171,354 +234,385 @@ const [debugPanel, setDebugPanel] = useState<{
         variant: "destructive"
       })
     }
-  }
+  }, [output?.content, toast])
 
-const handleDownload = async (format: 'md' | 'pdf' = 'md') => {
-  if (!output?.content) return;
+  const handleDownload = useCallback(async (format: 'md' | 'pdf' = 'md') => {
+    if (!output?.content) return;
 
-  if (format === 'md') {
-    // Pobieranie jako Markdown
-    const blob = new Blob([output.content], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${output.title}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  } else {
-    // Pobieranie jako PDF z zachowaniem struktury tekstu
-    try {
-      const { default: html2pdf } = await import('html2pdf.js');
-
-      const notesElement = document.querySelector('.markdown-content');
-      if (!notesElement) return;
-
-      const opt = {
-        margin:       10,
-        filename:     `${output.title}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
-      };
-
-      // Renderuj PDF
-      await html2pdf().set(opt).from(notesElement).save();
-      
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      toast({
-        title: "PDF generation failed",
-        description: "Could not generate PDF",
-        variant: "destructive"
-      });
-    }
-  }
-}
-
-  // Toggle collapse sekcji
-  const toggleSection = (sectionId: string) => {
-    const newCollapsed = new Set(collapsedSections)
-    if (newCollapsed.has(sectionId)) {
-      newCollapsed.delete(sectionId)
+    if (format === 'md') {
+      const blob = new Blob([output.content], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${output.title}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } else {
-      newCollapsed.add(sectionId)
-    }
-    setCollapsedSections(newCollapsed)
-  }
+      try {
+        const { default: html2pdf } = await import('html2pdf.js');
+        const notesElement = document.querySelector('.markdown-content');
+        if (!notesElement) return;
 
-  // Style hover dla nagłówków sekcji
-  const getSectionHoverStyles = (level: number) => {
-    const intensity = Math.max(0.12 - (level - 1) * 0.02, 0.06)
-    const borderIntensity = Math.max(0.4 - (level - 1) * 0.05, 0.2)
-    
-    return {
-      backgroundColor: `rgba(59, 130, 246, ${intensity})`,
-      borderLeft: `${Math.max(4 - level, 2)}px solid rgba(59, 130, 246, ${borderIntensity})`,
-      borderRadius: '8px',
-      padding: '12px 16px',
-      margin: '8px -16px',
-      transition: 'all 0.2s ease-in-out',
-      cursor: 'pointer',
-      boxShadow: `0 2px 4px rgba(59, 130, 246, ${intensity * 2})`,
-      transform: 'translateX(2px)'
-    }
-  }
+        const opt = {
+          margin: 10,
+          filename: `${output.title}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+        };
 
-  const handleSectionHover = (event: React.MouseEvent<HTMLElement>, sectionId: string, level: number) => {
-    // Tylko dla podsekcji (h3+) - nie dla głównych sekcji (h1, h2)
-    if (level <= 2) return
+        await html2pdf().set(opt).from(notesElement).save();
+      } catch (error) {
+        console.error('Error generating PDF:', error);
+        toast({
+          title: "PDF generation failed",
+          description: "Could not generate PDF",
+          variant: "destructive"
+        });
+      }
+    }
+  }, [output?.content, output?.title, toast])
+
+  const toggleSection = useCallback((sectionId: string) => {
+    setCollapsedSections(prev => {
+      const newCollapsed = new Set(prev)
+      if (newCollapsed.has(sectionId)) {
+        newCollapsed.delete(sectionId)
+      } else {
+        newCollapsed.add(sectionId)
+      }
+      return newCollapsed
+    })
+  }, [])
+
+  // Optimized section hover with debouncing
+  const handleSectionHover = useCallback((event: React.MouseEvent<HTMLElement>, sectionId: string, level: number) => {
+    if (level <= 2 || isAnimating) return
     
     event.stopPropagation()
     
     const sectionContainer = event.currentTarget.closest('.section-container') as HTMLElement
     if (!sectionContainer) return
-    
-    setHoveredSection(sectionId)
-    
-    // Znajdź wszystkie elementy należące do tej sekcji
-    const sectionElements = [
-      sectionContainer.querySelector('.section-heading'),
-      sectionContainer.querySelector('.section-content'),
-      ...Array.from(sectionContainer.querySelectorAll('.subsections-container'))
-    ].filter(Boolean) as HTMLElement[]
-    
-    // Aplikuj hover style na wszystkie elementy sekcji
-    sectionElements.forEach(element => {
-      if (element) {
-        Object.assign(element.style, getSectionHoverStyles(level))
-      }
-    })
-  }
 
-  const clearSectionHoverStyles = (event: React.MouseEvent<HTMLElement>) => {
+    // Clear previous timeout
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current)
+    }
+
+    // Apply hover styles immediately
+    Object.assign(sectionContainer.style, {
+      backgroundColor: `rgba(59, 130, 246, 0.08)`,
+      border: `2px solid rgba(59, 130, 246, 0.2)`,
+      borderRadius: '8px',
+      padding: '12px',
+      margin: '8px 0',
+      transition: 'all 0.2s ease-in-out',
+      boxShadow: `0 2px 4px rgba(59, 130, 246, 0.15)`
+    })
+
+    lastHoveredRef.current = sectionId
+  }, [isAnimating])
+
+  const clearSectionHoverStyles = useCallback((event: React.MouseEvent<HTMLElement>) => {
     const sectionContainer = event.currentTarget.closest('.section-container') as HTMLElement
     if (!sectionContainer) return
     
-    // Znajdź section ID na podstawie data attribute
     const headingElement = sectionContainer.querySelector('[data-section-id]') as HTMLElement
-    const sectionId = headingElement?.getAttribute('data-section-id') || 'unknown'
     const level = parseInt(headingElement?.tagName.charAt(1) || '1')
     
-    // Tylko dla podsekcji
     if (level <= 2) return
     
-    setHoveredSection(null)
+    lastHoveredRef.current = null
     
-    // Znajdź wszystkie elementy należące do tej sekcji i wyczyść style
-    const sectionElements = [
-      sectionContainer.querySelector('.section-heading'),
-      sectionContainer.querySelector('.section-content'),
-      ...Array.from(sectionContainer.querySelectorAll('.subsections-container'))
-    ].filter(Boolean) as HTMLElement[]
+    Object.assign(sectionContainer.style, {
+      backgroundColor: '',
+      border: '',
+      borderRadius: '',
+      padding: '',
+      margin: '',
+      boxShadow: '',
+      transition: 'all 0.2s ease-in-out'
+    })
     
-    sectionElements.forEach(element => {
-      if (element) {
+    setTimeout(() => {
+      if (sectionContainer.style.transition) {
+        sectionContainer.style.transition = ''
+      }
+    }, 200)
+  }, [])
+
+  // Optimized element click handler with debouncing
+  const handleElementClick = useCallback((event: React.MouseEvent<HTMLElement>, elementType: string) => {
+    if (isAnimating) return
+    
+    event.preventDefault()
+    event.stopPropagation()
+    
+    setIsAnimating(true)
+    
+    // Clear any existing timeout
+    if (animationTimeoutRef.current) {
+      clearTimeout(animationTimeoutRef.current)
+    }
+    
+    const element = event.currentTarget
+    const content = element.textContent || element.innerHTML || 'Brak zawartości'
+    
+    // Log to console (replacement for debug panel)
+    console.group(`🎯 Element Clicked: ${elementType}`)
+    console.log('Content:', content.trim())
+    console.log('Element:', element)
+    console.log('Length:', content.length, 'characters')
+    console.log('Word count:', content.trim().split(/\s+/).length, 'words')
+    console.groupEnd()
+    
+    // Wait for any ongoing animations to complete
+    animationTimeoutRef.current = setTimeout(() => {
+      const rect = element.getBoundingClientRect()
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+      const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft
+      
+      setActionPanel({
+        isVisible: true,
+        element,
+        content: content.trim(),
+        elementType,
+        position: {
+          x: rect.left + scrollLeft + rect.width / 2,
+          y: rect.top + scrollTop - 10
+        },
+        detailLevel: 3
+      })
+      
+      setIsAnimating(false)
+    }, 150) // Wait for animations to complete
+  }, [isAnimating])
+
+  const closeActionPanel = useCallback(() => {
+    setActionPanel(null)
+    setIsAnimating(false)
+  }, [])
+
+  // Memoized section content collector
+  const getSectionContent = useCallback((section: ParsedSection): string => {
+    let content = `# ${section.title}\n\n`
+    
+    section.content.forEach(contentItem => {
+      if (contentItem.trim()) {
+        content += contentItem + '\n\n'
+      }
+    })
+    
+    section.children.forEach(childSection => {
+      content += getSectionContent(childSection)
+    })
+    
+    return content
+  }, [])
+
+  // Detail level utilities - memoized
+  const getDetailLevelColor = useCallback((level: number): string => {
+    switch (level) {
+      case 1: return 'text-blue-500'
+      case 2: return 'text-cyan-500'
+      case 3: return 'text-green-500'
+      case 4: return 'text-yellow-500'
+      case 5: return 'text-red-500'
+      default: return 'text-gray-500'
+    }
+  }, [])
+
+  const getDetailLevelEmoji = useCallback((level: number): string => {
+    switch (level) {
+      case 1: return '🟦'
+      case 2: return '🟨'
+      case 3: return '🟩'
+      case 4: return '🟧'
+      case 5: return '🟥'
+      default: return '⚪'
+    }
+  }, [])
+
+  // Optimized transformation handler
+  const handleTransformation = useCallback((type: 'tldr' | 'paraphrase' | 'quiz') => {
+    if (!actionPanel) return
+    
+    console.group(`🔄 Transformation: ${type.toUpperCase()}`)
+    console.log('Original content:', actionPanel.content)
+    console.log('Detail level:', actionPanel.detailLevel)
+    console.log('Element type:', actionPanel.elementType)
+    console.groupEnd()
+    
+    toast({
+      title: `${type.toUpperCase()} Transformation`,
+      description: `Processing ${actionPanel.elementType} content...`,
+    })
+  }, [actionPanel, toast])
+
+  // Optimized hover handler for markdown elements
+  const createHoverHandler = useCallback((elementType: string, color: string) => {
+    return {
+      onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+        if (isAnimating) return
+        
+        const intensity = 0.06
+        const element = e.currentTarget
+        Object.assign(element.style, {
+          backgroundColor: `rgba(${color}, ${intensity})`,
+          borderLeft: `3px solid rgba(${color}, ${intensity * 4})`,
+          borderRadius: '6px',
+          padding: '8px 12px',
+          margin: '4px -12px',
+          transition: 'all 0.15s ease-in-out'
+        })
+      },
+      onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+        const element = e.currentTarget
         Object.assign(element.style, {
           backgroundColor: '',
           borderLeft: '',
           borderRadius: '',
           padding: '',
           margin: '',
-          boxShadow: '',
-          transform: '',
-          transition: 'all 0.5s ease-in-out'
+          transition: 'all 0.15s ease-in-out'
         })
         
-        // Usuń transition po animacji
         setTimeout(() => {
           if (element.style.transition) {
             element.style.transition = ''
           }
-        }, 200)
-      }
-    })
-  }
-// Funkcja do obsługi kliknięcia na element z hover
-const handleElementClick = (event: React.MouseEvent<HTMLElement>, elementType: string) => {
-  event.preventDefault()
-  event.stopPropagation()
-  
-  const element = event.currentTarget
-  const rect = element.getBoundingClientRect()
-  const scrollTop = window.pageYOffset || document.documentElement.scrollTop
-  const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft
-  
-  // Pobierz zawartość elementu
-  const content = element.textContent || element.innerHTML || 'Brak zawartości'
-  
-  setDebugPanel({
-    isVisible: true,
-    element,
-    content: content.trim(),
-    elementType,
-    position: {
-      x: rect.left + scrollLeft + rect.width / 2,
-      y: rect.top + scrollTop - 10
-    }
-  })
-}
-
-// Funkcja do zamykania debug panelu
-const closeDebugPanel = () => {
-  setDebugPanel(null)
-}
-  // Komponenty do renderowania markdown z hover (ulepszony dla zawartości sekcji)
-// Obsługa klawisza Escape dla debug panelu
-  React.useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && debugPanel) {
-        closeDebugPanel()
+        }, 150)
+      },
+      onClick: (e: React.MouseEvent<HTMLElement>) => {
+        e.stopPropagation()
+        handleElementClick(e, elementType)
       }
     }
-    
-    if (debugPanel) {
-      document.addEventListener('keydown', handleEscape)
-      return () => document.removeEventListener('keydown', handleEscape)
-    }
-  }, [debugPanel])
+  }, [handleElementClick, isAnimating])
 
-  // Komponenty do renderowania markdown z hover (ulepszony dla zawartości sekcji)
-  const createMarkdownComponents = () => ({
-    // Paragrafy z hover - mniej intensywny w sekcjach
-    p: ({ node, children, ...props }: any) => (
-      <p
-        className="mb-4 leading-relaxed text-foreground cursor-pointer section-content-element"
-        onMouseEnter={(e) => {
-          // Sprawdź czy jesteśmy w sekcji z hover
-          const sectionContainer = e.currentTarget.closest('.section-container.section-container-hovered')
-          const intensity = sectionContainer ? 0.04 : 0.08 // Mniejsza intensywność jeśli sekcja ma hover
-          
-          const element = e.currentTarget
-          Object.assign(element.style, {
-            backgroundColor: `rgba(34, 197, 94, ${intensity})`,
-            borderLeft: `3px solid rgba(34, 197, 94, ${intensity * 4})`,
-            borderRadius: '6px',
-            padding: '8px 12px',
-            margin: '4px -12px',
-            transition: 'all 0.15s ease-in-out'
-          })
-        }}
-        onMouseLeave={(e) => {
-          const element = e.currentTarget
-          // Animowane wyjście z hover
-          Object.assign(element.style, {
-            backgroundColor: '',
-            borderLeft: '',
-            borderRadius: '',
-            padding: '',
-            margin: '',
-            transition: 'all 0.15s ease-in-out' // Zachowaj transition przy wyjściu
-          })
-          
-          // Usuń transition po animacji
-          setTimeout(() => {
-            if (element.style.transition) {
-              element.style.transition = ''
-            }
-          }, 150)
-        }}
-        onClick={(e) => handleElementClick(e, 'paragraph')}
-        {...props}
-      >
-        {children}
-      </p>
-    ),
+  // Optimized markdown components
+  const createMarkdownComponents = useMemo(() => ({
+    p: ({ node, children, ...props }: any) => {
+      const elementId = `p-${Math.random().toString(36).substr(2, 9)}`
+      const handlers = createHoverHandler('paragraph', '34, 197, 94')
+      
+      return (
+        <p
+          id={elementId}
+          className="mb-4 leading-relaxed text-foreground cursor-pointer section-content-element relative"
+          {...handlers}
+          {...props}
+        >
+          {children}
+        </p>
+      )
+    },
 
-    // Listy z hover
-    ul: ({ node, children, ...props }: any) => (
-      <ul
-        className="list-disc list-inside space-y-2 mb-4 ml-4 cursor-pointer section-content-element"
-        onMouseEnter={(e) => {
-          const sectionContainer = e.currentTarget.closest('.section-container.section-container-hovered')
-          const intensity = sectionContainer ? 0.04 : 0.08
-          
-          const element = e.currentTarget
-          Object.assign(element.style, {
-            backgroundColor: `rgba(168, 85, 247, ${intensity})`,
-            borderLeft: `3px solid rgba(168, 85, 247, ${intensity * 4})`,
-            borderRadius: '6px',
-            padding: '8px 12px',
-            margin: '4px -12px',
-            transition: 'all 0.15s ease-in-out'
-          })
-        }}
-        onMouseLeave={(e) => {
-          const element = e.currentTarget
-          // Animowane wyjście z hover
-          Object.assign(element.style, {
-            backgroundColor: '',
-            borderLeft: '',
-            borderRadius: '',
-            padding: '',
-            margin: '',
-            transition: 'all 0.15s ease-in-out'
-          })
-          
-          setTimeout(() => {
-            if (element.style.transition) {
-              element.style.transition = ''
-            }
-          }, 150)
-        }}
-        onClick={(e) => handleElementClick(e, 'unordered-list')}
-        {...props}
-      >
-        {children}
-      </ul>
-    ),
+    ul: ({ node, children, ...props }: any) => {
+      const elementId = `ul-${Math.random().toString(36).substr(2, 9)}`
+      const handlers = createHoverHandler('unordered-list', '168, 85, 247')
+      
+      return (
+        <ul
+          id={elementId}
+          className="list-disc list-inside space-y-2 mb-4 ml-4 cursor-pointer section-content-element relative"
+          {...handlers}
+          {...props}
+        >
+          {children}
+        </ul>
+      )
+    },
 
-    ol: ({ node, children, ...props }: any) => (
-      <ol
-        className="list-decimal list-inside space-y-2 mb-4 ml-4 cursor-pointer section-content-element"
-        onMouseEnter={(e) => {
-          const sectionContainer = e.currentTarget.closest('.section-container.section-container-hovered')
-          const intensity = sectionContainer ? 0.04 : 0.08
-          
-          const element = e.currentTarget
-          Object.assign(element.style, {
-            backgroundColor: `rgba(168, 85, 247, ${intensity})`,
-            borderLeft: `3px solid rgba(168, 85, 247, ${intensity * 4})`,
-            borderRadius: '6px',
-            padding: '8px 12px',
-            margin: '4px -12px',
-            transition: 'all 0.15s ease-in-out'
-          })
-        }}
-        onMouseLeave={(e) => {
-          const element = e.currentTarget
-          // Animowane wyjście z hover dla list
-          Object.assign(element.style, {
-            backgroundColor: '',
-            borderLeft: '',
-            borderRadius: '',
-            padding: '',
-            margin: '',
-            transition: 'all 0.15s ease-in-out'
-          })
-          
-          setTimeout(() => {
-            if (element.style.transition) {
-              element.style.transition = ''
-            }
-          }, 150)
-        }}
-        onClick={(e) => handleElementClick(e, 'ordered-list')}
-        {...props}
-      >
-        {children}
-      </ol>
-    ),
+    ol: ({ node, children, ...props }: any) => {
+      const elementId = `ol-${Math.random().toString(36).substr(2, 9)}`
+      const handlers = createHoverHandler('ordered-list', '168, 85, 247')
+      
+      return (
+        <ol
+          id={elementId}
+          className="list-decimal list-inside space-y-2 mb-4 ml-4 cursor-pointer section-content-element relative"
+          {...handlers}
+          {...props}
+        >
+          {children}
+        </ol>
+      )
+    },
 
-    // Tabele z hover
-    table: ({ node, children, ...props }: any) => (
-      <div className="overflow-x-auto mb-6">
-        <table
-          className="min-w-full border-collapse border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer section-content-element"
+    table: ({ node, children, ...props }: any) => {
+      const elementId = `table-${Math.random().toString(36).substr(2, 9)}`
+      
+      return (
+        <div className="overflow-x-auto mb-6">
+          <table
+            id={elementId}
+            className="min-w-full border-collapse border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer section-content-element relative"
+            onMouseEnter={(e) => {
+              if (isAnimating) return
+              const element = e.currentTarget
+              Object.assign(element.style, {
+                backgroundColor: `rgba(249, 115, 22, 0.06)`,
+                border: `2px solid rgba(249, 115, 22, 0.24)`,
+                borderRadius: '8px',
+                padding: '4px',
+                transition: 'all 0.15s ease-in-out'
+              })
+            }}
+            onMouseLeave={(e) => {
+              const element = e.currentTarget
+              Object.assign(element.style, {
+                backgroundColor: '',
+                border: '1px solid rgba(0, 0, 0, 0.1)',
+                borderRadius: '',
+                padding: '',
+                transition: 'all 0.15s ease-in-out'
+              })
+              
+              setTimeout(() => {
+                if (element.style.transition) {
+                  element.style.transition = ''
+                }
+                element.style.border = ''
+              }, 150)
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+              handleElementClick(e, 'table')
+            }}
+            {...props}
+          >
+            {children}
+          </table>
+        </div>
+      )
+    },
+
+    blockquote: ({ node, children, ...props }: any) => {
+      const elementId = `blockquote-${Math.random().toString(36).substr(2, 9)}`
+      
+      return (
+        <blockquote
+          id={elementId}
+          className="border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-900/20 pl-4 py-3 mb-4 italic rounded-r-md cursor-pointer section-content-element relative"
           onMouseEnter={(e) => {
-            const sectionContainer = e.currentTarget.closest('.section-container.section-container-hovered')
-            const intensity = sectionContainer ? 0.04 : 0.08
-            
+            if (isAnimating) return
             const element = e.currentTarget
             Object.assign(element.style, {
-              backgroundColor: `rgba(249, 115, 22, ${intensity})`,
-              border: `2px solid rgba(249, 115, 22, ${intensity * 4})`,
-              borderRadius: '8px',
-              padding: '4px',
+              backgroundColor: `rgba(34, 197, 94, 0.06)`,
+              borderRadius: '6px',
+              transform: 'translateX(2px)',
               transition: 'all 0.15s ease-in-out'
             })
           }}
           onMouseLeave={(e) => {
             const element = e.currentTarget
-            // Animowane wyjście z hover dla tabel
             Object.assign(element.style, {
               backgroundColor: '',
-              border: '1px solid rgba(0, 0, 0, 0.1)', // Przywróć domyślny border
-              borderColor: '',
-              borderRadius: '',
-              padding: '',
+              transform: '',
               transition: 'all 0.15s ease-in-out'
             })
             
@@ -526,54 +620,18 @@ const closeDebugPanel = () => {
               if (element.style.transition) {
                 element.style.transition = ''
               }
-              // Przywróć oryginalne klasy border
-              element.style.border = ''
             }, 150)
           }}
-          onClick={(e) => handleElementClick(e, 'table')}
+          onClick={(e) => {
+            e.stopPropagation()
+            handleElementClick(e, 'blockquote')
+          }}
           {...props}
         >
           {children}
-        </table>
-      </div>
-    ),
-
-    blockquote: ({ node, children, ...props }: any) => (
-      <blockquote
-        className="border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-900/20 pl-4 py-3 mb-4 italic rounded-r-md cursor-pointer section-content-element"
-        onMouseEnter={(e) => {
-          const sectionContainer = e.currentTarget.closest('.section-container.section-container-hovered')
-          const intensity = sectionContainer ? 0.04 : 0.08
-          
-          const element = e.currentTarget
-          Object.assign(element.style, {
-            backgroundColor: `rgba(34, 197, 94, ${intensity})`,
-            borderRadius: '6px',
-            transform: 'translateX(2px)',
-            transition: 'all 0.15s ease-in-out'
-          })
-        }}
-        onMouseLeave={(e) => {
-          const element = e.currentTarget
-          // Animowane wyjście z hover dla blockquote
-          Object.assign(element.style, {
-            backgroundColor: '',
-            transform: '',
-            transition: 'all 0.15s ease-in-out'
-          })
-          
-          setTimeout(() => {
-            if (element.style.transition) {
-              element.style.transition = ''
-            }
-          }, 150)
-        }}
-        onClick={(e) => handleElementClick(e, 'blockquote')}
-        {...props}
-      >
-        {children}
-      </blockquote>
-    ),
+        </blockquote>
+      )
+    },
 
     // Pozostałe elementy bez zmian
     li: ({ node, ...props }: any) => <li className="mb-1 leading-relaxed" {...props} />,
@@ -611,34 +669,16 @@ const closeDebugPanel = () => {
     pre: ({ node, ...props }: any) => <pre className="bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-lg overflow-x-auto mb-6" {...props} />,
     a: ({ node, ...props }: any) => <a className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />,
     
-    // Wyłącz nagłówki bo renderujemy je osobno
     h1: () => null,
     h2: () => null,
     h3: () => null,
     h4: () => null,
     h5: () => null,
     h6: () => null,
-  })
-// Funkcja do zbierania całej zawartości sekcji (rekurencyjnie)
-const getSectionContent = (section: ParsedSection): string => {
-  let content = `# ${section.title}\n\n`
-  
-  // Dodaj zawartość sekcji
-  section.content.forEach(contentItem => {
-    if (contentItem.trim()) {
-      content += contentItem + '\n\n'
-    }
-  })
-  
-  // Dodaj zawartość podsekcji (rekurencyjnie)
-  section.children.forEach(childSection => {
-    content += getSectionContent(childSection)
-  })
-  
-  return content
-}
-  // Komponent do renderowania hierarchicznej sekcji
-  const renderSection = (section: ParsedSection, depth: number = 0) => {
+  }), [createHoverHandler, handleElementClick, isAnimating])
+
+  // Optimized renderSection
+  const renderSection = useCallback((section: ParsedSection, depth: number = 0) => {
     const isCollapsed = collapsedSections.has(section.id)
     const HeadingTag = `h${Math.min(section.level, 6)}` as keyof JSX.IntrinsicElements
     
@@ -654,7 +694,6 @@ const getSectionContent = (section: ParsedSection): string => {
       }
     }
 
-    // Tylko podsekcje (h3+) mają hover effect
     const shouldHaveHover = section.level > 2
 
     return (
@@ -667,69 +706,57 @@ const getSectionContent = (section: ParsedSection): string => {
           onMouseLeave: clearSectionHoverStyles
         })}
       >
-<HeadingTag
-  className={`${getHeadingClasses(section.level)} text-foreground group flex items-center gap-3 select-none cursor-pointer relative z-10 section-heading`}
-  data-section-id={section.id}
-  onClick={(e) => {
-    // Sprawdź czy kliknięto w przycisk strzałki
-    const target = e.target as HTMLElement
-    if (target.closest('.toggle-button')) {
-      return // Nie rób nic, button handler się zajmie
-    } else {
-      // Kliknięto w obszar tytułu - wyślij całą sekcję do debug panelu
-      e.preventDefault()
-      e.stopPropagation()
-      
-      // Zbierz całą zawartość sekcji (tytuł + content + dzieci)
-      const sectionContent = getSectionContent(section)
-      
-      const rect = e.currentTarget.getBoundingClientRect()
-      const scrollTop = window.pageYOffset || document.documentElement.scrollTop
-      const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft
-      
-      setDebugPanel({
-        isVisible: true,
-        element: e.currentTarget,
-        content: sectionContent.trim(),
-        elementType: `complete-section-${section.level}`,
-        position: {
-          x: rect.left + scrollLeft + rect.width / 2,
-          y: rect.top + scrollTop - 10
-        }
-      })
-    }
-  }}
->
-  {/* Przycisk strzałki - teraz z klasą toggle-button */}
-  <button 
-    className="toggle-button flex-shrink-0 p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
-    onClick={(e) => {
-      e.stopPropagation() // Zapobiegaj propagacji do parent
-      toggleSection(section.id)
-    }}
-  >
-    {isCollapsed ? (
-      <ChevronRight className="h-4 w-4 text-blue-500 opacity-70 hover:opacity-100 transition-opacity" />
-    ) : (
-      <ChevronDown className="h-4 w-4 text-blue-500 opacity-70 hover:opacity-100 transition-opacity" />
-    )}
-  </button>
-  
-  {/* Tytuł sekcji */}
-  <span className="flex-1">{section.title}</span>
-</HeadingTag>
+        <HeadingTag
+          className={`${getHeadingClasses(section.level)} text-foreground group flex items-center gap-3 select-none cursor-pointer relative z-10 section-heading`}
+          data-section-id={section.id}
+          onClick={(e) => {
+            const target = e.target as HTMLElement
+            if (target.closest('.toggle-button')) {
+              return
+            } else {
+              e.preventDefault()
+              e.stopPropagation()
+              
+              const sectionContent = getSectionContent(section)
+              
+              console.group(`🎯 Section Clicked: ${section.title}`)
+              console.log('Full section content:', sectionContent.trim())
+              console.log('Section level:', section.level)
+              console.log('Has children:', section.children.length > 0)
+              console.groupEnd()
+              
+              if (!isAnimating) {
+                handleElementClick(e, `complete-section-${section.level}`)
+              }
+            }
+          }}
+        >
+          <button 
+            className="toggle-button flex-shrink-0 p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleSection(section.id)
+            }}
+          >
+            {isCollapsed ? (
+              <ChevronRight className="h-4 w-4 text-blue-500 opacity-70 hover:opacity-100 transition-opacity" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-blue-500 opacity-70 hover:opacity-100 transition-opacity" />
+            )}
+          </button>
+          
+          <span className="flex-1">{section.title}</span>
+        </HeadingTag>
 
-        {/* Zawartość sekcji */}
         {!isCollapsed && (
           <div className="section-content space-y-4 relative">
-            {/* Renderuj zawartość markdown */}
             {section.content.map((content, index) => (
               content.trim() && (
                 <div key={index} className="section-content-item">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkMath]}
                     rehypePlugins={[rehypeKatex]}
-                    components={createMarkdownComponents()}
+                    components={createMarkdownComponents}
                   >
                     {content}
                   </ReactMarkdown>
@@ -737,7 +764,6 @@ const getSectionContent = (section: ParsedSection): string => {
               )
             ))}
 
-            {/* Renderuj podsekcje */}
             {section.children.length > 0 && (
               <div className="subsections-container">
                 {section.children.map(childSection => 
@@ -749,7 +775,7 @@ const getSectionContent = (section: ParsedSection): string => {
         )}
       </div>
     )
-  }
+  }, [collapsedSections, handleSectionHover, clearSectionHoverStyles, getSectionContent, handleElementClick, toggleSection, createMarkdownComponents, isAnimating])
 
   if (!output) {
     return (
@@ -819,77 +845,127 @@ const getSectionContent = (section: ParsedSection): string => {
         </ScrollArea>
       </div>
 
-      {/* Debug Panel Popup */}
-      {debugPanel && (
+      {/* AI Action Panel - Only shown after animations complete */}
+      {actionPanel && !isAnimating && (
         <>
-          {/* Overlay */}
           <div 
             className="fixed inset-0 bg-black/20 z-[9998]"
-            onClick={closeDebugPanel}
+            onClick={closeActionPanel}
           />
           
-          {/* Debug Panel */}
           <div
-            className="fixed z-[9999] bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl p-4 max-w-md w-80"
+            className="fixed z-[9999] bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl shadow-2xl p-6 max-w-sm w-96"
             style={{
-              left: `${Math.min(debugPanel.position.x - 160, window.innerWidth - 320)}px`,
-              top: `${Math.max(debugPanel.position.y - 200, 10)}px`,
+              left: `${Math.max(10, Math.min(actionPanel.position.x - 192, window.innerWidth - 400))}px`,
+              top: `${Math.max(10, Math.min(actionPanel.position.y - 50, window.innerHeight - 400))}px`,
             }}
           >
             {/* Header */}
-            <div className="flex items-start justify-between mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  Debug Panel
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Element: {debugPanel.elementType}
-                </p>
+            <div className="flex items-start justify-between mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                  <Sparkles className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    AI Actions
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {actionPanel.elementType.replace('-', ' ')}
+                  </p>
+                </div>
               </div>
               <button
-                onClick={closeDebugPanel}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
+                onClick={closeActionPanel}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
-                <span className="sr-only">Zamknij</span>
-                ✕
+                <X className="h-4 w-4" />
               </button>
             </div>
             
-            {/* Content */}
-            <div className="space-y-3">
-              <div>
-                <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Zawartość:
-                </h4>
-                <div className="bg-gray-50 dark:bg-gray-800 p-2 rounded text-xs text-gray-800 dark:text-gray-200 max-h-32 overflow-y-auto">
-                  {debugPanel.content}
+            {/* Detail Level Slider */}
+            <div className="mb-5">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                  <Sliders className="h-3 w-3" />
+                  Detail Level
+                </span>
+                <span className={`text-xs font-medium ${getDetailLevelColor(actionPanel.detailLevel)}`}>
+                  {getDetailLevelEmoji(actionPanel.detailLevel)} {actionPanel.detailLevel}
+                </span>
+              </div>
+              <Slider
+                value={[actionPanel.detailLevel]}
+                onValueChange={(value) => setActionPanel({...actionPanel, detailLevel: value[0]})}
+                max={5}
+                min={1}
+                step={1}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>🟦 Brief</span>
+                <span>🟩 Balanced</span>
+                <span>🟥 Detailed</span>
+              </div>
+            </div>
+
+            {/* Transformations */}
+            <div className="mb-5">
+              <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-1">
+                <RotateCcw className="h-3 w-3" />
+                Transformations
+              </h4>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => handleTransformation('tldr')}
+                  className="flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-xs"
+                >
+                  <Zap className="h-4 w-4 text-yellow-500" />
+                  <span>TLDR</span>
+                </button>
+                <button
+                  onClick={() => handleTransformation('paraphrase')}
+                  className="flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-xs"
+                >
+                  <Type className="h-4 w-4 text-blue-500" />
+                  <span>Rephrase</span>
+                </button>
+                <button
+                  onClick={() => handleTransformation('quiz')}
+                  className="flex flex-col items-center gap-1 p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-xs"
+                >
+                  <HelpCircle className="h-4 w-4 text-green-500" />
+                  <span>Quiz</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Smart Suggestion */}
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-700 mb-4">
+              <div className="flex items-start gap-2">
+                <Lightbulb className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h5 className="text-xs font-medium text-gray-800 dark:text-gray-200 mb-1">
+                    Smart Suggestion
+                  </h5>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                    {getSmartSuggestion(actionPanel.elementType, actionPanel.content)}
+                  </p>
                 </div>
               </div>
-              
-              <div>
-                <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Informacje techniczne:
-                </h4>
-                <div className="bg-gray-50 dark:bg-gray-800 p-2 rounded text-xs text-gray-600 dark:text-gray-400">
-                  <div>Typ: {debugPanel.elementType}</div>
-                  <div>Długość: {debugPanel.content.length} znaków</div>
-                  <div>Pozycja: x:{Math.round(debugPanel.position.x)}, y:{Math.round(debugPanel.position.y)}</div>
-                </div>
+            </div>
+
+            {/* Content Preview */}
+            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+              <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Content Preview
+              </h4>
+              <div className="bg-gray-50 dark:bg-gray-800 p-2 rounded text-xs text-gray-800 dark:text-gray-200 max-h-20 overflow-y-auto">
+                {actionPanel.content.length > 100 
+                  ? `${actionPanel.content.substring(0, 100)}...`
+                  : actionPanel.content
+                }
               </div>
-              
-              {/* Przycisk kopiowania */}
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(debugPanel.content)
-                  toast({
-                    title: "Skopiowano!",
-                    description: "Zawartość elementu została skopiowana do schowka"
-                  })
-                }}
-                className="w-full bg-blue-500 hover:bg-blue-600 text-white text-xs py-2 px-3 rounded transition-colors"
-              >
-                Kopiuj zawartość
-              </button>
             </div>
           </div>
         </>
