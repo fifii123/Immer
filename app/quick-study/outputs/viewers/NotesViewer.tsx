@@ -1,7 +1,7 @@
 // app/quick-study/outputs/viewers/NotesViewer.tsx - WITH EDIT MODAL
 "use client" 
 
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { 
   PenTool, Copy, Download, FileText, List, Table, ChevronDown, ChevronRight
 } from "lucide-react"
@@ -250,11 +250,6 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
   const HeadingTag = `h${Math.min(section.level, 6)}` as keyof JSX.IntrinsicElements
   const headingId = `heading-${section.id}`
   
-  // Make openEditModal available for hoverHandlers
-  React.useEffect(() => {
-    (window as any).currentOpenEditModalForHover = openEditModal
-  }, [openEditModal])
-  
   const getHeadingClasses = (level: number) => {
     switch (level) {
       case 1: return "text-3xl font-bold border-b-2 border-gray-200 dark:border-gray-700 pb-3"
@@ -326,28 +321,19 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
               y: e.clientY
             }, visualPreview)
           }}
-onMouseEnter={(e) => {
-
-
-  // Zapowiedź transformacji: GPU layer
-  e.currentTarget.style.willChange = 'transform'
-
-  // Ewentualnie lokalny efekt bez zmiany layoutu
-  e.currentTarget.style.transform = 'translateZ(0)' // lub scale(1.02), jeśli robisz animacje
-
-  hoverHandlers.applySectionHoverStyles(e, section.id, section.level)
-}}
-
-onMouseLeave={(e) => {
-
-
-  // Natychmiastowa czystość bez opóźnienia
-  e.currentTarget.style.transform = 'translateZ(0)'
-  e.currentTarget.style.willChange = 'auto'
-
-  hoverHandlers.clearSectionHoverStyles(e)
-}}
-
+          onMouseEnter={(e) => {
+            // Zapowiedź transformacji: GPU layer
+            e.currentTarget.style.willChange = 'transform'
+            // Ewentualnie lokalny efekt bez zmiany layoutu
+            e.currentTarget.style.transform = 'translateZ(0)' // lub scale(1.02), jeśli robisz animacje
+            hoverHandlers.applySectionHoverStyles(e, section.id, section.level)
+          }}
+          onMouseLeave={(e) => {
+            // Natychmiastowa czystość bez opóźnienia
+            e.currentTarget.style.transform = 'translateZ(0)'
+            e.currentTarget.style.willChange = 'auto'
+            hoverHandlers.clearSectionHoverStyles(e)
+          }}
         >
           {section.title}
         </HeadingTag>
@@ -406,43 +392,51 @@ onMouseLeave={(e) => {
 
   return (
     <EditModalProvider>
-      {(openEditModal) => (
-        <div className="h-full flex flex-col bg-background">
-          {/* Header (UNCHANGED) */}
-          <header className="flex-shrink-0 p-4 border-b border-border bg-muted/30">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  {noteTypeInfo.icon}
-                  <span className="text-sm font-medium">
-                    {"Tip: Click to edit"}
+      {(openEditModal) => {
+        // Move the useEffect here - at the top level of the render function
+        // Make openEditModal available for hoverHandlers
+        React.useEffect(() => {
+          (window as any).currentOpenEditModalForHover = openEditModal
+        }, [openEditModal])
+
+        return (
+          <div className="h-full flex flex-col bg-background">
+            {/* Header (UNCHANGED) */}
+            <header className="flex-shrink-0 p-4 border-b border-border bg-muted/30">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    {noteTypeInfo.icon}
+                    <span className="text-sm font-medium">
+                      {"Tip: Click to edit"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-center mt-4 mb-4">
+                <Badge className={`${noteTypeInfo.color} px-3 py-1 text-sm font-medium`}>
+                  <span className="flex items-center gap-1">
+                    {noteTypeInfo.icon}
+                    {noteTypeInfo.title}
                   </span>
-                </div>
+                </Badge>
               </div>
-            </div>
+            </header>
 
-            <div className="flex justify-center mt-4 mb-4">
-              <Badge className={`${noteTypeInfo.color} px-3 py-1 text-sm font-medium`}>
-                <span className="flex items-center gap-1">
-                  {noteTypeInfo.icon}
-                  {noteTypeInfo.title}
-                </span>
-              </Badge>
-            </div>
-          </header>
-
-          {/* Content with Hierarchical Sections */}
-          <div className="flex-1 w-full flex justify-center">
-            <ScrollArea className="h-full w-full max-w-6xl" style={{ overflow: 'auto' }}>
-              <div className="p-6 rounded-xl bg-muted/50 w-full" style={{ overflow: 'visible', minWidth: 'fit-content' }}>
-                <div className="space-y-6 w-full" style={{ overflow: 'visible' }}>
-                  {parsedSections.map(section => renderSection(section, openEditModal))}
+            {/* Content with Hierarchical Sections */}
+            <div className="flex-1 w-full flex justify-center">
+              <ScrollArea className="h-full w-full max-w-6xl" style={{ overflow: 'auto' }}>
+                <div className="p-6 rounded-xl bg-muted/50 w-full" style={{ overflow: 'visible', minWidth: 'fit-content' }}>
+                  <div className="space-y-6 w-full" style={{ overflow: 'visible' }}>
+                    {parsedSections.map(section => renderSection(section, openEditModal))}
+                  </div>
                 </div>
-              </div>
-            </ScrollArea>
+              </ScrollArea>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }}
     </EditModalProvider>
   )
 }
