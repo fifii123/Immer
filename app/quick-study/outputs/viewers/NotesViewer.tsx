@@ -327,7 +327,7 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
             }, visualPreview)
           }}
 onMouseEnter={(e) => {
-  console.log("jack")
+
 
   // Zapowiedź transformacji: GPU layer
   e.currentTarget.style.willChange = 'transform'
@@ -339,7 +339,7 @@ onMouseEnter={(e) => {
 }}
 
 onMouseLeave={(e) => {
-  console.log("off")
+
 
   // Natychmiastowa czystość bez opóźnienia
   e.currentTarget.style.transform = 'translateZ(0)'

@@ -22,36 +22,13 @@ export function EditModalOverlay({
   const previewRef = useRef<HTMLDivElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
 
-  // Smart scroll to center element if needed
+  // Simple animation trigger - scrolling is handled by EditModalProvider
   useEffect(() => {
-    if (editModal.isOpen && editModal.sourceElement) {
-      const rect = editModal.sourceElement.getBoundingClientRect()
-      const viewportHeight = window.innerHeight
-      const viewportWidth = window.innerWidth
-      
-      // Check if element needs centering
-      const elementCenter = rect.top + rect.height / 2
-      const viewportCenter = viewportHeight / 2
-      
-      // If element is not well-centered, scroll to center it
-      if (Math.abs(elementCenter - viewportCenter) > viewportHeight * 0.1) {
-        const scrollTarget = window.scrollY + elementCenter - viewportCenter
-        
-        window.scrollTo({
-          top: Math.max(0, scrollTarget),
-          behavior: 'smooth'
-        })
-        
-        // Wait for scroll to complete before starting animation
-        setTimeout(() => {
-          setIsAnimating(false)
-        }, 300)
-      } else {
-        // Element is already well-positioned, start animation immediately
-        setTimeout(() => {
-          setIsAnimating(false)
-        }, 100)
-      }
+    if (editModal.isOpen) {
+      // Start animation immediately since scrolling is handled externally
+      setTimeout(() => {
+        setIsAnimating(false)
+      }, 100)
     }
   }, [editModal.isOpen])
 
@@ -65,15 +42,6 @@ export function EditModalOverlay({
     }
   }, [viewMode, isAnimating])
 
-  // Auto-resize textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      const textarea = textareaRef.current
-      textarea.style.height = 'auto'
-      textarea.style.height = Math.max(120, Math.min(300, textarea.scrollHeight)) + 'px'
-    }
-  }, [editModal.content])
-
   // Update visual preview when switching to visual mode
   useEffect(() => {
     if (viewMode === 'visual' && previewRef.current && editModal.visualPreview) {
@@ -82,6 +50,18 @@ export function EditModalOverlay({
       previewRef.current.appendChild(clonedElement)
     }
   }, [viewMode, editModal.visualPreview])
+
+  // Calculate maximum modal height based on viewport (more compact)
+  const getMaxModalHeight = () => {
+    const viewportHeight = window.innerHeight
+    const headerHeight = 60 // Height of the header
+    const footerHeight = 60 // Height of the footer
+    const padding = 80 // More padding for compact feel
+    
+    // Max 400px or 60% of viewport, whichever is smaller
+    const calculatedHeight = viewportHeight - headerHeight - footerHeight - padding
+    return Math.min(400, calculatedHeight, viewportHeight * 0.6)
+  }
 
   // Calculate positioning for the illusion effect
   const getPositioning = () => {
@@ -92,11 +72,13 @@ export function EditModalOverlay({
         top: '50%',
         transform: 'translate(-50%, -50%)',
         width: 'auto',
-        maxWidth: '800px'
+        maxWidth: '800px',
+        maxHeight: getMaxModalHeight()
       }
     }
 
     const rect = editModal.sourceElement.getBoundingClientRect()
+    const maxHeight = getMaxModalHeight()
     
     // Account for content area padding (16px) and border (1px) = 17px total
     const offset = 17
@@ -107,6 +89,7 @@ export function EditModalOverlay({
       top: rect.top - offset,
       width: rect.width,
       minWidth: Math.max(rect.width, 400), // Ensure minimum usable width
+      maxHeight: maxHeight,
       transform: isAnimating 
         ? 'scale(1)' 
         : 'scale(1.05)', // Subtle pop-out effect
@@ -117,6 +100,7 @@ export function EditModalOverlay({
   }
 
   const modalStyle = getPositioning()
+  const maxContentHeight = modalStyle.maxHeight ? modalStyle.maxHeight : 400
 
   const getElementTypeInfo = (elementType: string) => {
     if (elementType.startsWith('complete-section')) {
@@ -214,14 +198,23 @@ export function EditModalOverlay({
           </div>
         </div>
 
-        {/* Content Area - This is the clone positioned exactly at source element */}
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700">
-          {viewMode === 'visual' && hasVisualPreview ? (
-            <div>
-              {/* Visual Preview Container - matches original element styling with padding */}
+        {/* Content Area - This is the clone positioned exactly at source element with scroll */}
+        <div 
+          className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col"
+          style={{
+            maxHeight: `${maxContentHeight}px`,
+            height: 'auto'
+          }}
+        >
+          <div 
+            className="overflow-y-auto flex-1"
+            style={{ maxHeight: `${maxContentHeight}px` }}
+          >
+            {viewMode === 'visual' && hasVisualPreview ? (
+              /* Visual Preview Container - matches original element styling with padding */
               <div 
                 ref={previewRef}
-                className="min-h-[100px] overflow-visible p-4"
+                className="min-h-[100px] p-4"
                 style={{ 
                   fontFamily: 'inherit',
                   fontSize: 'inherit',
@@ -229,52 +222,42 @@ export function EditModalOverlay({
                   color: 'inherit'
                 }}
               />
-            </div>
-          ) : (
-            <div className="space-y-3 p-4">
-              <div className="text-xs text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-950/30 p-3 rounded-lg border border-green-200 dark:border-green-800">
-                <div className="flex items-center gap-2">
-                  <Edit className="h-3 w-3" />
-                  <span className="font-medium">Edit Mode</span>
-                </div>
-                <p className="mt-1 text-xs text-green-600 dark:text-green-400">
-                  Make your changes below. {hasVisualPreview ? 'Switch to Preview to see how it looks.' : ''}
-                </p>
-              </div>
-              
-              <div className="relative">
+            ) : (
+              /* Edit Mode - same container dimensions as preview */
+              <div className="p-4">
                 <textarea
                   ref={textareaRef}
                   value={editModal.content}
                   onChange={(e) => onContentChange(e.target.value)}
-                  className="w-full min-h-[150px] max-h-[300px] p-3 border border-gray-300 dark:border-gray-600 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 overflow-y-auto font-mono text-sm"
+                  className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm"
                   placeholder="Enter your content here..."
+                  style={{
+                    height: '100%',
+                    minHeight: '100px'
+                  }}
                 />
-                <div className="absolute bottom-2 right-2 text-xs text-gray-400 bg-white dark:bg-gray-800 px-2 py-1 rounded">
-                  {editModal.content.length} chars
-                </div>
               </div>
+            )}
+          </div>
 
-              {/* AI Enhancements - only show in edit mode */}
-              <div className="mt-3 p-3 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                <div className="flex items-center gap-2 mb-2">
-                  <Wand2 className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                  <span className="text-xs font-medium text-blue-900 dark:text-blue-100">AI Enhancements</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" className="text-xs h-6 flex items-center gap-1">
-                    <Sparkles className="h-3 w-3" />Improve
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs h-6 flex items-center gap-1">
-                    <Type className="h-3 w-3" />Simplify
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs h-6 flex items-center gap-1">
-                    <Edit3 className="h-3 w-3" />Expand
-                  </Button>
-                </div>
-              </div>
+          {/* AI Enhancements - shown in both modes at the bottom */}
+          <div className="border-t border-gray-200 dark:border-gray-700 p-3 bg-gradient-to-r from-blue-50/50 to-purple-50/50 dark:from-blue-950/20 dark:to-purple-950/20">
+            <div className="flex items-center gap-2 mb-2">
+              <Wand2 className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+              <span className="text-xs font-medium text-blue-900 dark:text-blue-100">AI Enhancements</span>
             </div>
-          )}
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" className="text-xs h-6 flex items-center gap-1">
+                <Sparkles className="h-3 w-3" />Improve
+              </Button>
+              <Button variant="outline" size="sm" className="text-xs h-6 flex items-center gap-1">
+                <Type className="h-3 w-3" />Simplify
+              </Button>
+              <Button variant="outline" size="sm" className="text-xs h-6 flex items-center gap-1">
+                <Edit3 className="h-3 w-3" />Expand
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Footer - positioned absolutely below the clone */}
