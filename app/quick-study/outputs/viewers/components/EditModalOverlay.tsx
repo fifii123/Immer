@@ -1,8 +1,17 @@
 // app/quick-study/outputs/viewers/components/EditModalOverlay.tsx
-import React, { useEffect, useRef, useState } from 'react'
-import { X, Save, RotateCcw, Type, Wand2, Edit3, Sparkles, FileText, Clock, Eye, Edit } from 'lucide-react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
+import { X, Save, RotateCcw, Type, Wand2, Edit3, Sparkles, FileText, Clock, Eye, Edit, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EditModalState } from '../hooks/useEditModal'
+import { useAIOperations, AIOperationType } from '../hooks/useAIOperations'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeRaw from 'rehype-raw'
+import rehypeSanitize from 'rehype-sanitize'
+import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 
 interface EditModalOverlayProps {
   editModal: EditModalState
@@ -11,16 +20,20 @@ interface EditModalOverlayProps {
   onSave: () => void
   onReset: () => void
   hasChanges: boolean
+  sessionId?: string
 }
 
 export function EditModalOverlay({
-  editModal, onClose, onContentChange, onSave, onReset, hasChanges
+  editModal, onClose, onContentChange, onSave, onReset, hasChanges, sessionId
 }: EditModalOverlayProps) {
   const [isAnimating, setIsAnimating] = useState(true)
-  const [viewMode, setViewMode] = useState<'visual' | 'edit'>('visual')
+  const [viewMode, setViewMode] = useState<'visual' | 'edit' | 'ai-processing'>('visual')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
+  
+  // AI Operations hook
+  const { operationState, processContent, resetOperation } = useAIOperations()
 
   // Simple animation trigger - scrolling is handled by EditModalProvider
   useEffect(() => {
@@ -50,6 +63,26 @@ export function EditModalOverlay({
       previewRef.current.appendChild(clonedElement)
     }
   }, [viewMode, editModal.visualPreview])
+
+const handleAIOperation = useCallback(async (operation: AIOperationType) => {
+  if (!editModal?.content || !sessionId) {
+    console.warn('Missing content or sessionId for AI operation')
+    return
+  }
+
+  try {
+    // Clear the visual preview before starting AI processing
+    if (previewRef.current) {
+      previewRef.current.innerHTML = ''
+    }
+    
+    setViewMode('ai-processing')
+    await processContent(sessionId, operation, editModal.content)
+  } catch (error) {
+    console.error('AI operation failed:', error)
+    setViewMode('visual')
+  }
+}, [editModal, sessionId, processContent])
 
   // Calculate maximum modal height based on viewport (more compact)
   const getMaxModalHeight = () => {
@@ -174,8 +207,12 @@ export function EditModalOverlay({
                 <Button
                   variant={viewMode === 'visual' ? 'default' : 'ghost'}
                   size="sm"
-                  onClick={() => setViewMode('visual')}
+                  onClick={() => {
+                    setViewMode('visual')
+                    resetOperation()
+                  }}
                   className="h-7 text-xs flex items-center gap-1.5"
+                  disabled={operationState.isProcessing}
                 >
                   <Eye className="h-3 w-3" />
                   Preview
@@ -183,8 +220,12 @@ export function EditModalOverlay({
                 <Button
                   variant={viewMode === 'edit' ? 'default' : 'ghost'}
                   size="sm"
-                  onClick={() => setViewMode('edit')}
+                  onClick={() => {
+                    setViewMode('edit')
+                    resetOperation()
+                  }}
                   className="h-7 text-xs flex items-center gap-1.5"
+                  disabled={operationState.isProcessing}
                 >
                   <Edit className="h-3 w-3" />
                   Edit
@@ -208,9 +249,103 @@ export function EditModalOverlay({
         >
           <div 
             className="overflow-y-auto flex-1"
-            style={{ maxHeight: `${maxContentHeight}px` }}
+            style={{ 
+              maxHeight: viewMode === 'ai-processing' ? 'calc(100vh - 200px)' : `${maxContentHeight}px`
+            }}
           >
-            {viewMode === 'visual' && hasVisualPreview ? (
+            {viewMode === 'ai-processing' ? (
+              /* AI Processing Area - streaming markdown */
+              <div className="min-h-[100px] p-4">
+                <div className={`${operationState.isProcessing ? 'streaming-message' : ''}`}>
+                  <div className="markdown-content text-sm">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[
+                        rehypeRaw,
+                        rehypeSanitize,
+                        rehypeHighlight,
+                        [rehypeKatex, {
+                          strict: false,
+                          trust: true,
+                          fleqn: false,
+                          throwOnError: false,
+                          errorColor: '#cc0000',
+                          macros: {
+                            "\\f": "#1f(#2)"
+                          }
+                        }]
+                      ]}
+                      components={{
+                        h2: ({node, ...props}) => <h2 className="text-lg font-semibold text-blue-600 dark:text-blue-400 mt-4 mb-2" {...props} />,
+                        h3: ({node, ...props}) => <h3 className="text-md font-semibold text-blue-500 dark:text-blue-300 mt-3 mb-2" {...props} />,
+                        ul: ({node, ...props}) => <ul className="list-disc pl-5 my-2" {...props} />,
+                        ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-2" {...props} />,
+                        li: ({node, ...props}) => <li className="my-1" {...props} />,
+                        blockquote: ({node, ...props}) => (
+                          <blockquote className="border-l-4 border-blue-500 pl-4 py-2 my-4 bg-blue-50/50 dark:bg-blue-950/20 italic text-muted-foreground" {...props} />
+                        ),
+                        strong: ({node, ...props}) => <strong className="font-semibold text-blue-600 dark:text-blue-400" {...props} />,
+                        code: ({node, inline, ...props}) => {
+                          if (inline) {
+                            return <code className="bg-muted px-2 py-1 rounded text-sm font-mono text-foreground" {...props} />
+                          }
+                          return <code className="block bg-muted p-4 rounded-lg text-sm font-mono overflow-x-auto" {...props} />
+                        }
+                      }}
+                    >
+                      {operationState.content}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+
+                {/* Wskaźnik streamingu */}
+                {operationState.isProcessing && (
+                  <div className="flex items-center gap-2 mt-4 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Generowanie odpowiedzi...</span>
+                  </div>
+                )}
+
+                {/* Przyciski akcji dla AI - gdy zakończone */}
+                {!operationState.isProcessing && operationState.content && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                    <div className="flex gap-2 justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setViewMode('visual')
+                          resetOperation()
+                        }}
+                        className="text-xs h-7"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          onContentChange(operationState.content)
+                          setViewMode('edit')
+                          resetOperation()
+                        }}
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-7"
+                      >
+                        Use This Content
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Komunikat o błędzie */}
+                {operationState.error && (
+                  <div className="mt-4 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded">
+                    <p className="text-sm text-red-600 dark:text-red-400">
+                      Error: {operationState.error}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : viewMode === 'visual' && hasVisualPreview ? (
               /* Visual Preview Container - matches original element styling with padding */
               <div 
                 ref={previewRef}
@@ -240,24 +375,44 @@ export function EditModalOverlay({
             )}
           </div>
 
-          {/* AI Enhancements - shown in both modes at the bottom */}
-          <div className="border-t border-gray-200 dark:border-gray-700 p-3 bg-gradient-to-r from-blue-50/50 to-purple-50/50 dark:from-blue-950/20 dark:to-purple-950/20">
-            <div className="flex items-center gap-2 mb-2">
-              <Wand2 className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-              <span className="text-xs font-medium text-blue-900 dark:text-blue-100">AI Enhancements</span>
+          {/* AI Enhancements - shown when NOT in ai-processing mode */}
+          {viewMode !== 'ai-processing' && (
+            <div className="border-t border-gray-200 dark:border-gray-700 p-3 bg-gradient-to-r from-blue-50/50 to-purple-50/50 dark:from-blue-950/20 dark:to-purple-950/20">
+              <div className="flex items-center gap-2 mb-2">
+                <Wand2 className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                <span className="text-xs font-medium text-blue-900 dark:text-blue-100">AI Enhancements</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-xs h-6 flex items-center gap-1"
+                  onClick={() => handleAIOperation('improve')}
+                  disabled={!sessionId}
+                >
+                  <Sparkles className="h-3 w-3" />Improve
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-xs h-6 flex items-center gap-1"
+                  onClick={() => handleAIOperation('simplify')}
+                  disabled={!sessionId}
+                >
+                  <Type className="h-3 w-3" />Simplify
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-xs h-6 flex items-center gap-1"
+                  onClick={() => handleAIOperation('expand')}
+                  disabled={!sessionId}
+                >
+                  <Edit3 className="h-3 w-3" />Expand
+                </Button>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" className="text-xs h-6 flex items-center gap-1">
-                <Sparkles className="h-3 w-3" />Improve
-              </Button>
-              <Button variant="outline" size="sm" className="text-xs h-6 flex items-center gap-1">
-                <Type className="h-3 w-3" />Simplify
-              </Button>
-              <Button variant="outline" size="sm" className="text-xs h-6 flex items-center gap-1">
-                <Edit3 className="h-3 w-3" />Expand
-              </Button>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Footer - positioned absolutely below the clone */}

@@ -215,8 +215,14 @@ export default function PlaygroundArea({
       case 'summary':
         return <SummaryViewer output={currentOutput} selectedSource={selectedSource} />
         
-      case 'notes':
-        return <NotesViewer output={currentOutput} selectedSource={selectedSource} />
+case 'notes':
+  return (
+    <NotesViewer 
+      output={currentOutput} 
+      selectedSource={selectedSource}
+      sessionId={sessionId}
+    />
+  )
         
       case 'chat':
         const currentMessages = selectedSource ? sourceConversations[selectedSource.id] || [] : []

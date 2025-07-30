@@ -28,6 +28,7 @@ interface Output {
 interface NotesViewerProps {
   output: Output | null;
   selectedSource: any;
+  sessionId?: string;
 }
 
 interface ParsedSection {
@@ -71,16 +72,44 @@ const getNoteTypeInfo = (noteType?: string) => {
   }
 }
 
-export default function NotesViewer({ output, selectedSource }: NotesViewerProps) {
+export default function NotesViewer({ output, selectedSource, sessionId }: NotesViewerProps) {
   const { toast } = useToast()
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
   const [isAnimating, setIsAnimating] = useState(false)
+  const [localContent, setLocalContent] = useState(output?.content || '')
 
+  // Update lokalnego content gdy output się zmienia
+  useEffect(() => {
+    setLocalContent(output?.content || '')
+  }, [output?.content])
+
+const handleContentSaved = useCallback((element: HTMLElement, newContent: string) => {
+  console.log('📝 SAVING:', newContent.length, 'chars')
+  
+  if (!newContent.trim()) {
+    console.warn('⚠️ Empty content, not saving')
+    return
+  }
+
+  // PROBLEM: Nie można po prostu zastąpić całości fragmentem
+  // setLocalContent(newContent) // ❌ TO NISZCZY CAŁĄ NOTATKĘ
+  
+  // ROZWIĄZANIE: Trzeba znaleźć i podmienić konkretny fragment
+  // Ale to jest skomplikowane w markdown...
+  
+  // TYMCZASOWE ROZWIĄZANIE: Dodaj na koniec zamiast zastępować
+  setLocalContent(prev => prev + '\n\n**EDITED:**\n' + newContent)
+  
+  toast({
+    title: "Changes saved",
+    description: "Content has been updated successfully",
+  })
+}, [toast])
   // Parsowanie markdown - memoized (IMPROVED LOGIC FROM PASTE2)
   const parsedSections = useMemo(() => {
-    if (!output?.content) return []
+    if (!localContent) return []
     
-    const lines = output.content.split('\n')
+    const lines = localContent.split('\n')
     const sections: ParsedSection[] = []
     const stack: ParsedSection[] = []
     let currentContent: string[] = []
@@ -141,7 +170,7 @@ export default function NotesViewer({ output, selectedSource }: NotesViewerProps
     
     flushContent()
     return sections
-  }, [output?.content])
+  }, [localContent])
 
   // Memoized section content collector (UNCHANGED)
   const getSectionContent = useCallback((section: ParsedSection): string => {
@@ -391,7 +420,10 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
   const noteTypeInfo = getNoteTypeInfo(output.noteType)
 
   return (
-    <EditModalProvider>
+    <EditModalProvider 
+      sessionId={sessionId}
+      onContentSaved={handleContentSaved}
+    >
       {(openEditModal) => {
         // Move the useEffect here - at the top level of the render function
         // Make openEditModal available for hoverHandlers

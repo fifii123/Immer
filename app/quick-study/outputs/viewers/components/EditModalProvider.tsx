@@ -4,6 +4,8 @@ import { useEditModal } from '../hooks/useEditModal'
 import { EditModalOverlay } from './EditModalOverlay'
 
 interface EditModalProviderProps {
+  sessionId?: string
+  onContentSaved?: (element: HTMLElement, newContent: string) => void
   children: (openEditModal: (
     content: string,
     elementType: string,
@@ -237,7 +239,7 @@ const scrollToFitModal = (sourceElement: HTMLElement, elementType: string, visua
   })
 }
 
-export function EditModalProvider({ children }: EditModalProviderProps) {
+export function EditModalProvider({ children, sessionId, onContentSaved }: EditModalProviderProps) {
   // Zawsze wywołuj wszystkie hooki w tej samej kolejności
   const editModalHook = useEditModal()
   const [scrolling, setScrolling] = useState(false)
@@ -248,10 +250,20 @@ export function EditModalProvider({ children }: EditModalProviderProps) {
     openEditModal: originalOpenEditModal,
     closeEditModal,
     updateContent,
-    saveChanges,
+    saveChanges: originalSaveChanges,
     hasChanges,
     resetContent
   } = editModalHook
+
+  // JEDYNA ZMIANA: Custom saveChanges handler
+  const saveChanges = useCallback(() => {
+    if (editModal && onContentSaved) {
+      onContentSaved(editModal.sourceElement!, editModal.content)
+    } else {
+      originalSaveChanges()
+    }
+    closeEditModal()
+  }, [editModal, onContentSaved, originalSaveChanges, closeEditModal])
 
   const openEditModalWithAutoScroll = useCallback(async (
     content: string,
@@ -284,6 +296,7 @@ export function EditModalProvider({ children }: EditModalProviderProps) {
           onSave={saveChanges}
           onReset={resetContent}
           hasChanges={hasChanges()}
+          sessionId={sessionId}
         />
       )}
     </>
