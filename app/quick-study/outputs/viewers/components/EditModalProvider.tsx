@@ -154,71 +154,95 @@ const findScrollableContainer = (element: HTMLElement): HTMLElement | null => {
   return null
 }
 
-const scrollToFitModal = (sourceElement: HTMLElement, elementType: string, visualPreview?: HTMLElement): boolean => {
-  const scrollContainer = findScrollableContainer(sourceElement)
-  const currentScrollTop = scrollContainer?.scrollTop || window.pageYOffset || 0
-  
-  const maxScrollTop = scrollContainer ? 
-    scrollContainer.scrollHeight - scrollContainer.clientHeight :
-    document.documentElement.scrollHeight - window.innerHeight
-  
-  const rect = sourceElement.getBoundingClientRect()
-  const { totalModalHeight, headerHeight: modalHeaderHeight } = calculateModalDimensions(sourceElement, elementType, visualPreview)
-  
-  const modalTop = rect.top - modalHeaderHeight
-  const modalBottom = modalTop + totalModalHeight
-  
-  const baseBuffer = 20
-  const modalSizeBuffer = Math.min(totalModalHeight * 0.1, 40)
-  const bottomPageBuffer = rect.bottom > window.innerHeight * 0.8 ? 60 : 0
-  const BUFFER = baseBuffer + modalSizeBuffer + bottomPageBuffer
-  
-  const outsideTop = modalTop < BUFFER
-  const outsideBottom = modalBottom > window.innerHeight - BUFFER
-  
-  if (!outsideTop && !outsideBottom) {
-    return false
-  }
-  
-  let scrollAdjustment = 0
-  
-  if (outsideTop && outsideBottom) {
-    if (totalModalHeight > window.innerHeight * 0.9) {
-      scrollAdjustment = modalTop - BUFFER
-    } else {
-      const viewportCenter = window.innerHeight / 2
-      const modalCenter = modalTop + totalModalHeight / 2
-      scrollAdjustment = modalCenter - viewportCenter
-    }
-  } else if (outsideTop) {
-    scrollAdjustment = modalTop - BUFFER
-  } else if (outsideBottom) {
-    scrollAdjustment = modalBottom - (window.innerHeight - BUFFER)
-  }
-  
-  const newScrollTop = Math.max(0, Math.min(currentScrollTop + scrollAdjustment, maxScrollTop))
-  const actualScrollAdjustment = newScrollTop - currentScrollTop
-  
-  if (Math.abs(actualScrollAdjustment) > 1) {
-    if (scrollContainer) {
-      scrollContainer.scrollTo({
-        top: newScrollTop,
-        behavior: 'smooth'
-      })
-    } else {
-      window.scrollTo({
-        top: newScrollTop,
-        behavior: 'smooth'
-      })
+const scrollToFitModal = (sourceElement: HTMLElement, elementType: string, visualPreview?: HTMLElement): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const scrollContainer = findScrollableContainer(sourceElement)
+    const currentScrollTop = scrollContainer?.scrollTop || window.pageYOffset || 0
+    
+    const maxScrollTop = scrollContainer ? 
+      scrollContainer.scrollHeight - scrollContainer.clientHeight :
+      document.documentElement.scrollHeight - window.innerHeight
+    
+    const rect = sourceElement.getBoundingClientRect()
+    const { totalModalHeight, headerHeight: modalHeaderHeight } = calculateModalDimensions(sourceElement, elementType, visualPreview)
+    
+    const modalTop = rect.top - modalHeaderHeight
+    const modalBottom = modalTop + totalModalHeight
+    
+    const baseBuffer = 20
+    const modalSizeBuffer = Math.min(totalModalHeight * 0.1, 40)
+    const bottomPageBuffer = rect.bottom > window.innerHeight * 0.8 ? 60 : 0
+    const BUFFER = baseBuffer + modalSizeBuffer + bottomPageBuffer
+    
+    const outsideTop = modalTop < BUFFER
+    const outsideBottom = modalBottom > window.innerHeight - BUFFER
+    
+    if (!outsideTop && !outsideBottom) {
+      resolve(false)
+      return
     }
     
-    return true
-  }
-  
-  return false
+    let scrollAdjustment = 0
+    
+    if (outsideTop && outsideBottom) {
+      if (totalModalHeight > window.innerHeight * 0.9) {
+        scrollAdjustment = modalTop - BUFFER
+      } else {
+        const viewportCenter = window.innerHeight / 2
+        const modalCenter = modalTop + totalModalHeight / 2
+        scrollAdjustment = modalCenter - viewportCenter
+      }
+    } else if (outsideTop) {
+      scrollAdjustment = modalTop - BUFFER
+    } else if (outsideBottom) {
+      scrollAdjustment = modalBottom - (window.innerHeight - BUFFER)
+    }
+    
+    const newScrollTop = Math.max(0, Math.min(currentScrollTop + scrollAdjustment, maxScrollTop))
+    const actualScrollAdjustment = newScrollTop - currentScrollTop
+    
+    if (Math.abs(actualScrollAdjustment) > 1) {
+      // Custom fast scroll implementation
+      const startTime = performance.now()
+      const startScrollTop = currentScrollTop
+      const distance = actualScrollAdjustment
+      const duration = 200 // Szybsze scrollowanie - 200ms zamiast domyślnych ~500ms
+      
+      const easeOutQuart = (t: number): number => 1 - Math.pow(1 - t, 4)
+      
+      const animateScroll = (currentTime: number) => {
+        const elapsed = currentTime - startTime
+        const progress = Math.min(elapsed / duration, 1)
+        const easedProgress = easeOutQuart(progress)
+        
+        const currentPos = startScrollTop + (distance * easedProgress)
+        
+        if (scrollContainer) {
+          scrollContainer.scrollTop = currentPos
+        } else {
+          window.scrollTo(0, currentPos)
+        }
+        
+        if (progress < 1) {
+          requestAnimationFrame(animateScroll)
+        } else {
+          resolve(true)
+        }
+      }
+      
+      requestAnimationFrame(animateScroll)
+    } else {
+      resolve(false)
+    }
+  })
 }
 
 export function EditModalProvider({ children }: EditModalProviderProps) {
+  // Zawsze wywołuj wszystkie hooki w tej samej kolejności
+  const editModalHook = useEditModal()
+  const [scrolling, setScrolling] = useState(false)
+  
+  // Destrukturyzacja po wywołaniu hooków
   const {
     editModal,
     openEditModal: originalOpenEditModal,
@@ -227,26 +251,23 @@ export function EditModalProvider({ children }: EditModalProviderProps) {
     saveChanges,
     hasChanges,
     resetContent
-  } = useEditModal()
+  } = editModalHook
 
-  const [scrolling, setScrolling] = useState(false)
-
-  const openEditModalWithAutoScroll = useCallback((
+  const openEditModalWithAutoScroll = useCallback(async (
     content: string,
     elementType: string,
     sourceElement: HTMLElement,
     clickPosition: { x: number; y: number },
     visualPreview?: HTMLElement
   ) => {
-    const needsScroll = scrollToFitModal(sourceElement, elementType, visualPreview)
+    // Sprawdź czy potrzebny scroll - bez delay
+    const needsScroll = await scrollToFitModal(sourceElement, elementType, visualPreview)
     
     if (needsScroll) {
-      setScrolling(true)
-      setTimeout(() => {
-        originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview)
-        setScrolling(false)
-      }, 400)
+      // Scroll już się zakończył, otwórz modal natychmiast
+      originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview)
     } else {
+      // Bez scroll - instant otwarcie
       originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview)
     }
   }, [originalOpenEditModal])
@@ -255,7 +276,7 @@ export function EditModalProvider({ children }: EditModalProviderProps) {
     <>
       {children(openEditModalWithAutoScroll)}
       
-      {editModal && editModal.isOpen && !scrolling && (
+      {editModal && editModal.isOpen && (
         <EditModalOverlay
           editModal={editModal}
           onClose={closeEditModal}
