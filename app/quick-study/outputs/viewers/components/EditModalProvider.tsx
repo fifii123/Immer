@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+// app/quick-study/outputs/viewers/components/EditModalProvider.tsx
+import React, { useState, useCallback } from 'react'
 import { useEditModal } from '../hooks/useEditModal'
 import { EditModalOverlay } from './EditModalOverlay'
 
@@ -13,64 +14,132 @@ interface EditModalProviderProps {
 }
 
 const useAutoScroll = () => {
-  const debugElementsRef = useRef<HTMLElement[]>([])
-
-  const addDebugStyles = () => {
-    const styleId = 'scroll-debug-styles'
-    if (!document.getElementById(styleId)) {
-      const style = document.createElement('style')
-      style.id = styleId
-      style.textContent = `
-        .scroll-debug-element {
-          position: fixed;
-          height: 2px;
-          left: 0;
-          right: 0;
-          z-index: 9999;
-          pointer-events: none;
-        }
-        .scroll-debug-label {
-          position: fixed;
-          left: 10px;
-          background: rgba(0,0,0,0.7);
-          color: white;
-          padding: 2px 5px;
-          font-family: monospace;
-          font-size: 12px;
-          z-index: 9999;
-          pointer-events: none;
-        }
-      `
-      document.head.appendChild(style)
+  const getModalDimensions = () => {
+    return {
+      headerHeight: 60,
+      footerHeight: 60,
+      padding: 17
     }
   }
 
-  const createDebugElement = (position: number, color: string, label: string) => {
-    addDebugStyles()
-
-    const line = document.createElement('div')
-    line.className = 'scroll-debug-element'
-    line.style.top = `${position}px`
-    line.style.backgroundColor = color
-    document.body.appendChild(line)
-
-    const labelEl = document.createElement('div')
-    labelEl.className = 'scroll-debug-label'
-    labelEl.style.top = `${position}px`
-    labelEl.textContent = `${label}: ${position}px`
-    labelEl.style.color = color
-    document.body.appendChild(labelEl)
-
-    debugElementsRef.current.push(line, labelEl)
+  const calculateModalDimensions = (sourceElement: HTMLElement, elementType: string, visualPreview?: HTMLElement) => {
+    const { headerHeight, footerHeight } = getModalDimensions()
+    
+    let fullContentHeight = 0
+    let measurementElement = sourceElement
+    const sourceRect = sourceElement.getBoundingClientRect()
+    
+    if (visualPreview) {
+      fullContentHeight = measureVisualPreviewAccurately(visualPreview, sourceElement)
+    } else {
+      if (elementType.startsWith('complete-section')) {
+        const sectionContainer = sourceElement.closest('.section-container') as HTMLElement
+        if (sectionContainer) {
+          measurementElement = sectionContainer
+          fullContentHeight = sectionContainer.scrollHeight
+        } else {
+          fullContentHeight = sourceElement.scrollHeight
+        }
+      } else {
+        fullContentHeight = Math.max(
+          sourceElement.scrollHeight,
+          sourceElement.offsetHeight,
+          sourceRect.height
+        )
+      }
+    }
+    
+    const contentPadding = 32
+    fullContentHeight += contentPadding
+    
+    const viewportHeight = window.innerHeight
+    const maxModalContentHeight = Math.min(400, viewportHeight - headerHeight - footerHeight - 80, viewportHeight * 0.6)
+    
+    const actualModalContentHeight = Math.min(fullContentHeight, maxModalContentHeight)
+    const totalModalHeight = headerHeight + actualModalContentHeight + footerHeight
+    
+    return { 
+      totalModalHeight, 
+      headerHeight, 
+      actualModalContentHeight,
+      willNeedScroll: fullContentHeight > maxModalContentHeight
+    }
   }
 
-  const clearDebugElements = () => {
-    debugElementsRef.current.forEach(el => el.remove())
-    debugElementsRef.current = []
+  const measureVisualPreviewAccurately = (visualPreview: HTMLElement, sourceElement: HTMLElement): number => {
+    const tempContainer = document.createElement('div')
+    const sourceRect = sourceElement.getBoundingClientRect()
+    
+    let containerWidth = sourceRect.width
+    
+    if (visualPreview.classList.contains('section-container')) {
+      const realContainer = document.querySelector('.section-container')
+      if (realContainer) {
+        containerWidth = realContainer.getBoundingClientRect().width
+      }
+    }
+    
+    tempContainer.style.cssText = `
+      position: absolute;
+      visibility: hidden;
+      left: -9999px;
+      width: ${containerWidth}px;
+      overflow: visible;
+      font-family: inherit;
+      font-size: inherit;
+      line-height: inherit;
+    `
+    
+    const clonedPreview = visualPreview.cloneNode(true) as HTMLElement
+    copyNestedStyles(visualPreview, clonedPreview)
+    
+    tempContainer.appendChild(clonedPreview)
+    document.body.appendChild(tempContainer)
+    
+    tempContainer.offsetHeight
+    
+    const containerHeight = tempContainer.getBoundingClientRect().height
+    const containerScrollHeight = tempContainer.scrollHeight
+    const clonedHeight = clonedPreview.getBoundingClientRect().height
+    const clonedScrollHeight = clonedPreview.scrollHeight
+    
+    const allHeights = [containerHeight, containerScrollHeight, clonedHeight, clonedScrollHeight]
+      .filter(h => h > 0)
+    
+    const finalHeight = Math.max(...allHeights)
+    
+    document.body.removeChild(tempContainer)
+    
+    return finalHeight
+  }
+
+  const copyNestedStyles = (original: HTMLElement, clone: HTMLElement) => {
+    const originalStyle = window.getComputedStyle(original)
+    const cloneEl = clone as HTMLElement
+    
+    const importantStyles = [
+      'font-family', 'font-size', 'font-weight', 'line-height',
+      'padding', 'margin', 'border', 'box-sizing',
+      'display', 'width', 'height', 'max-width', 'max-height'
+    ]
+    
+    importantStyles.forEach(property => {
+      cloneEl.style.setProperty(property, originalStyle.getPropertyValue(property))
+    })
+    
+    const originalChildren = Array.from(original.children) as HTMLElement[]
+    const cloneChildren = Array.from(clone.children) as HTMLElement[]
+    
+    originalChildren.forEach((child, index) => {
+      if (cloneChildren[index]) {
+        copyNestedStyles(child, cloneChildren[index])
+      }
+    })
   }
 
   const findScrollableContainer = (element: HTMLElement): HTMLElement | null => {
     let current = element.parentElement
+    
     while (current && current !== document.body) {
       const style = window.getComputedStyle(current)
       const hasScroll = style.overflowY === 'auto' || style.overflowY === 'scroll' || style.overflowY === 'overlay'
@@ -79,74 +148,78 @@ const useAutoScroll = () => {
       if (hasScroll && isScrollable) {
         return current
       }
+      
       current = current.parentElement
     }
+    
     return null
   }
 
-  const scrollToFitModal = useCallback((sourceElement: HTMLElement, modalElement: HTMLElement) => {
-    clearDebugElements()
-
+  const scrollToFitModal = useCallback((sourceElement: HTMLElement, elementType: string, visualPreview?: HTMLElement) => {
     const scrollContainer = findScrollableContainer(sourceElement)
-    const containerScrollTop = scrollContainer?.scrollTop || 0
-    const windowScrollTop = window.pageYOffset || 0
-    const currentScrollTop = scrollContainer ? containerScrollTop : windowScrollTop
+    const currentScrollTop = scrollContainer?.scrollTop || window.pageYOffset || 0
     
-    const sourceRect = sourceElement.getBoundingClientRect()
-    const modalRect = modalElement.getBoundingClientRect()
-
-    // Oblicz pozycję modala względem dokumentu
-    const modalTop = modalRect.top + window.scrollY
-    const modalBottom = modalTop + modalRect.height
-
-    // Oblicz granice widocznego obszaru
-    const BUFFER = 20
-    const viewportTop = window.scrollY + BUFFER
-    const viewportBottom = window.scrollY + window.innerHeight - BUFFER
-
-    // Debug - pokaż granice
-    createDebugElement(viewportTop, 'red', 'Viewport Top')
-    createDebugElement(viewportBottom, 'blue', 'Viewport Bottom')
-    createDebugElement(modalTop, 'orange', 'Modal Top')
-    createDebugElement(modalBottom, 'green', 'Modal Bottom')
-
-    // Sprawdź, czy modal wymaga scrollowania
-    const needsScroll = modalTop < viewportTop || modalBottom > viewportBottom
+    const maxScrollTop = scrollContainer ? 
+      scrollContainer.scrollHeight - scrollContainer.clientHeight :
+      document.documentElement.scrollHeight - window.innerHeight
     
-    if (!needsScroll) {
+    const rect = sourceElement.getBoundingClientRect()
+    const { totalModalHeight, headerHeight: modalHeaderHeight } = calculateModalDimensions(sourceElement, elementType, visualPreview)
+    
+    const modalTop = rect.top - modalHeaderHeight
+    const modalBottom = modalTop + totalModalHeight
+    
+    const baseBuffer = 20
+    const modalSizeBuffer = Math.min(totalModalHeight * 0.1, 40)
+    const bottomPageBuffer = rect.bottom > window.innerHeight * 0.8 ? 60 : 0
+    const BUFFER = baseBuffer + modalSizeBuffer + bottomPageBuffer
+    
+    const outsideTop = modalTop < BUFFER
+    const outsideBottom = modalBottom > window.innerHeight - BUFFER
+    
+    if (!outsideTop && !outsideBottom) {
       return false
     }
-
-    // Oblicz potrzebną korektę scrolla
+    
     let scrollAdjustment = 0
-    if (modalTop < viewportTop) {
-      // Modal jest powyżej widocznego obszaru - scroll w górę
-      scrollAdjustment = modalTop - viewportTop - BUFFER
-    } else if (modalBottom > viewportBottom) {
-      // Modal jest poniżej widocznego obszaru - scroll w dół
-      scrollAdjustment = modalBottom - viewportBottom + BUFFER
+    
+    if (outsideTop && outsideBottom) {
+      if (totalModalHeight > window.innerHeight * 0.9) {
+        scrollAdjustment = modalTop - BUFFER
+      } else {
+        const viewportCenter = window.innerHeight / 2
+        const modalCenter = modalTop + totalModalHeight / 2
+        scrollAdjustment = modalCenter - viewportCenter
+      }
+    } else if (outsideTop) {
+      scrollAdjustment = modalTop - BUFFER
+    } else if (outsideBottom) {
+      scrollAdjustment = modalBottom - (window.innerHeight - BUFFER)
     }
-
-    // Oblicz nową pozycję scrolla
-    const newScrollTop = currentScrollTop + scrollAdjustment
-
-    // Ogranicz do prawidłowego zakresu
-    const containerHeight = scrollContainer ? scrollContainer.clientHeight : window.innerHeight
-    const scrollableHeight = scrollContainer ? scrollContainer.scrollHeight : document.documentElement.scrollHeight
-    const maxScroll = scrollableHeight - containerHeight
-    const finalScrollTop = Math.max(0, Math.min(newScrollTop, maxScroll))
-
-    // Zastosuj scroll
-    if (scrollContainer) {
-      scrollContainer.scrollTo({ top: finalScrollTop, behavior: 'smooth' })
-    } else {
-      window.scrollTo({ top: finalScrollTop, behavior: 'smooth' })
+    
+    const newScrollTop = Math.max(0, Math.min(currentScrollTop + scrollAdjustment, maxScrollTop))
+    const actualScrollAdjustment = newScrollTop - currentScrollTop
+    
+    if (Math.abs(actualScrollAdjustment) > 1) {
+      if (scrollContainer) {
+        scrollContainer.scrollTo({
+          top: newScrollTop,
+          behavior: 'smooth'
+        })
+      } else {
+        window.scrollTo({
+          top: newScrollTop,
+          behavior: 'smooth'
+        })
+      }
+      
+      return true
     }
-
-    return true
+    
+    return false
   }, [])
 
-  return { scrollToFitModal, clearDebugElements }
+  return { scrollToFitModal }
 }
 
 export function EditModalProvider({ children }: EditModalProviderProps) {
@@ -160,9 +233,8 @@ export function EditModalProvider({ children }: EditModalProviderProps) {
     resetContent
   } = useEditModal()
 
-  const { scrollToFitModal, clearDebugElements } = useAutoScroll()
+  const { scrollToFitModal } = useAutoScroll()
   const [scrolling, setScrolling] = useState(false)
-  const modalRef = useRef<HTMLDivElement>(null)
 
   const openEditModalWithAutoScroll = useCallback((
     content: string,
@@ -171,40 +243,18 @@ export function EditModalProvider({ children }: EditModalProviderProps) {
     clickPosition: { x: number; y: number },
     visualPreview?: HTMLElement
   ) => {
-    // Tymczasowo otwórz modal, aby zmierzyć jego rozmiar
-    const modalInstance = originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview)
+    const needsScroll = scrollToFitModal(sourceElement, elementType, visualPreview)
     
-    // Pobierz element DOM modala
-    const modalElement = document.querySelector('[data-modal-container]') as HTMLElement
-    
-    if (!modalElement) {
-      console.error('Element modala nie znaleziony, otwieram bez scrollowania')
-      return
-    }
-    
-    // Zamknij tymczasowy modal
-    closeEditModal()
-    
-    // Oblicz potrzebny scroll
-    const needsScroll = scrollToFitModal(sourceElement, modalElement)
-    
-    // Otwórz modal z odpowiednim opóźnieniem jeśli potrzebny jest scroll
     if (needsScroll) {
       setScrolling(true)
       setTimeout(() => {
         originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview)
         setScrolling(false)
-      }, 300)
+      }, 400)
     } else {
       originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview)
     }
-  }, [originalOpenEditModal, closeEditModal, scrollToFitModal])
-
-  useEffect(() => {
-    return () => {
-      clearDebugElements()
-    }
-  }, [clearDebugElements])
+  }, [originalOpenEditModal, scrollToFitModal])
 
   return (
     <>

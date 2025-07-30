@@ -128,12 +128,12 @@ export function EditModalOverlay({
   return (
     <>
       {/* Backdrop overlay */}
-      <div 
+      {/* <div 
         className={`fixed inset-0 bg-black/40 backdrop-blur-sm z-[10000] transition-opacity duration-300 ${
           isAnimating ? 'opacity-0' : 'opacity-100'
         }`}
         onClick={onClose}
-      />
+      /> */}
       
       {/* Modal positioned at source element location */}
       <div
