@@ -9,6 +9,7 @@ export interface EditModalState {
   sourceElement: HTMLElement | null
   clickPosition: { x: number; y: number } | null
   visualPreview?: HTMLElement | null
+  elementId: string | null  // Add element ID
 }
 
 export function useEditModal() {
@@ -19,8 +20,11 @@ export function useEditModal() {
     elementType: string,
     sourceElement: HTMLElement,
     clickPosition: { x: number; y: number },
-    visualPreview?: HTMLElement
+    visualPreview?: HTMLElement,
+    elementId?: string  // Add element ID parameter
   ) => {
+    console.log(`🎯 useEditModal: Opening modal for element: ${elementId}`)
+    
     // Create a clean visual preview if provided
     let cleanedPreview: HTMLElement | undefined = undefined
     
@@ -48,58 +52,8 @@ export function useEditModal() {
           el.removeAttribute('onmouseleave')
           el.removeAttribute('data-content')
           el.removeAttribute('data-element-type')
-          el.removeAttribute('data-section-id')
         }
       })
-      
-      // Remove cursor pointer from all elements
-      const allElements = [cleanedPreview, ...Array.from(cleanedPreview.querySelectorAll('*'))]
-      allElements.forEach(el => {
-        if (el instanceof HTMLElement) {
-          el.classList.remove('cursor-pointer')
-          el.classList.add('cursor-default')
-          el.style.pointerEvents = 'none'
-        }
-      })
-      
-      // Special cleanup for sections
-      if (elementType.startsWith('complete-section')) {
-        // Remove only buttons, not the entire container
-        const buttons = cleanedPreview.querySelectorAll('button')
-        buttons.forEach(button => button.remove())
-        
-        // Remove spacer divs
-        const spacers = cleanedPreview.querySelectorAll('div.w-6.h-6.shrink-0')
-        spacers.forEach(spacer => spacer.remove())
-        
-        // Ensure all section content is visible (expand collapsed sections)
-        const sectionContents = cleanedPreview.querySelectorAll('.section-content')
-        sectionContents.forEach(content => {
-          content.style.display = 'block'
-          content.style.visibility = 'visible'
-        })
-        
-        // Clean up interactive styling from all headings in the section
-        const headings = cleanedPreview.querySelectorAll('h1, h2, h3, h4, h5, h6')
-        headings.forEach(heading => {
-          heading.classList.remove('cursor-pointer', 'hover:text-primary')
-          heading.classList.add('cursor-default')
-          
-          const hoverClasses = ['hover:bg-blue-50', 'dark:hover:bg-blue-900/20']
-          hoverClasses.forEach(cls => heading.classList.remove(cls))
-        })
-      }
-      
-      // For content elements, remove hover effects
-      if (!elementType.startsWith('complete-section')) {
-        const allElements = [cleanedPreview, ...Array.from(cleanedPreview.querySelectorAll('*'))]
-        allElements.forEach(el => {
-          if (el instanceof HTMLElement) {
-            el.classList.remove('cursor-pointer')
-            el.classList.add('cursor-default')
-          }
-        })
-      }
     }
 
     setEditModal({
@@ -109,7 +63,8 @@ export function useEditModal() {
       elementType,
       sourceElement,
       clickPosition,
-      visualPreview: cleanedPreview
+      visualPreview: cleanedPreview || null,
+      elementId: elementId || null  // Store the ID
     })
   }, [])
 
@@ -128,7 +83,8 @@ export function useEditModal() {
       console.log('Saving changes:', {
         content: editModal.content,
         elementType: editModal.elementType,
-        sourceElement: editModal.sourceElement
+        sourceElement: editModal.sourceElement,
+        elementId: editModal.elementId  // Log the element ID
       })
       
       // You could emit an event or call a callback to update the content

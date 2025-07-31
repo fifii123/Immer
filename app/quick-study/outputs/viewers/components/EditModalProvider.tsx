@@ -5,13 +5,14 @@ import { EditModalOverlay } from './EditModalOverlay'
 
 interface EditModalProviderProps {
   sessionId?: string
-  onContentSaved?: (element: HTMLElement, newContent: string) => void
+onContentSaved?: (element: HTMLElement, newContent: string, elementId?: string) => void
   children: (openEditModal: (
     content: string,
     elementType: string,
     sourceElement: HTMLElement,
     clickPosition: { x: number; y: number },
-    visualPreview?: HTMLElement
+    visualPreview?: HTMLElement,
+    elementId?: string  // Add element ID parameter
   ) => void) => React.ReactNode
 }
 
@@ -255,24 +256,27 @@ export function EditModalProvider({ children, sessionId, onContentSaved }: EditM
     resetContent
   } = editModalHook
 
-  // JEDYNA ZMIANA: Custom saveChanges handler
+// Custom saveChanges handler with elementId
   const saveChanges = useCallback(() => {
     if (editModal && onContentSaved) {
-      onContentSaved(editModal.sourceElement!, editModal.content)
+      console.log(`💾 EditModalProvider: Saving element ${editModal.elementId}`)
+onContentSaved(editModal.sourceElement!, editModal.content, editModal.elementId || undefined)
     } else {
       originalSaveChanges()
     }
     closeEditModal()
   }, [editModal, onContentSaved, originalSaveChanges, closeEditModal])
-
-  // FIXED: Improved modal opening with better DOM stability
+// FIXED: Improved modal opening with better DOM stability
   const openEditModalWithAutoScroll = useCallback(async (
     content: string,
     elementType: string,
     sourceElement: HTMLElement,
     clickPosition: { x: number; y: number },
-    visualPreview?: HTMLElement
+    visualPreview?: HTMLElement,
+    elementId?: string
   ) => {
+    console.log(`🎯 Opening edit modal for element: ${elementId}`)
+    
     // FIXED: Add small delay to ensure DOM is fully stable
     await new Promise(resolve => setTimeout(resolve, 10))
     
@@ -283,10 +287,10 @@ export function EditModalProvider({ children, sessionId, onContentSaved }: EditM
       // FIXED: Add small delay after scroll to ensure position is stable
       await new Promise(resolve => setTimeout(resolve, 20))
       // Scroll już się zakończył, otwórz modal
-      originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview)
+      originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview, elementId)
     } else {
       // Bez scroll - instant otwarcie
-      originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview)
+      originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview, elementId)
     }
   }, [originalOpenEditModal])
 

@@ -32,11 +32,17 @@ interface NotesViewerProps {
 }
 
 interface ParsedSection {
-  id: string;
+  id: string;           // unique ID for this section
   level: number;
   title: string;
-  content: string[];
+  content: ContentItem[];  // Changed from string[] to ContentItem[]
   children: ParsedSection[];
+}
+
+interface ContentItem {
+  id: string;           // unique ID for this content item
+  content: string;      // actual markdown content
+  type: 'paragraph' | 'list' | 'code' | 'quote' | 'other';
 }
 
 const getNoteTypeInfo = (noteType?: string) => {
@@ -82,30 +88,27 @@ export default function NotesViewer({ output, selectedSource, sessionId }: Notes
   useEffect(() => {
     setLocalContent(output?.content || '')
   }, [output?.content])
+// ID generators
+  let sectionIdCounter = 0
+  let contentIdCounter = 0
 
-const handleContentSaved = useCallback((element: HTMLElement, newContent: string) => {
-  console.log('📝 SAVING:', newContent.length, 'chars')
-  
-  if (!newContent.trim()) {
-    console.warn('⚠️ Empty content, not saving')
-    return
+  const generateSectionId = () => `section_${++sectionIdCounter}_${Date.now()}`
+  const generateContentId = () => `content_${++contentIdCounter}_${Date.now()}`
+
+
+  // Helper function to determine content type
+  const determineContentType = (content: string): ContentItem['type'] => {
+    if (content.trim().startsWith('- ') || content.trim().match(/^\d+\./)) {
+      return 'list'
+    } else if (content.trim().startsWith('```')) {
+      return 'code'
+    } else if (content.trim().startsWith('> ')) {
+      return 'quote'
+    }
+    return 'paragraph'
   }
 
-  // PROBLEM: Nie można po prostu zastąpić całości fragmentem
-  // setLocalContent(newContent) // ❌ TO NISZCZY CAŁĄ NOTATKĘ
-  
-  // ROZWIĄZANIE: Trzeba znaleźć i podmienić konkretny fragment
-  // Ale to jest skomplikowane w markdown...
-  
-  // TYMCZASOWE ROZWIĄZANIE: Dodaj na koniec zamiast zastępować
-  setLocalContent(prev => prev + '\n\n**EDITED:**\n' + newContent)
-  
-  toast({
-    title: "Changes saved",
-    description: "Content has been updated successfully",
-  })
-}, [toast])
-  // Parsowanie markdown - memoized (IMPROVED LOGIC FROM PASTE2)
+  // Parsowanie markdown - memoized with ID generation
   const parsedSections = useMemo(() => {
     if (!localContent) return []
     
@@ -121,8 +124,13 @@ const handleContentSaved = useCallback((element: HTMLElement, newContent: string
           null
         
         if (target) {
-          // Join content lines and push as single content item
-          target.content.push(currentContent.join('\n'))
+          const joinedContent = currentContent.join('\n')
+          // Create ContentItem with ID and type
+          target.content.push({
+            id: generateContentId(),
+            content: joinedContent,
+            type: determineContentType(joinedContent)
+          })
         }
         currentContent = []
       }
@@ -136,14 +144,9 @@ const handleContentSaved = useCallback((element: HTMLElement, newContent: string
         
         const level = headingMatch[1].length
         const title = headingMatch[2].trim()
-        const id = title
-          .replace(/[^a-zA-Z0-9\s]/g, '')
-          .replace(/\s+/g, '-')
-          .toLowerCase()
-          .slice(0, 20) || 'section-' + Math.random().toString(36).substr(2, 6)
         
         const newSection: ParsedSection = {
-          id,
+          id: generateSectionId(),
           level,
           title,
           content: [],
@@ -171,14 +174,191 @@ const handleContentSaved = useCallback((element: HTMLElement, newContent: string
     flushContent()
     return sections
   }, [localContent])
+// Helper function to find element by ID in parsed sections
+const findElementById = useCallback((sections: ParsedSection[], elementId: string): { type: 'section' | 'content', section?: ParsedSection, contentItem?: ContentItem, parent?: ParsedSection } | null => {
+  for (const section of sections) {
+    // Check if this section matches
+    if (section.id === elementId) {
+      return { type: 'section', section }
+    }
+    
+    // Check content items in this section
+    for (const contentItem of section.content) {
+      if (contentItem.id === elementId) {
+        return { type: 'content', contentItem, parent: section }
+      }
+    }
+    
+    // Recursively check children
+    const childResult = findElementById(section.children, elementId)
+    if (childResult) {
+      return childResult
+    }
+  }
+  
+  return null
+}, [])
 
-  // Memoized section content collector (UNCHANGED)
+// Helper function to regenerate markdown from parsed sections
+const regenerateMarkdown = useCallback((sections: ParsedSection[]): string => {
+  let markdown = ''
+  
+  const processSection = (section: ParsedSection): string => {
+    let sectionMarkdown = ''
+    
+    // Add section title
+    const headingPrefix = '#'.repeat(section.level)
+    sectionMarkdown += `${headingPrefix} ${section.title}\n\n`
+    
+    // Add content items
+    section.content.forEach(contentItem => {
+      if (contentItem.content.trim()) {
+        sectionMarkdown += contentItem.content + '\n\n'
+      }
+    })
+    
+    // Add child sections
+    section.children.forEach(childSection => {
+      sectionMarkdown += processSection(childSection)
+    })
+    
+    return sectionMarkdown
+  }
+  
+  sections.forEach(section => {
+    markdown += processSection(section)
+  })
+  
+  return markdown.trim()
+}, [])
+
+const handleContentSaved = useCallback((element: HTMLElement, newContent: string, elementId?: string) => {
+  console.log(`📝 SAVING: ${newContent.length} chars for element: ${elementId}`)
+  
+  if (!newContent.trim()) {
+    console.warn('⚠️ Empty content, not saving')
+    return
+  }
+
+  if (!elementId) {
+    console.warn('⚠️ No elementId provided, cannot replace content')
+    toast({
+      title: "Error",
+      description: "Could not identify element to update",
+      variant: "destructive",
+    })
+    return
+  }
+
+  // Find the element in current parsed sections
+  const foundElement = findElementById(parsedSections, elementId)
+  
+  if (!foundElement) {
+    console.warn(`⚠️ Element ${elementId} not found in current sections`)
+    toast({
+      title: "Error", 
+      description: "Could not find element to update",
+      variant: "destructive",
+    })
+    return
+  }
+
+  // Create a deep copy of parsed sections for modification
+  const updatedSections = JSON.parse(JSON.stringify(parsedSections)) as ParsedSection[]
+  
+  // Find and update the element in the copy
+  const updateResult = findElementById(updatedSections, elementId)
+  
+  if (!updateResult) {
+    console.warn('⚠️ Failed to find element in updated sections')
+    return
+  }
+
+  // Replace content based on element type
+  if (updateResult.type === 'section' && updateResult.section) {
+    // For sections, parse the new content and replace entire section
+    console.log(`🔄 Replacing section: ${updateResult.section.title}`)
+    
+    // Parse new content to detect new structure
+    const lines = newContent.trim().split('\n')
+    const newContentItems: ContentItem[] = []
+    let currentContent: string[] = []
+    
+    const flushCurrentContent = () => {
+      if (currentContent.length > 0) {
+        const joinedContent = currentContent.join('\n')
+        newContentItems.push({
+          id: generateContentId(),
+          content: joinedContent,
+          type: determineContentType(joinedContent)
+        })
+        currentContent = []
+      }
+    }
+    
+    // Skip first line if it's a heading (section title)
+    let startIndex = 0
+    if (lines[0] && lines[0].match(/^#{1,6}\s+/)) {
+      startIndex = 1
+      // Update section title if it changed
+      const titleMatch = lines[0].match(/^#{1,6}\s+(.+)$/)
+      if (titleMatch) {
+        updateResult.section.title = titleMatch[1].trim()
+      }
+    }
+    
+    for (let i = startIndex; i < lines.length; i++) {
+      const line = lines[i]
+      
+      // Check if this is a subsection heading
+      const headingMatch = line.match(/^(#{1,6})\s+(.+)$/)
+      if (headingMatch && headingMatch[1].length > updateResult.section.level) {
+        // This is a subsection - for now, treat as content
+        // In future, could parse as child sections
+        currentContent.push(line)
+      } else {
+        currentContent.push(line)
+      }
+    }
+    
+    flushCurrentContent()
+    
+    // Replace section content
+    updateResult.section.content = newContentItems
+    // Clear children for now (could be enhanced to preserve/parse subsections)
+    updateResult.section.children = []
+    
+  } else if (updateResult.type === 'content' && updateResult.contentItem) {
+    // For content items, simply replace the content
+    console.log(`🔄 Replacing content item: ${updateResult.contentItem.id}`)
+    
+    updateResult.contentItem.content = newContent.trim()
+    updateResult.contentItem.type = determineContentType(newContent.trim())
+  }
+
+  // Regenerate markdown from updated sections
+  const newMarkdown = regenerateMarkdown(updatedSections)
+  console.log(`✅ Generated new markdown: ${newMarkdown.length} chars`)
+  
+  // Update local content
+  setLocalContent(newMarkdown)
+  
+  toast({
+    title: "Changes saved",
+    description: "Content has been updated successfully",
+  })
+}, [toast, parsedSections, findElementById, regenerateMarkdown, generateContentId, determineContentType])
+
+
+
+
+// Memoized section content collector - updated for ContentItem
   const getSectionContent = useCallback((section: ParsedSection): string => {
     let content = `# ${section.title}\n\n`
     
     section.content.forEach(contentItem => {
-      if (contentItem.trim()) {
-        content += contentItem + '\n\n'
+      if (contentItem.content.trim()) {
+        content += contentItem.content + '\n\n'
       }
     })
     
@@ -188,9 +368,7 @@ const handleContentSaved = useCallback((element: HTMLElement, newContent: string
     
     return content
   }, [])
-
-  // Handler for hoverHandlers - needs access to openEditModal from render context
-  const handleHoverClick = useCallback((event: React.MouseEvent<HTMLElement>, elementType: string) => {
+const handleHoverClick = useCallback((event: React.MouseEvent<HTMLElement>, elementType: string) => {
     // Get openEditModal from the current render context
     const openEditModal = (window as any).currentOpenEditModalForHover
     if (!openEditModal) return
@@ -202,12 +380,18 @@ const handleContentSaved = useCallback((element: HTMLElement, newContent: string
     const content = element.textContent || element.innerHTML || ''
     const visualPreview = element.cloneNode(true) as HTMLElement
     
+    // Try to extract ID from element attributes (fallback for hover clicks)
+    const elementId = element.getAttribute('data-element-id') || 
+                      element.closest('[data-element-id]')?.getAttribute('data-element-id') ||
+                      undefined
+    
+    console.log(`🎯 HandleHoverClick: Found elementId: ${elementId}`)
+    
     openEditModal(content, elementType, element, {
       x: event.clientX,
       y: event.clientY
-    }, visualPreview)
+    }, visualPreview, elementId)
   }, [])
-
   const hoverHandlers = useNotesHover({
     isAnimating,
     onElementClick: handleHoverClick
@@ -292,7 +476,7 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
   }
   
   // Sprawdź czy sekcja ma jakąkolwiek zawartość (content lub children)
-  const hasContent = section.content.some(item => item.trim()) || section.children.length > 0
+  const hasContent = section.content.some(item => item.content) || section.children.length > 0
   
   return (
     <div key={section.id} className="section-container mb-6 first:mt-8">
@@ -323,9 +507,10 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
         {!hasContent && <div className="w-6 h-6 shrink-0" />}
         
         {/* Section Title - clickable for EditModal, używa hoverHandlers */}
-        <HeadingTag
+<HeadingTag
           id={headingId}
           data-section-id={section.id}
+          data-element-id={section.id}  // Add this for hover detection
           data-content={getSectionContent(section)}
           data-element-type={`complete-section-${section.level}`}
           className={`${getHeadingClasses(section.level)} text-foreground cursor-pointer hover:text-primary transition-colors flex-1 leading-6 flex items-center px-2 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20`}
@@ -337,7 +522,7 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
             contain: 'layout style',
             position: 'relative'
           }}
-          onClick={(e) => {
+   onClick={(e) => {
             // Call handleElementEdit directly with section data
             const sectionContainer = e.currentTarget.closest('.section-container') as HTMLElement
             const fullContent = getSectionContent(section)
@@ -348,7 +533,7 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
             openEditModal(fullContent, `complete-section-${section.level}`, e.currentTarget, {
               x: e.clientX,
               y: e.clientY
-            }, visualPreview)
+            }, visualPreview, section.id) // Pass section ID
           }}
           onMouseEnter={(e) => {
             // Zapowiedź transformacji: GPU layer
@@ -371,26 +556,30 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
       {/* Zawartość sekcji - pokazuj tylko gdy nie jest zwinięta */}
       {!isCollapsed && hasContent && (
         <div className="section-content pl-4" style={{ overflow: 'visible', contain: 'none' }}>
-          {/* Section content - każdy element ma własną obsługę kliknięcia */}
-          {section.content.map((contentItem, index) => (
-            contentItem.trim() && (
-              <div 
-                key={index} 
+{/* Section content - każdy element ma własną obsługę kliknięcia */}
+          {section.content.map((contentItem) => (
+            contentItem.content.trim() && (
+<div 
+                key={contentItem.id} 
+                data-element-id={contentItem.id}  // Add this for hover detection
                 className="mb-4 cursor-pointer"
                 style={{ overflow: 'visible', minWidth: '0' }}
-                onClick={(e) => {
-                  // Backup click handler in case hoverHandlers don't work
-                  const contentType = getContentType(contentItem)
-                  const visualPreview = e.currentTarget.cloneNode(true) as HTMLElement
-                  
-                  openEditModal(contentItem, contentType, e.currentTarget, {
-                    x: e.clientX,
-                    y: e.clientY
-                  }, visualPreview)
-                }}
+onClick={(e) => {
+            // Call handleElementEdit directly with section data
+            const sectionContainer = e.currentTarget.closest('.section-container') as HTMLElement
+            const fullContent = getSectionContent(section)
+            
+            // Create visual preview from entire section container
+            const visualPreview = sectionContainer ? sectionContainer.cloneNode(true) as HTMLElement : e.currentTarget.cloneNode(true) as HTMLElement
+            
+            openEditModal(fullContent, `complete-section-${section.level}`, e.currentTarget, {
+              x: e.clientX,
+              y: e.clientY
+            }, visualPreview, section.id) // Pass section ID
+          }}
               >
                 <MarkdownRenderer 
-                  content={contentItem}
+                  content={contentItem.content}
                   hoverHandlers={hoverHandlers}
                 />
               </div>
