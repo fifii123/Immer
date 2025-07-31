@@ -15,15 +15,15 @@ export async function POST(
   try {
     const body = await request.json()
     
-    const { 
-      operation, 
-      content, 
-      context 
-    }: {
-      operation: 'expand' | 'improve' | 'simplify'
-      content: string
-      context?: string
-    } = body
+const { 
+  operation, 
+  content, 
+  context 
+}: {
+  operation: 'expand' | 'improve' | 'summarize'
+  content: string
+  context?: string
+} = body
 
     // Walidacja
     if (!operation || !content) {
@@ -68,8 +68,8 @@ INSTRUKCJE:
 - Rozwiń każdy punkt o dodatkowe informacje`
         break
 
-      case 'improve':
-        userPrompt = `Ulepsz poniższy fragment tekstu, poprawiając jego klarowność, precyzję i jakość przekazu.
+case 'improve':
+  userPrompt = `Ulepsz prezentację poniższego fragmentu tekstu, skupiając się na lepszym formatowaniu i strukturze. Możesz też delikatnie poprawić treść, ale główny fokus ma być na prezentacji.
 
 ORYGINALNY TEKST:
 ${content}
@@ -77,15 +77,17 @@ ${content}
 ${context ? `\nKONTEKST:\n${context}` : ''}
 
 INSTRUKCJE:
-- Popraw jasność i precyzję wyrażania
-- Zoptymalizuj strukturę i przepływ tekstu
-- Usuń redundancje i niepotrzebne słowa
-- Wzmocnij kluczowe punkty
-- Zachowaj oryginalny sens i intencję`
+- Użyj formatowania Markdown: **pogrubienie** dla kluczowych terminów, *kursywa* dla podkreśleń
+- Dodaj nagłówki ## i ### dla lepszej struktury
+- Przekształć w listy punktowane (-) lub numerowane (1.) gdzie to sensowne  
+- Użyj \`kod\` dla terminów technicznych
+- Użyj > dla cytatów i definicji
+- Popraw klarowność i precyzję bez dodawania zbędnej treści
+- Zachowaj oryginalny sens i długość, ale uczyń prezentację bardziej profesjonalną`
         break
 
-      case 'simplify':
-        userPrompt = `Uprość poniższy fragment tekstu, czyniąc go bardziej przystępnym i łatwym do zrozumienia.
+case 'summarize':
+  userPrompt = `Streszczaj poniższy fragment tekstu, wydobywając najważniejsze informacje.
 
 ORYGINALNY TEKST:
 ${content}
@@ -93,20 +95,19 @@ ${content}
 ${context ? `\nKONTEKST:\n${context}` : ''}
 
 INSTRUKCJE:
-- Użyj prostszego języka i krótszych zdań
-- Wyjaśnij trudne terminy
-- Rozbij złożone koncepcje na prostsze części
-- Zachowaj wszystkie kluczowe informacje
-- Dodaj przykłady ułatwiające zrozumienie`
+- Wyodrębnij kluczowe punkty i główne idee
+- Zachowaj logiczną strukturę
+- Usuń szczegóły drugorzędne
+- Użyj zwięzłego języka
+- Zachowaj wszystkie istotne informacje`
         break
 
       default:
         return Response.json(
-          { error: 'Invalid operation type' },
+          { error: `Unsupported operation: ${operation}` },
           { status: 400 }
         )
     }
-
     // Stwórz streaming response
     const stream = new ReadableStream({
       async start(controller) {

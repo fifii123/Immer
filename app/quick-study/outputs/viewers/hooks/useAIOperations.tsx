@@ -1,7 +1,7 @@
 // app/quick-study/outputs/viewers/hooks/useAIOperations.ts
 import { useState, useCallback } from 'react'
 
-export type AIOperationType = 'expand' | 'improve' | 'simplify'
+export type AIOperationType = 'expand' | 'improve' | 'summarize'
 
 export interface AIOperationState {
   isProcessing: boolean
