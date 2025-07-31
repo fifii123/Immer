@@ -12,7 +12,7 @@ import { useToast } from "@/components/ui/use-toast"
 
 // Import our extracted components and hooks
 import { useNotesHover } from './hooks/useNotesHover'
-import { MarkdownRenderer } from './components/MarkdownRenderer'
+import { ContentItemRenderer } from './components/ContentItemRenderer'
 import { EditModalProvider } from './components/EditModalProvider'
 
 interface Output {
@@ -557,34 +557,26 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
       {!isCollapsed && hasContent && (
         <div className="section-content pl-4" style={{ overflow: 'visible', contain: 'none' }}>
 {/* Section content - każdy element ma własną obsługę kliknięcia */}
-          {section.content.map((contentItem) => (
-            contentItem.content.trim() && (
-<div 
-                key={contentItem.id} 
-                data-element-id={contentItem.id}  // Add this for hover detection
-                className="mb-4 cursor-pointer"
-                style={{ overflow: 'visible', minWidth: '0' }}
-onClick={(e) => {
-            // Call handleElementEdit directly with section data
-            const sectionContainer = e.currentTarget.closest('.section-container') as HTMLElement
-            const fullContent = getSectionContent(section)
-            
-            // Create visual preview from entire section container
-            const visualPreview = sectionContainer ? sectionContainer.cloneNode(true) as HTMLElement : e.currentTarget.cloneNode(true) as HTMLElement
-            
-            openEditModal(fullContent, `complete-section-${section.level}`, e.currentTarget, {
-              x: e.clientX,
-              y: e.clientY
-            }, visualPreview, section.id) // Pass section ID
-          }}
-              >
-                <MarkdownRenderer 
-                  content={contentItem.content}
-                  hoverHandlers={hoverHandlers}
-                />
-              </div>
-            )
-          ))}
+{section.content.map((contentItem) => (
+  contentItem.content.trim() && (
+    <ContentItemRenderer
+      key={contentItem.id}
+      contentItem={contentItem}
+      hoverHandlers={hoverHandlers}
+      onClick={(e) => {
+        console.log(`🎯 Clicked ContentItem: ${contentItem.id}`)
+        openEditModal(
+          contentItem.content,
+          getContentType(contentItem.content),
+          e.currentTarget, 
+          { x: e.clientX, y: e.clientY }, 
+          e.currentTarget.cloneNode(true) as HTMLElement, 
+          contentItem.id
+        )
+      }}
+    />
+  )
+))}
           
           {/* Child sections */}
           {section.children.length > 0 && (
@@ -612,19 +604,17 @@ const getCurrentDocumentContent = useCallback(() => {
   return localContent || output?.content || ''
 }, [localContent, output?.content])
 
-// NEW: Callback to get parsed sections for ID-based context
 const getParsedSections = useCallback(() => {
   return parsedSections
 }, [parsedSections])
 
-
-  return (
-    <EditModalProvider 
-      sessionId={sessionId}
-      onContentSaved={handleContentSaved}
-      getCurrentDocumentContent={getCurrentDocumentContent} 
-      getParsedSections={getParsedSections} 
-    >
+return (
+  <EditModalProvider 
+    sessionId={sessionId}
+    onContentSaved={handleContentSaved}
+    getCurrentDocumentContent={getCurrentDocumentContent} 
+    getParsedSections={getParsedSections} 
+  >
       {(openEditModal) => {
         // Move the useEffect here - at the top level of the render function
         // Make openEditModal available for hoverHandlers

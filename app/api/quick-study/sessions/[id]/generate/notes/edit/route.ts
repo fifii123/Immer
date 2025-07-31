@@ -221,7 +221,7 @@ Odpowiadaj TYLKO przepracowanym fragmentem, bez meta-komentarzy.`
         // Fallback to contextual mode
         if (editContext) {
           console.log('🔄 Falling back to contextual mode')
-          userPrompt = MinimalContextService.createContextualPrompt(operation, editContext)
+          userPrompt = MinimalContextService.createIntelligentPrompt(operation, editContext)
           contextInfo = { mode: 'contextual_fallback', section: editContext.fragmentPosition?.sectionTitle }
         } else {
           console.log('🔄 Falling back to basic mode')
@@ -235,7 +235,7 @@ Odpowiadaj TYLKO przepracowanym fragmentem, bez meta-komentarzy.`
     // FALLBACK: Contextual editing (existing system)
     else if (editContext) {
       console.log('🎯 Using contextual prompt with document awareness')
-      userPrompt = MinimalContextService.createContextualPrompt(operation, editContext)
+      userPrompt = MinimalContextService.createIntelligentPrompt(operation, editContext)
       systemPrompt = getBasicSystemPrompt()
       contextInfo = { 
         mode: 'contextual', 
