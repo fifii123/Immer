@@ -1,12 +1,10 @@
-// app/api/quick-study/sessions/[id]/generate/notes/edit/route.ts
 import { NextRequest } from 'next/server'
 import { OpenAI } from 'openai'
-
+import { MinimalContextService } from '@/app/services/MinimalContextService'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
-
 
 export async function POST(
   request: NextRequest,
@@ -15,15 +13,17 @@ export async function POST(
   try {
     const body = await request.json()
     
-const { 
-  operation, 
-  content, 
-  context 
-}: {
-  operation: 'expand' | 'improve' | 'summarize'
-  content: string
-  context?: string
-} = body
+    const { 
+      operation, 
+      content, 
+      context,
+      editContext  // NOWE: kontekst edycji
+    }: {
+      operation: 'expand' | 'improve' | 'summarize'
+      content: string
+      context?: string
+      editContext?: any  // Typ z MinimalContextService
+    } = body
 
     // Walidacja
     if (!operation || !content) {
@@ -34,8 +34,28 @@ const {
     }
 
     console.log(`🔄 Processing ${operation} operation for session ${params.id}`)
+    console.log(`📊 Context mode: ${editContext ? 'CONTEXTUAL' : context ? 'BASIC' : 'NONE'}`)
 
-    // Przygotuj prompt w zależności od operacji
+    // ZMIANA: Użyj kontekstowego prompt jeśli dostępny
+    let userPrompt: string
+
+    if (editContext) {
+      // NOWE: Kontekstowe przetwarzanie
+      console.log('🎯 Using contextual prompt with full document awareness')
+      userPrompt = MinimalContextService.createContextualPrompt(operation, editContext)
+      
+      console.log('📋 Context info:', {
+        section: editContext.fragmentPosition.sectionTitle,
+        level: editContext.fragmentPosition.sectionLevel,
+        positionInDoc: `${editContext.fragmentPosition.indexInDocument + 1}/${editContext.fragmentPosition.totalSections}`,
+        positionInSection: `${editContext.fragmentPositionInSection.percentPosition}%`
+      })
+    } else {
+      // FALLBACK: Podstawowe prompty (istniejące)
+      console.log('⚡ Using basic prompt (no context available)')
+      userPrompt = getBasicPrompt(operation, content, context)
+    }
+
     const systemPrompt = `Jesteś ekspertem w przetwarzaniu treści edukacyjnych. 
 Wykonuj operacje precyzyjnie, zachowując akademicki poziom i używając formatowania Markdown.
 
@@ -49,65 +69,6 @@ FORMATOWANIE:
 
 Odpowiadaj zawsze w języku polskim.`
 
-    let userPrompt = ''
-    
-    switch (operation) {
-      case 'expand':
-        userPrompt = `Rozwiń poniższy fragment tekstu, dodając więcej szczegółów, przykładów i wyjaśnień. Zachowaj oryginalny ton i styl.
-
-ORYGINALNY TEKST:
-${content}
-
-${context ? `\nKONTEKST:\n${context}` : ''}
-
-INSTRUKCJE:
-- Dodaj konkretne przykłady i szczegóły
-- Wyjaśnij kluczowe koncepcje głębiej
-- Zachowaj spójność z oryginalnym tekstem
-- Użyj formatowania Markdown dla lepszej czytelności
-- Rozwiń każdy punkt o dodatkowe informacje`
-        break
-
-case 'improve':
-  userPrompt = `Ulepsz prezentację poniższego fragmentu tekstu, skupiając się na lepszym formatowaniu i strukturze. Możesz też delikatnie poprawić treść, ale główny fokus ma być na prezentacji.
-
-ORYGINALNY TEKST:
-${content}
-
-${context ? `\nKONTEKST:\n${context}` : ''}
-
-INSTRUKCJE:
-- Użyj formatowania Markdown: **pogrubienie** dla kluczowych terminów, *kursywa* dla podkreśleń
-- Dodaj nagłówki ## i ### dla lepszej struktury
-- Przekształć w listy punktowane (-) lub numerowane (1.) gdzie to sensowne  
-- Użyj \`kod\` dla terminów technicznych
-- Użyj > dla cytatów i definicji
-- Popraw klarowność i precyzję bez dodawania zbędnej treści
-- Zachowaj oryginalny sens i długość, ale uczyń prezentację bardziej profesjonalną`
-        break
-
-case 'summarize':
-  userPrompt = `Streszczaj poniższy fragment tekstu, wydobywając najważniejsze informacje.
-
-ORYGINALNY TEKST:
-${content}
-
-${context ? `\nKONTEKST:\n${context}` : ''}
-
-INSTRUKCJE:
-- Wyodrębnij kluczowe punkty i główne idee
-- Zachowaj logiczną strukturę
-- Usuń szczegóły drugorzędne
-- Użyj zwięzłego języka
-- Zachowaj wszystkie istotne informacje`
-        break
-
-      default:
-        return Response.json(
-          { error: `Unsupported operation: ${operation}` },
-          { status: 400 }
-        )
-    }
     // Stwórz streaming response
     const stream = new ReadableStream({
       async start(controller) {
@@ -180,5 +141,65 @@ INSTRUKCJE:
       { error: 'Edit operation failed' },
       { status: 500 }
     )
+  }
+}
+
+// NOWE: Funkcja dla podstawowych promptów (fallback)
+function getBasicPrompt(operation: string, content: string, context?: string): string {
+  const baseContext = context ? `\n\nKONTEKST:\n${context}` : ''
+  
+  switch (operation) {
+    case 'expand':
+      return `Rozwiń poniższy fragment tekstu, dodając więcej szczegółów, przykładów i wyjaśnień. Zachowaj oryginalny ton i styl.
+
+ORYGINALNY TEKST:
+${content}
+
+${baseContext}
+
+INSTRUKCJE:
+- Dodaj konkretne przykłady i szczegóły
+- Wyjaśnij kluczowe koncepcje głębiej
+- Zachowaj spójność z oryginalnym tekstem
+- Użyj formatowania Markdown dla lepszej czytelności
+- Rozwiń każdy punkt o dodatkowe informacje`
+
+    case 'improve':
+      return `Ulepsz prezentację poniższego fragmentu tekstu, skupiając się na lepszym formatowaniu i strukturze. Możesz też delikatnie poprawić treść, ale główny fokus ma być na prezentacji.
+
+ORYGINALNY TEKST:
+${content}
+
+${baseContext}
+
+INSTRUKCJE:
+- Użyj formatowania Markdown: **pogrubienie** dla kluczowych terminów, *kursywa* dla podkreśleń
+- Dodaj nagłówki ## i ### dla lepszej struktury
+- Przekształć w listy punktowane (-) lub numerowane (1.) gdzie to sensowne  
+- Użyj \`kod\` dla terminów technicznych
+- Użyj > dla cytatów i definicji
+- Popraw klarowność i precyzję bez dodawania zbędnej treści
+- Zachowaj oryginalny sens i długość, ale uczyń prezentację bardziej profesjonalną`
+
+    case 'summarize':
+      return `Streszczaj poniższy fragment tekstu, wydobywając najważniejsze informacje.
+
+ORYGINALNY TEKST:
+${content}
+
+${baseContext}
+
+INSTRUKCJE:
+- Wyodrębnij kluczowe punkty i główne idee
+- Zachowaj logiczną strukturę
+- Usuń szczegóły drugorzędne
+- Użyj zwięzłego języka
+- Zachowaj wszystkie istotne informacje`
+
+    default:
+      return `Przetworz poniższy fragment tekstu zgodnie z operacją: ${operation}
+
+TEKST:
+${content}${baseContext}`
   }
 }

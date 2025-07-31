@@ -4,6 +4,7 @@ import { X, Save, RotateCcw, Type, Wand2, Edit3, Sparkles, FileText, Clock, Eye,
 import { Button } from '@/components/ui/button'
 import { EditModalState } from '../hooks/useEditModal'
 import { useAIOperations, AIOperationType } from '../hooks/useAIOperations'
+import { MinimalContextService } from '@/app/services/MinimalContextService'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -21,10 +22,11 @@ interface EditModalOverlayProps {
   onReset: () => void
   hasChanges: boolean
   sessionId?: string
+  getCurrentDocumentContent?: () => string 
 }
 
 export function EditModalOverlay({
-  editModal, onClose, onContentChange, onSave, onReset, hasChanges, sessionId
+  editModal, onClose, onContentChange, onSave, onReset, hasChanges, sessionId, getCurrentDocumentContent
 }: EditModalOverlayProps) {
   const [isAnimating, setIsAnimating] = useState(true)
   const [viewMode, setViewMode] = useState<'visual' | 'edit' | 'ai-processing'>('visual')
@@ -32,7 +34,7 @@ export function EditModalOverlay({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
-  
+
   // AI Operations hook
   const { operationState, processContent, resetOperation } = useAIOperations()
 
@@ -105,12 +107,42 @@ const handleAIOperation = useCallback(async (operation: AIOperationType) => {
     }
     
     setViewMode('ai-processing')
-    await processContent(sessionId, operation, editModal.content)
+    
+    // NOWE: Jeśli mamy dostęp do pełnego dokumentu, użyj kontekstowego przetwarzania
+    if (getCurrentDocumentContent) {
+      try {
+        console.log('🎯 Using contextual AI processing')
+        const fullDocument = getCurrentDocumentContent()
+        const editContext = MinimalContextService.getEditContext(editModal.content, fullDocument)
+        
+        console.log('📋 Edit context prepared:', {
+          sectionTitle: editContext.fragmentPosition.sectionTitle,
+          sectionLevel: editContext.fragmentPosition.sectionLevel,
+          positionInSection: `${editContext.fragmentPositionInSection.percentPosition}%`,
+          hasNeighbors: {
+            preceding: !!editContext.precedingSection,
+            following: !!editContext.followingSection
+          }
+        })
+        
+        await processContent(sessionId, operation, editModal.content, editContext)
+      } catch (contextError) {
+        console.warn('❌ Contextual processing failed, falling back to basic mode:', contextError)
+        // Fallback to basic processing
+        await processContent(sessionId, operation, editModal.content)
+      }
+    } else {
+      // Fallback: basic processing without context
+      console.log('⚡ Using basic AI processing (no document context available)')
+      await processContent(sessionId, operation, editModal.content)
+    }
+    
   } catch (error) {
     console.error('AI operation failed:', error)
     setViewMode('visual')
   }
-}, [editModal, sessionId, processContent])
+}, [editModal, sessionId, processContent, getCurrentDocumentContent])
+
 
   // Calculate maximum modal height based on viewport (more compact)
   const getMaxModalHeight = () => {

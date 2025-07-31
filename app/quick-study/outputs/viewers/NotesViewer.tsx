@@ -608,10 +608,15 @@ onClick={(e) => {
 
   const noteTypeInfo = getNoteTypeInfo(output.noteType)
 
+const getCurrentDocumentContent = useCallback(() => {
+  return localContent || output?.content || ''
+}, [localContent, output?.content])
+
   return (
     <EditModalProvider 
       sessionId={sessionId}
       onContentSaved={handleContentSaved}
+      getCurrentDocumentContent={getCurrentDocumentContent} 
     >
       {(openEditModal) => {
         // Move the useEffect here - at the top level of the render function

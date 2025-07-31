@@ -6,6 +6,7 @@ import { EditModalOverlay } from './EditModalOverlay'
 interface EditModalProviderProps {
   sessionId?: string
 onContentSaved?: (element: HTMLElement, newContent: string, elementId?: string) => void
+ getCurrentDocumentContent?: () => string 
   children: (openEditModal: (
     content: string,
     elementType: string,
@@ -240,7 +241,7 @@ const scrollToFitModal = (sourceElement: HTMLElement, elementType: string, visua
   })
 }
 
-export function EditModalProvider({ children, sessionId, onContentSaved }: EditModalProviderProps) {
+export function EditModalProvider({ children, sessionId, onContentSaved ,  getCurrentDocumentContent }: EditModalProviderProps) {
   // Zawsze wywołuj wszystkie hooki w tej samej kolejności
   const editModalHook = useEditModal()
   const [scrolling, setScrolling] = useState(false)
@@ -307,6 +308,7 @@ onContentSaved(editModal.sourceElement!, editModal.content, editModal.elementId 
           onReset={resetContent}
           hasChanges={hasChanges()}
           sessionId={sessionId}
+          getCurrentDocumentContent={getCurrentDocumentContent} 
         />
       )}
     </>

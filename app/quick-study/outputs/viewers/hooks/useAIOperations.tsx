@@ -1,5 +1,5 @@
-// app/quick-study/outputs/viewers/hooks/useAIOperations.ts
 import { useState, useCallback } from 'react'
+import { EditContext } from '@/app/services/MinimalContextService'
 
 export type AIOperationType = 'expand' | 'improve' | 'summarize'
 
@@ -22,7 +22,7 @@ export function useAIOperations() {
     sessionId: string,
     operation: AIOperationType,
     content: string,
-    context?: string
+    contextOrEditContext?: string | EditContext  // ZMIANA: rozszerzone typy
   ) => {
     console.log(`🚀 Starting AI operation: ${operation}`)
     
@@ -42,7 +42,9 @@ export function useAIOperations() {
         body: JSON.stringify({
           operation,
           content,
-          context
+          // ZMIANA: obsługa obu typów kontekstu
+          context: typeof contextOrEditContext === 'string' ? contextOrEditContext : undefined,
+          editContext: typeof contextOrEditContext === 'object' ? contextOrEditContext : undefined
         }),
       })
 
