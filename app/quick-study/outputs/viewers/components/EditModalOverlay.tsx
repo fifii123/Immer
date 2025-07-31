@@ -23,10 +23,11 @@ interface EditModalOverlayProps {
   hasChanges: boolean
   sessionId?: string
   getCurrentDocumentContent?: () => string 
+  getParsedSections?: () => any[] 
 }
 
 export function EditModalOverlay({
-  editModal, onClose, onContentChange, onSave, onReset, hasChanges, sessionId, getCurrentDocumentContent
+  editModal, onClose, onContentChange, onSave, onReset, hasChanges, sessionId, getCurrentDocumentContent, getParsedSections 
 }: EditModalOverlayProps) {
   const [isAnimating, setIsAnimating] = useState(true)
   const [viewMode, setViewMode] = useState<'visual' | 'edit' | 'ai-processing'>('visual')
@@ -108,32 +109,66 @@ const handleAIOperation = useCallback(async (operation: AIOperationType) => {
     
     setViewMode('ai-processing')
     
-    // NOWE: Jeśli mamy dostęp do pełnego dokumentu, użyj kontekstowego przetwarzania
-    if (getCurrentDocumentContent) {
+    // NEW: Try ID-based processing first (most reliable)
+    if (editModal.elementId && getParsedSections) {
       try {
-        console.log('🎯 Using contextual AI processing')
-        const fullDocument = getCurrentDocumentContent()
-        const editContext = MinimalContextService.getEditContext(editModal.content, fullDocument)
+        console.log('🎯 Using ID-based intelligent processing (most reliable)')
+        const parsedSections = getParsedSections()
+        const fullDocument = getCurrentDocumentContent ? getCurrentDocumentContent() : ''
         
-        console.log('📋 Edit context prepared:', {
-          sectionTitle: editContext.fragmentPosition.sectionTitle,
-          sectionLevel: editContext.fragmentPosition.sectionLevel,
-          positionInSection: `${editContext.fragmentPositionInSection.percentPosition}%`,
-          hasNeighbors: {
-            preceding: !!editContext.precedingSection,
-            following: !!editContext.followingSection
-          }
+        console.log('📋 ID-based context:', {
+          elementId: editModal.elementId,
+          parsedSectionsCount: parsedSections.length,
+          fullDocumentLength: fullDocument.length,
+          fragmentLength: editModal.content.length
         })
         
-        await processContent(sessionId, operation, editModal.content, editContext)
+        // IMPORTANT: Use structured context with ID and parsed sections
+        await processContent(sessionId, operation, editModal.content, {
+          elementId: editModal.elementId,
+          parsedSections: parsedSections,
+          fullDocument: fullDocument
+        })
+        
+      } catch (idError) {
+        console.warn('❌ ID-based processing failed, falling back to text-based mode:', idError)
+        // Fallback to text-based intelligent processing
+        if (getCurrentDocumentContent) {
+          try {
+            const fullDocument = getCurrentDocumentContent()
+            await processContent(sessionId, operation, editModal.content, fullDocument)
+          } catch (textError) {
+            console.warn('❌ Text-based processing also failed, falling back to basic mode:', textError)
+            await processContent(sessionId, operation, editModal.content)
+          }
+        } else {
+          await processContent(sessionId, operation, editModal.content)
+        }
+      }
+    }
+    // FALLBACK: Text-based intelligent processing
+    else if (getCurrentDocumentContent) {
+      try {
+        console.log('🧠 Using text-based intelligent processing (fallback)')
+        const fullDocument = getCurrentDocumentContent()
+        
+        console.log('📋 Text-based context:', {
+          documentLength: fullDocument.length,
+          fragmentLength: editModal.content.length,
+          hasElementId: !!editModal.elementId,
+          hasParsedSections: !!getParsedSections
+        })
+        
+        await processContent(sessionId, operation, editModal.content, fullDocument)
+        
       } catch (contextError) {
-        console.warn('❌ Contextual processing failed, falling back to basic mode:', contextError)
-        // Fallback to basic processing
+        console.warn('❌ Text-based processing failed, falling back to basic mode:', contextError)
         await processContent(sessionId, operation, editModal.content)
       }
-    } else {
-      // Fallback: basic processing without context
-      console.log('⚡ Using basic AI processing (no document context available)')
+    } 
+    // BASIC: No context available
+    else {
+      console.log('⚡ Using basic AI processing (no context available)')
       await processContent(sessionId, operation, editModal.content)
     }
     
@@ -141,7 +176,7 @@ const handleAIOperation = useCallback(async (operation: AIOperationType) => {
     console.error('AI operation failed:', error)
     setViewMode('visual')
   }
-}, [editModal, sessionId, processContent, getCurrentDocumentContent])
+}, [editModal, sessionId, processContent, getCurrentDocumentContent, getParsedSections])
 
 
   // Calculate maximum modal height based on viewport (more compact)

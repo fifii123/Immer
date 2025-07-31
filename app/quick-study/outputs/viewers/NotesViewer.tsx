@@ -612,11 +612,18 @@ const getCurrentDocumentContent = useCallback(() => {
   return localContent || output?.content || ''
 }, [localContent, output?.content])
 
+// NEW: Callback to get parsed sections for ID-based context
+const getParsedSections = useCallback(() => {
+  return parsedSections
+}, [parsedSections])
+
+
   return (
     <EditModalProvider 
       sessionId={sessionId}
       onContentSaved={handleContentSaved}
       getCurrentDocumentContent={getCurrentDocumentContent} 
+      getParsedSections={getParsedSections} 
     >
       {(openEditModal) => {
         // Move the useEffect here - at the top level of the render function

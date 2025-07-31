@@ -5,8 +5,9 @@ import { EditModalOverlay } from './EditModalOverlay'
 
 interface EditModalProviderProps {
   sessionId?: string
-onContentSaved?: (element: HTMLElement, newContent: string, elementId?: string) => void
- getCurrentDocumentContent?: () => string 
+  onContentSaved?: (element: HTMLElement, newContent: string, elementId?: string) => void
+  getCurrentDocumentContent?: () => string 
+  getParsedSections?: () => any[]  // NEW: Get parsed sections for ID-based context
   children: (openEditModal: (
     content: string,
     elementType: string,
@@ -241,7 +242,13 @@ const scrollToFitModal = (sourceElement: HTMLElement, elementType: string, visua
   })
 }
 
-export function EditModalProvider({ children, sessionId, onContentSaved ,  getCurrentDocumentContent }: EditModalProviderProps) {
+export function EditModalProvider({ 
+  children, 
+  sessionId, 
+  onContentSaved, 
+  getCurrentDocumentContent,
+  getParsedSections  // NEW: Accept parsed sections getter
+}: EditModalProviderProps) {
   // Zawsze wywołuj wszystkie hooki w tej samej kolejności
   const editModalHook = useEditModal()
   const [scrolling, setScrolling] = useState(false)
@@ -261,12 +268,13 @@ export function EditModalProvider({ children, sessionId, onContentSaved ,  getCu
   const saveChanges = useCallback(() => {
     if (editModal && onContentSaved) {
       console.log(`💾 EditModalProvider: Saving element ${editModal.elementId}`)
-onContentSaved(editModal.sourceElement!, editModal.content, editModal.elementId || undefined)
+      onContentSaved(editModal.sourceElement!, editModal.content, editModal.elementId || undefined)
     } else {
       originalSaveChanges()
     }
     closeEditModal()
   }, [editModal, onContentSaved, originalSaveChanges, closeEditModal])
+
 // FIXED: Improved modal opening with better DOM stability
   const openEditModalWithAutoScroll = useCallback(async (
     content: string,
@@ -309,6 +317,7 @@ onContentSaved(editModal.sourceElement!, editModal.content, editModal.elementId 
           hasChanges={hasChanges()}
           sessionId={sessionId}
           getCurrentDocumentContent={getCurrentDocumentContent} 
+          getParsedSections={getParsedSections}  // NEW: Pass parsed sections getter
         />
       )}
     </>
