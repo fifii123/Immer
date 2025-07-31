@@ -204,11 +204,11 @@ const scrollToFitModal = (sourceElement: HTMLElement, elementType: string, visua
     const actualScrollAdjustment = newScrollTop - currentScrollTop
     
     if (Math.abs(actualScrollAdjustment) > 1) {
-      // Custom fast scroll implementation
+      // FIXED: Improved scroll implementation with better timing
       const startTime = performance.now()
       const startScrollTop = currentScrollTop
       const distance = actualScrollAdjustment
-      const duration = 200 // Szybsze scrollowanie - 200ms zamiast domyślnych ~500ms
+      const duration = 150 // Reduced from 200ms to 150ms for even faster response
       
       const easeOutQuart = (t: number): number => 1 - Math.pow(1 - t, 4)
       
@@ -265,6 +265,7 @@ export function EditModalProvider({ children, sessionId, onContentSaved }: EditM
     closeEditModal()
   }, [editModal, onContentSaved, originalSaveChanges, closeEditModal])
 
+  // FIXED: Improved modal opening with better DOM stability
   const openEditModalWithAutoScroll = useCallback(async (
     content: string,
     elementType: string,
@@ -272,11 +273,16 @@ export function EditModalProvider({ children, sessionId, onContentSaved }: EditM
     clickPosition: { x: number; y: number },
     visualPreview?: HTMLElement
   ) => {
+    // FIXED: Add small delay to ensure DOM is fully stable
+    await new Promise(resolve => setTimeout(resolve, 10))
+    
     // Sprawdź czy potrzebny scroll - bez delay
     const needsScroll = await scrollToFitModal(sourceElement, elementType, visualPreview)
     
     if (needsScroll) {
-      // Scroll już się zakończył, otwórz modal natychmiast
+      // FIXED: Add small delay after scroll to ensure position is stable
+      await new Promise(resolve => setTimeout(resolve, 20))
+      // Scroll już się zakończył, otwórz modal
       originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview)
     } else {
       // Bez scroll - instant otwarcie

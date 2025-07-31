@@ -28,6 +28,7 @@ export function EditModalOverlay({
 }: EditModalOverlayProps) {
   const [isAnimating, setIsAnimating] = useState(true)
   const [viewMode, setViewMode] = useState<'visual' | 'edit' | 'ai-processing'>('visual')
+  const [fixedModalHeight, setFixedModalHeight] = useState<number | null>(null) // NEW: Fixed height state
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
@@ -35,15 +36,42 @@ export function EditModalOverlay({
   // AI Operations hook
   const { operationState, processContent, resetOperation } = useAIOperations()
 
-  // Simple animation trigger - scrolling is handled by EditModalProvider
+  // FIXED: Better animation timing with position recalculation
   useEffect(() => {
     if (editModal.isOpen) {
-      // Start animation immediately since scrolling is handled externally
-      setTimeout(() => {
+      // Force a small delay to ensure DOM is stable before positioning
+      const timer = setTimeout(() => {
         setIsAnimating(false)
-      }, 100)
+      }, 50) // Reduced from 100ms to 50ms for faster response
+      
+      return () => clearTimeout(timer)
     }
   }, [editModal.isOpen])
+
+  // NEW: Capture modal height before AI processing starts
+  useEffect(() => {
+    if (viewMode === 'ai-processing' && fixedModalHeight === null && modalRef.current) {
+      // Get the content area height, not the whole modal
+      const contentArea = modalRef.current.querySelector('.bg-white.dark\\:bg-gray-900.rounded-2xl') as HTMLElement
+      if (contentArea) {
+        const currentHeight = contentArea.getBoundingClientRect().height
+        setFixedModalHeight(Math.max(currentHeight, 200)) // Minimum 200px for AI content
+      }
+    }
+    
+    // Reset fixed height when leaving AI processing mode
+    if (viewMode !== 'ai-processing' && fixedModalHeight !== null) {
+      setFixedModalHeight(null)
+    }
+  }, [viewMode, fixedModalHeight])
+
+  // FIXED: Update content from AI operations when processing completes
+  useEffect(() => {
+    if (!operationState.isProcessing && operationState.content && viewMode === 'ai-processing') {
+      // Update the modal content with AI generated content
+      onContentChange(operationState.content)
+    }
+  }, [operationState.isProcessing, operationState.content, viewMode, onContentChange])
 
   // Focus handling for edit mode
   useEffect(() => {
@@ -96,7 +124,7 @@ const handleAIOperation = useCallback(async (operation: AIOperationType) => {
     return Math.min(400, calculatedHeight, viewportHeight * 0.6)
   }
 
-  // Calculate positioning for the illusion effect
+  // FIXED: Better positioning with DOM stability check
   const getPositioning = () => {
     if (!editModal.sourceElement) {
       return {
@@ -106,10 +134,12 @@ const handleAIOperation = useCallback(async (operation: AIOperationType) => {
         transform: 'translate(-50%, -50%)',
         width: 'auto',
         maxWidth: '800px',
-        maxHeight: getMaxModalHeight()
+        maxHeight: getMaxModalHeight(),
+        ...(fixedModalHeight && { height: `${fixedModalHeight}px` }) // NEW: Apply fixed height during AI processing
       }
     }
 
+    // FIXED: Force recalculation of bounding rect to ensure fresh positioning
     const rect = editModal.sourceElement.getBoundingClientRect()
     const maxHeight = getMaxModalHeight()
     
@@ -123,6 +153,7 @@ const handleAIOperation = useCallback(async (operation: AIOperationType) => {
       width: rect.width,
       minWidth: Math.max(rect.width, 400), // Ensure minimum usable width
       maxHeight: maxHeight,
+      ...(fixedModalHeight && { height: `${fixedModalHeight}px` }), // NEW: Apply fixed height during AI processing
       transform: isAnimating 
         ? 'scale(1)' 
         : 'scale(1.05)', // Subtle pop-out effect
@@ -133,7 +164,10 @@ const handleAIOperation = useCallback(async (operation: AIOperationType) => {
   }
 
   const modalStyle = getPositioning()
-  const maxContentHeight = modalStyle.maxHeight ? modalStyle.maxHeight : 400
+  // FIXED: Use fixed height during AI processing, otherwise use calculated max height
+  const maxContentHeight = fixedModalHeight 
+    ? fixedModalHeight - 0 // Use full fixed height for content area
+    : (modalStyle.maxHeight ? modalStyle.maxHeight : 400)
 
   const getElementTypeInfo = (elementType: string) => {
     if (elementType.startsWith('complete-section')) {
@@ -195,7 +229,8 @@ const handleAIOperation = useCallback(async (operation: AIOperationType) => {
                 Edit {elementInfo.label}
               </h2>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {hasVisualPreview ? 'Visual preview or edit mode' : 'Make your changes below'}
+                {hasVisualPreview ? 
+                  'Visual preview or edit mode' : 'Make your changes below'}
               </p>
             </div>
           </div>
@@ -243,107 +278,49 @@ const handleAIOperation = useCallback(async (operation: AIOperationType) => {
         <div 
           className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col"
           style={{
-            maxHeight: `${maxContentHeight}px`,
-            height: 'auto'
+            // FIXED: Ensure content area has proper height
+            height: fixedModalHeight ? `${fixedModalHeight}px` : 'auto',
+            maxHeight: fixedModalHeight ? `${fixedModalHeight}px` : `${maxContentHeight}px`,
+            minHeight: viewMode === 'ai-processing' ? '200px' : 'auto' // Minimum height for AI processing
           }}
         >
           <div 
             className="overflow-y-auto flex-1"
             style={{ 
-              maxHeight: viewMode === 'ai-processing' ? 'calc(100vh - 200px)' : `${maxContentHeight}px`
+              // FIXED: Content should fill available space
+              maxHeight: fixedModalHeight ? `${fixedModalHeight}px` : `${maxContentHeight}px`,
+              minHeight: viewMode === 'ai-processing' ? '150px' : 'auto'
             }}
           >
             {viewMode === 'ai-processing' ? (
-              /* AI Processing Area - streaming markdown */
-              <div className="min-h-[100px] p-4">
-                <div className={`${operationState.isProcessing ? 'streaming-message' : ''}`}>
-                  <div className="markdown-content text-sm">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkMath]}
-                      rehypePlugins={[
-                        rehypeRaw,
-                        rehypeSanitize,
-                        rehypeHighlight,
-                        [rehypeKatex, {
-                          strict: false,
-                          trust: true,
-                          fleqn: false,
-                          throwOnError: false,
-                          errorColor: '#cc0000',
-                          macros: {
-                            "\\f": "#1f(#2)"
-                          }
-                        }]
-                      ]}
-                      components={{
-                        h2: ({node, ...props}) => <h2 className="text-lg font-semibold text-blue-600 dark:text-blue-400 mt-4 mb-2" {...props} />,
-                        h3: ({node, ...props}) => <h3 className="text-md font-semibold text-blue-500 dark:text-blue-300 mt-3 mb-2" {...props} />,
-                        ul: ({node, ...props}) => <ul className="list-disc pl-5 my-2" {...props} />,
-                        ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-2" {...props} />,
-                        li: ({node, ...props}) => <li className="my-1" {...props} />,
-                        blockquote: ({node, ...props}) => (
-                          <blockquote className="border-l-4 border-blue-500 pl-4 py-2 my-4 bg-blue-50/50 dark:bg-blue-950/20 italic text-muted-foreground" {...props} />
-                        ),
-                        strong: ({node, ...props}) => <strong className="font-semibold text-blue-600 dark:text-blue-400" {...props} />,
-                        code: ({node, inline, ...props}) => {
-                          if (inline) {
-                            return <code className="bg-muted px-2 py-1 rounded text-sm font-mono text-foreground" {...props} />
-                          }
-                          return <code className="block bg-muted p-4 rounded-lg text-sm font-mono overflow-x-auto" {...props} />
-                        }
-                      }}
-                    >
-                      {operationState.content}
-                    </ReactMarkdown>
-                  </div>
-                </div>
-
-                {/* Wskaźnik streamingu */}
-                {operationState.isProcessing && (
-                  <div className="flex items-center gap-2 mt-4 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Generowanie odpowiedzi...</span>
-                  </div>
-                )}
-
-                {/* Przyciski akcji dla AI - gdy zakończone */}
-                {!operationState.isProcessing && operationState.content && (
-                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-                    <div className="flex gap-2 justify-end">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setViewMode('visual')
-                          resetOperation()
-                        }}
-                        className="text-xs h-7"
+              /* AI Processing Area - streaming markdown with proper background */
+              <div className="min-h-[150px] p-4 bg-white dark:bg-gray-900">
+                <div className={`${operationState.isProcessing ? 
+                  'text-gray-600 dark:text-gray-300' : 'text-gray-900 dark:text-gray-100'}`}>
+                  {operationState.content ? (
+                    <div className="prose prose-sm max-w-none dark:prose-invert">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeRaw, rehypeSanitize, rehypeHighlight, rehypeKatex]}
                       >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          onContentChange(operationState.content)
-                          setViewMode('edit')
-                          resetOperation()
-                        }}
-                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-7"
-                      >
-                        Use This Content
-                      </Button>
+                        {operationState.content}
+                      </ReactMarkdown>
+                      {operationState.isProcessing && (
+                        <div className="flex items-center gap-2 mt-4 text-blue-600 dark:text-blue-400">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span className="text-sm">Generating...</span>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
-
-                {/* Komunikat o błędzie */}
-                {operationState.error && (
-                  <div className="mt-4 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded">
-                    <p className="text-sm text-red-600 dark:text-red-400">
-                      Error: {operationState.error}
-                    </p>
-                  </div>
-                )}
+                  ) : (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="flex items-center gap-3 text-blue-600 dark:text-blue-400">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span>Starting AI enhancement...</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : viewMode === 'visual' && hasVisualPreview ? (
               /* Visual Preview Container - matches original element styling with padding */
@@ -378,78 +355,91 @@ const handleAIOperation = useCallback(async (operation: AIOperationType) => {
           {/* AI Enhancements - shown when NOT in ai-processing mode */}
           {viewMode !== 'ai-processing' && (
             <div className="border-t border-gray-200 dark:border-gray-700 p-3 bg-gradient-to-r from-blue-50/50 to-purple-50/50 dark:from-blue-950/20 dark:to-purple-950/20">
-              <div className="flex items-center gap-2 mb-2">
-                <Wand2 className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                <span className="text-xs font-medium text-blue-900 dark:text-blue-100">AI Enhancements</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="text-xs h-6 flex items-center gap-1"
-                  onClick={() => handleAIOperation('improve')}
-                  disabled={!sessionId}
-                >
-                  <Sparkles className="h-3 w-3" />Improve
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="text-xs h-6 flex items-center gap-1"
-                  onClick={() => handleAIOperation('simplify')}
-                  disabled={!sessionId}
-                >
-                  <Type className="h-3 w-3" />Simplify
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="text-xs h-6 flex items-center gap-1"
-                  onClick={() => handleAIOperation('expand')}
-                  disabled={!sessionId}
-                >
-                  <Edit3 className="h-3 w-3" />Expand
-                </Button>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    AI Enhancements
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleAIOperation('improve')}
+                    disabled={operationState.isProcessing}
+                    className="h-7 text-xs flex items-center gap-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+                  >
+                    <Wand2 className="h-3 w-3" />
+                    Improve
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleAIOperation('expand')}
+                    disabled={operationState.isProcessing}
+                    className="h-7 text-xs flex items-center gap-1.5 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/50"
+                  >
+                    <FileText className="h-3 w-3" />
+                    Expand
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleAIOperation('summarize')}
+                    disabled={operationState.isProcessing}
+                    className="h-7 text-xs flex items-center gap-1.5 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/50"
+                  >
+                    <Type className="h-3 w-3" />
+                    Summarize
+                  </Button>
+                </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Footer - positioned absolutely below the clone */}
+        {/* Footer Actions - positioned absolutely below the clone */}
         <div 
-          className="absolute left-0 bg-white dark:bg-gray-900 rounded-b-2xl shadow-lg border border-gray-200 dark:border-gray-700 border-t-0 flex items-center justify-between p-4 pt-3 bg-gray-50 dark:bg-gray-800/50"
+          className="absolute left-0 bg-white dark:bg-gray-900 rounded-b-2xl shadow-lg border border-gray-200 dark:border-gray-700 border-t-0 flex items-center justify-between p-4 pt-3"
           style={{
-            top: '100%', // Position below the clone
+            bottom: '-60px',
             width: '100%',
             minWidth: '400px',
             zIndex: 1
           }}
         >
-          <div className="flex items-center gap-3">
-            {hasChanges && (
-              <Button variant="ghost" size="sm" onClick={onReset} className="flex items-center gap-2 h-7 text-xs">
-                <RotateCcw className="h-3 w-3" />Reset
-              </Button>
-            )}
-            {hasChanges && (
-              <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-                <Clock className="h-3 w-3" />Unsaved changes
+          <div className="flex items-center gap-2">
+            {operationState.isProcessing && (
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                <Clock className="h-4 w-4" />
+                <span className="text-sm">Processing...</span>
               </div>
             )}
           </div>
           
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={onClose} className="h-7 text-xs">
-              Cancel
-            </Button>
-            <Button 
+            {hasChanges && !operationState.isProcessing && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onReset}
+                className="h-8 text-xs flex items-center gap-1.5"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Reset
+              </Button>
+            )}
+            
+            <Button
+              variant="default"
               size="sm"
-              onClick={onSave} 
-              disabled={!hasChanges || viewMode === 'visual'} 
-              className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 disabled:opacity-50 h-7 text-xs"
+              onClick={onSave}
+              disabled={operationState.isProcessing}
+              className="h-8 text-xs flex items-center gap-1.5"
             >
               <Save className="h-3 w-3" />
-              Save Changes
+              {operationState.isProcessing ? 'Processing...' : 'Save Changes'}
             </Button>
           </div>
         </div>
