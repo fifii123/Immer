@@ -19,7 +19,12 @@ export interface HoverHandlers {
 
 interface UseNotesHoverProps {
   isAnimating: boolean
-  onElementClick: (event: React.MouseEvent<HTMLElement>, elementType: string, customContent?: string) => void
+  onElementClick: (event: React.MouseEvent<HTMLElement>, domData: {
+    elementId: string | null
+    content: string
+    elementType: string
+    clone: HTMLElement
+  }) => void
 }
 
 export function useNotesHover({ isAnimating, onElementClick }: UseNotesHoverProps): HoverHandlers {
@@ -193,9 +198,23 @@ onMouseOver: (e: React.MouseEvent<HTMLElement>) => {
           }
         }, 150)
       },
-      onClick: (e: React.MouseEvent<HTMLElement>) => {
+onClick: (e: React.MouseEvent<HTMLElement>) => {
         e.stopPropagation()
-        onElementClick(e, elementType)
+        e.preventDefault()
+        
+        const element = e.currentTarget
+        
+        // Pobierz wszystkie dane z DOM - single source of truth!
+        const domData = {
+          elementId: element.getAttribute('data-element-id') || `fallback_${Date.now()}`,
+          content: element.textContent?.trim() || '',
+          elementType: element.getAttribute('data-element-type') || elementType,
+          clone: element.cloneNode(true) as HTMLElement
+        }
+        
+        console.log('🎯 DOM-first onClick:', domData)
+        
+        onElementClick(e, domData)
       }
     }
   }, [onElementClick, isAnimating, startHoverTracking, stopHoverTracking])

@@ -233,15 +233,19 @@ const regenerateMarkdown = useCallback((sections: ParsedSection[]): string => {
 }, [])
 
 const handleContentSaved = useCallback((element: HTMLElement, newContent: string, elementId?: string) => {
-  console.log(`📝 SAVING: ${newContent.length} chars for element: ${elementId}`)
+  console.log(`📝 SAVING: ${newContent.length} chars for DOM element: ${elementId}`)
   
   if (!newContent.trim()) {
     console.warn('⚠️ Empty content, not saving')
     return
   }
 
-  if (!elementId) {
-    console.warn('⚠️ No elementId provided, cannot replace content')
+  // DOM-first approach: pobierz structural ID z DOM elementu
+  const structuralId = element.getAttribute('data-structural-id') || 
+                       element.closest('[data-structural-id]')?.getAttribute('data-structural-id')
+
+  if (!structuralId) {
+    console.warn('⚠️ No structural ID found in DOM, cannot replace content')
     toast({
       title: "Error",
       description: "Could not identify element to update",
@@ -250,11 +254,28 @@ const handleContentSaved = useCallback((element: HTMLElement, newContent: string
     return
   }
 
-  // Find the element in current parsed sections
-  const foundElement = findElementById(parsedSections, elementId)
+  console.log(`🎯 DOM → Structural mapping: ${elementId} → ${structuralId}`)
+
+  // Debug: log wszystkie ID w parsedSections
+  console.log(`🔍 DEBUG: Available IDs in parsedSections:`)
+  const debugLogIds = (sections: ParsedSection[], prefix = '') => {
+    sections.forEach(section => {
+      console.log(`${prefix}Section: ${section.id}`)
+      section.content.forEach(contentItem => {
+        console.log(`${prefix}  Content: ${contentItem.id}`)
+      })
+      if (section.children.length > 0) {
+        debugLogIds(section.children, prefix + '  ')
+      }
+    })
+  }
+  debugLogIds(parsedSections)
+
+// Find the element in current parsed sections using structural ID
+  const foundElement = findElementById(parsedSections, structuralId)
   
   if (!foundElement) {
-    console.warn(`⚠️ Element ${elementId} not found in current sections`)
+    console.warn(`⚠️ Element ${structuralId} not found in current sections`)
     toast({
       title: "Error", 
       description: "Could not find element to update",
@@ -263,19 +284,76 @@ const handleContentSaved = useCallback((element: HTMLElement, newContent: string
     return
   }
 
+  console.log(`✅ Found element in parsedSections:`, foundElement)
+
   // Create a deep copy of parsed sections for modification
   const updatedSections = JSON.parse(JSON.stringify(parsedSections)) as ParsedSection[]
   
-  // Find and update the element in the copy
-  const updateResult = findElementById(updatedSections, elementId)
+  // Debug: Check if deep copy preserved IDs
+  console.log(`🔍 DEBUG: IDs after deep copy:`)
+  debugLogIds(updatedSections)
+  
+// Debug: Sprawdź dokładnie co się dzieje z findElementById
+  console.log(`🔍 DEEP DEBUG: Searching for ${structuralId} in updatedSections`)
+  console.log(`📊 Original result:`, foundElement)
+  
+  // Find and update the element in the copy  
+  const updateResult = findElementById(updatedSections, structuralId)
+  console.log(`📊 Updated result:`, updateResult)
   
   if (!updateResult) {
-    console.warn('⚠️ Failed to find element in updated sections')
+    console.error('❌ CRITICAL: findElementById failed on identical data structure!')
+    console.log('🔍 Manual search in updatedSections:')
+    
+    // Manual search to find the bug
+    for (const section of updatedSections) {
+      console.log(`  Checking section: ${section.id}`)
+      for (const contentItem of section.content) {
+        console.log(`    Checking content: ${contentItem.id}`)
+        if (contentItem.id === structuralId) {
+          console.log(`    🎯 FOUND IT MANUALLY! contentItem:`, contentItem)
+        }
+      }
+    }
+    
+    toast({
+      title: "Critical Error",
+      description: "findElementById function has a bug",
+      variant: "destructive",
+    })
     return
   }
-
-  // Replace content based on element type
-  if (updateResult.type === 'section' && updateResult.section) {
+// Sprawdź czy to granular edit (DOM elementId != structural ID)
+  const isGranularEdit = elementId.startsWith('li-') || 
+                         elementId.startsWith('p-') || 
+                         elementId.startsWith('ul-') ||
+                         elementId.startsWith('ol-')
+  
+  console.log(`🎯 Edit type: ${isGranularEdit ? 'GRANULAR' : 'STRUCTURAL'}`)
+  
+  if (isGranularEdit && updateResult.type === 'content' && updateResult.contentItem) {
+    // GRANULAR REPLACEMENT - replace only clicked part
+    console.log(`🔄 Granular replacing in: ${updateResult.contentItem.id}`)
+    console.log(`📝 Original content: "${updateResult.contentItem.content}"`)
+    
+    // Get original text from DOM element
+    const originalText = element.textContent?.trim() || ''
+    console.log(`📝 Original text: "${originalText}"`)
+    console.log(`📝 New text: "${newContent.trim()}"`)
+    
+    if (originalText && updateResult.contentItem.content.includes(originalText)) {
+      // Replace only the specific text
+      const updatedContent = updateResult.contentItem.content.replace(originalText, newContent.trim())
+      updateResult.contentItem.content = updatedContent
+      console.log(`📝 Updated content: "${updatedContent}"`)
+    } else {
+      console.warn(`⚠️ Could not find original text "${originalText}" in content`)
+      // Fallback to full replacement
+      updateResult.contentItem.content = newContent.trim()
+    }
+    
+    // Don't change type for granular edits
+  } else  if (updateResult.type === 'section' && updateResult.section) {
     // For sections, parse the new content and replace entire section
     console.log(`🔄 Replacing section: ${updateResult.section.title}`)
     
@@ -329,8 +407,8 @@ const handleContentSaved = useCallback((element: HTMLElement, newContent: string
     updateResult.section.children = []
     
   } else if (updateResult.type === 'content' && updateResult.contentItem) {
-    // For content items, simply replace the content
-    console.log(`🔄 Replacing content item: ${updateResult.contentItem.id}`)
+    // STRUCTURAL CONTENT REPLACEMENT  
+    console.log(`🔄 Structural replacing content item: ${updateResult.contentItem.id}`)
     
     updateResult.contentItem.content = newContent.trim()
     updateResult.contentItem.type = determineContentType(newContent.trim())
@@ -368,30 +446,32 @@ const handleContentSaved = useCallback((element: HTMLElement, newContent: string
     
     return content
   }, [])
-const handleHoverClick = useCallback((event: React.MouseEvent<HTMLElement>, elementType: string) => {
+const handleHoverClick = useCallback((event: React.MouseEvent<HTMLElement>, domData: {
+    elementId: string | null
+    content: string
+    elementType: string
+    clone: HTMLElement
+  }) => {
     // Get openEditModal from the current render context
     const openEditModal = (window as any).currentOpenEditModalForHover
     if (!openEditModal) return
     
-    event.preventDefault()
-    event.stopPropagation()
+    console.log(`🎯 DOM-first handleHoverClick:`, domData)
     
-    const element = event.currentTarget
-    const content = element.textContent || element.innerHTML || ''
-    const visualPreview = element.cloneNode(true) as HTMLElement
-    
-    // Try to extract ID from element attributes (fallback for hover clicks)
-    const elementId = element.getAttribute('data-element-id') || 
-                      element.closest('[data-element-id]')?.getAttribute('data-element-id') ||
-                      undefined
-    
-    console.log(`🎯 HandleHoverClick: Found elementId: ${elementId}`)
-    
-    openEditModal(content, elementType, element, {
-      x: event.clientX,
-      y: event.clientY
-    }, visualPreview, elementId)
+    openEditModal(
+      domData.content,
+      domData.elementType, 
+      event.currentTarget, 
+      {
+        x: event.clientX,
+        y: event.clientY
+      }, 
+      domData.clone, 
+      domData.elementId
+    )
   }, [])
+
+
   const hoverHandlers = useNotesHover({
     isAnimating,
     onElementClick: handleHoverClick
@@ -510,7 +590,8 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
 <HeadingTag
           id={headingId}
           data-section-id={section.id}
-          data-element-id={section.id}  // Add this for hover detection
+          data-element-id={section.id}
+          data-structural-id={section.id} 
           data-content={getSectionContent(section)}
           data-element-type={`complete-section-${section.level}`}
           className={`${getHeadingClasses(section.level)} text-foreground cursor-pointer hover:text-primary transition-colors flex-1 leading-6 flex items-center px-2 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20`}
@@ -556,24 +637,13 @@ const renderSection = useCallback((section: ParsedSection, openEditModal: any): 
       {/* Zawartość sekcji - pokazuj tylko gdy nie jest zwinięta */}
       {!isCollapsed && hasContent && (
         <div className="section-content pl-4" style={{ overflow: 'visible', contain: 'none' }}>
-{/* Section content - każdy element ma własną obsługę kliknięcia */}
+{/* Section content - teraz wszystko przez hoverHandlers */}
 {section.content.map((contentItem) => (
   contentItem.content.trim() && (
     <ContentItemRenderer
       key={contentItem.id}
       contentItem={contentItem}
       hoverHandlers={hoverHandlers}
-      onClick={(e) => {
-        console.log(`🎯 Clicked ContentItem: ${contentItem.id}`)
-        openEditModal(
-          contentItem.content,
-          getContentType(contentItem.content),
-          e.currentTarget, 
-          { x: e.clientX, y: e.clientY }, 
-          e.currentTarget.cloneNode(true) as HTMLElement, 
-          contentItem.id
-        )
-      }}
     />
   )
 ))}
