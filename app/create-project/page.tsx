@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, Upload, FolderPlus } from 'lucide-react'
+import { ArrowLeft, Save, Upload, FolderPlus, Loader } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,12 +12,14 @@ import { useToast } from '@/components/ui/use-toast'
 import { usePreferences } from '@/context/preferences-context'
 import { useTheme } from '@/hooks/use-theme'
 import { motion } from "framer-motion"
+import { useAuth } from '@/context/auth/AuthContext'
 
 export default function CreateProjectPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { t, addProject, darkMode } = usePreferences()
+  const { t, darkMode } = usePreferences()
   const theme = useTheme()
+  const { user } = useAuth()
   
   const [formData, setFormData] = useState({
     projectName: '',
@@ -42,35 +44,67 @@ export default function CreateProjectPage() {
       return
     }
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    try {
+      // First API call to create the project
+      const projectResponse = await fetch("/api/projects/create", {
+        method: "POST",
+        body: JSON.stringify({
+          subject_name: formData.projectName,
+          note_preferences: formData.subject,
+          user_id: user?.id.toString(),
+          description: formData.description,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
 
-    const newProject = {
-      id: Date.now(),
-      name: formData.projectName.trim(),
-      subject: formData.subject.trim(),
-      description: formData.description.trim(),
-      date: new Date().toLocaleDateString(),
-      timestamp: Date.now(),
-      files: files.map(file => file.name),
-      createdAt: new Date().toISOString(),
+      if (!projectResponse.ok) throw new Error("Project creation failed")
+
+      const projectData = await projectResponse.json()
+      const projectId = projectData.projectId
+
+      // Second API call to upload files if any
+      if (files.length > 0) {
+        const uploadData = new FormData()
+        uploadData.append("user_id", user?.id?.toString() || "")
+        uploadData.append("project_id", projectId.toString())
+
+        files.forEach((file) => uploadData.append("attached_files", file))
+
+        const fileResponse = await fetch("/api/projects/upload", {
+          method: "POST",
+          body: uploadData,
+        })
+
+        if (!fileResponse.ok) throw new Error("File upload failed")
+      }
+
+      toast({
+        title: t("projectCreated"),
+        description: t("projectCreatedDescription"),
+      })
+
+      router.push('/')
+    } catch (error) {
+      toast({
+        title: t("error"),
+        description: t("projectCreationFailed"),
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
     }
-
-    addProject(newProject)
-
-    toast({
-      title: t("projectCreated"),
-      description: t("projectCreatedDescription"),
-    })
-
-    setIsSubmitting(false)
-    router.push('/')
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setFiles(Array.from(e.target.files))
     }
+  }
+
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index))
   }
 
   return (
@@ -299,6 +333,15 @@ export default function CreateProjectPage() {
                                 {(file.size / 1024 / 1024).toFixed(2)} MB
                               </p>
                             </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeFile(index)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <ArrowLeft className="h-4 w-4 rotate-45" />
+                            </Button>
                           </div>
                         ))}
                       </div>
@@ -325,7 +368,7 @@ export default function CreateProjectPage() {
                   >
                     {isSubmitting ? (
                       <>
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                        <Loader className="h-5 w-5 animate-spin mr-3" />
                         {t("creating") || "Creating..."}
                       </>
                     ) : (
