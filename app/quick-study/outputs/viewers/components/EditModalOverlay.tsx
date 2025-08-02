@@ -27,7 +27,7 @@ interface EditModalOverlayProps {
 }
 
 export function EditModalOverlay({
-  editModal, onClose, onContentChange, onSave, onReset, hasChanges, sessionId, getCurrentDocumentContent, getParsedSections 
+  editModal, onClose, onContentChange, onSave, onReset, hasChanges, sessionId, getCurrentDocumentContent, getParsedSections
 }: EditModalOverlayProps) {
   const [isAnimating, setIsAnimating] = useState(true)
   const [viewMode, setViewMode] = useState<'visual' | 'edit' | 'ai-processing'>('visual')
@@ -94,7 +94,6 @@ export function EditModalOverlay({
       previewRef.current.appendChild(clonedElement)
     }
   }, [viewMode, editModal.visualPreview])
-
 const handleAIOperation = useCallback(async (operation: AIOperationType) => {
   if (!editModal?.content || !sessionId) {
     console.warn('Missing content or sessionId for AI operation')
@@ -109,67 +108,47 @@ const handleAIOperation = useCallback(async (operation: AIOperationType) => {
     
     setViewMode('ai-processing')
     
-    // NEW: Try ID-based processing first (most reliable)
-    if (editModal.elementId && getParsedSections) {
+    // NEW: Use pre-collected DOM info (no DOM access needed)
+    if (editModal.elementId && getParsedSections && editModal.domInfo) {
+      console.log('🎯 Using pre-collected DOM info for AI processing')
+      
       try {
-        console.log('🎯 Using ID-based intelligent processing (most reliable)')
         const parsedSections = getParsedSections()
         const fullDocument = getCurrentDocumentContent ? getCurrentDocumentContent() : ''
         
-        console.log('📋 ID-based context:', {
-          elementId: editModal.elementId,
-          parsedSectionsCount: parsedSections.length,
-          fullDocumentLength: fullDocument.length,
-          fragmentLength: editModal.content.length
-        })
+        console.log('🎯 Pre-collected DOM info available:', editModal.domInfo)
         
-        // IMPORTANT: Use structured context with ID and parsed sections
+        // Use pre-collected DOM info (no DOM access needed!)
         await processContent(sessionId, operation, editModal.content, {
-          elementId: editModal.elementId,
+          domInfo: editModal.domInfo, // Use pre-collected data
           parsedSections: parsedSections,
-          fullDocument: fullDocument
+          fullDocument: fullDocument,
+          useDOMFirst: true
         })
         
-      } catch (idError) {
-        console.warn('❌ ID-based processing failed, falling back to text-based mode:', idError)
-        // Fallback to text-based intelligent processing
+      } catch (error) {
+        console.warn('❌ Pre-collected DOM processing failed, falling back:', error)
+        // Fallback to text-based processing
         if (getCurrentDocumentContent) {
-          try {
-            const fullDocument = getCurrentDocumentContent()
-            await processContent(sessionId, operation, editModal.content, fullDocument)
-          } catch (textError) {
-            console.warn('❌ Text-based processing also failed, falling back to basic mode:', textError)
-            await processContent(sessionId, operation, editModal.content)
-          }
+          const fullDocument = getCurrentDocumentContent()
+          await processContent(sessionId, operation, editModal.content, fullDocument)
         } else {
           await processContent(sessionId, operation, editModal.content)
         }
       }
-    }
-    // FALLBACK: Text-based intelligent processing
-    else if (getCurrentDocumentContent) {
-      try {
-        console.log('🧠 Using text-based intelligent processing (fallback)')
+    } else {
+      console.log('🔍 No pre-collected DOM info, using fallback:', {
+        hasElementId: !!editModal.elementId,
+        hasGetParsedSections: !!getParsedSections,
+        hasDomInfo: !!editModal.domInfo
+      })
+      // Fallback to basic processing
+      if (getCurrentDocumentContent) {
         const fullDocument = getCurrentDocumentContent()
-        
-        console.log('📋 Text-based context:', {
-          documentLength: fullDocument.length,
-          fragmentLength: editModal.content.length,
-          hasElementId: !!editModal.elementId,
-          hasParsedSections: !!getParsedSections
-        })
-        
         await processContent(sessionId, operation, editModal.content, fullDocument)
-        
-      } catch (contextError) {
-        console.warn('❌ Text-based processing failed, falling back to basic mode:', contextError)
+      } else {
         await processContent(sessionId, operation, editModal.content)
       }
-    } 
-    // BASIC: No context available
-    else {
-      console.log('⚡ Using basic AI processing (no context available)')
-      await processContent(sessionId, operation, editModal.content)
     }
     
   } catch (error) {
@@ -190,46 +169,108 @@ const handleAIOperation = useCallback(async (operation: AIOperationType) => {
     const calculatedHeight = viewportHeight - headerHeight - footerHeight - padding
     return Math.min(400, calculatedHeight, viewportHeight * 0.6)
   }
+// FIXED: Better positioning with DOM stability check + extensive logging
+const getPositioning = () => {
 
-  // FIXED: Better positioning with DOM stability check
-  const getPositioning = () => {
-    if (!editModal.sourceElement) {
+  // FIXED: Always try to find current element by selector first
+  let currentElement = editModal.sourceElement
+  let rect = editModal.originalRect
+
+  if (editModal.elementSelector) {
+    const freshElement = document.querySelector(editModal.elementSelector) as HTMLElement
+    if (freshElement && freshElement.isConnected) {
+      console.log('🎯 Found fresh element via selector - using fresh position')
+      currentElement = freshElement
+      rect = freshElement.getBoundingClientRect()
+    } else {
+      console.log('⚠️ Using cached position from originalRect')
+      currentElement = null
+      rect = editModal.originalRect
+    }
+  } else if (currentElement && currentElement.isConnected) {
+    console.log('🎯 Using original element - fresh position')
+    rect = currentElement.getBoundingClientRect()
+  } else {
+    console.log('⚠️ Using cached position from originalRect')
+    rect = editModal.originalRect
+  }
+
+  const maxHeight = getMaxModalHeight()
+
+  // FALLBACK: If we have no position data at all
+  if (!rect) {
+    console.error('❌ No position data available - using center positioning as last resort')
+    return {
+      position: 'fixed' as const,
+      left: '50%',
+      top: '50%',
+      transform: 'translate(-50%, -50%)',
+      width: 'auto',
+      maxWidth: '800px',
+      maxHeight: maxHeight,
+      ...(fixedModalHeight && { height: `${fixedModalHeight}px` })
+    }
+  }
+
+
+  // Check for invalid positioning and use clickPosition fallback
+  if (rect.left === 0 && rect.top === 0 && rect.width === 0 && rect.height === 0) {
+    console.error('❌ INVALID RECT - Element has zero dimensions/position!')
+
+    
+    // Use clickPosition as fallback for in-place effect
+    if (editModal.clickPosition) {
+      console.log('🎯 Using clickPosition as fallback for in-place effect')
+      const offset = 17
       return {
         position: 'fixed' as const,
-        left: '50%',
-        top: '50%',
-        transform: 'translate(-50%, -50%)',
-        width: 'auto',
-        maxWidth: '800px',
-        maxHeight: getMaxModalHeight(),
-        ...(fixedModalHeight && { height: `${fixedModalHeight}px` }) // NEW: Apply fixed height during AI processing
+        left: editModal.clickPosition.x - offset,
+        top: editModal.clickPosition.y - offset,
+        width: 400,
+        minWidth: 400,
+        maxHeight: maxHeight,
+        ...(fixedModalHeight && { height: `${fixedModalHeight}px` }),
+        transform: isAnimating ? 'scale(1)' : 'scale(1.05)',
+        transformOrigin: 'top left',
+        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        zIndex: 10001
       }
     }
+  }
 
-    // FIXED: Force recalculation of bounding rect to ensure fresh positioning
-    const rect = editModal.sourceElement.getBoundingClientRect()
-    const maxHeight = getMaxModalHeight()
-    
-    // Account for content area padding (16px) and border (1px) = 17px total
+  // Special handling for edit mode - use compact dimensions
+  if (viewMode === 'edit') {
     const offset = 17
-    
     return {
       position: 'fixed' as const,
       left: rect.left - offset,
       top: rect.top - offset,
-      width: rect.width,
-      minWidth: Math.max(rect.width, 400), // Ensure minimum usable width
-      maxHeight: maxHeight,
-      ...(fixedModalHeight && { height: `${fixedModalHeight}px` }), // NEW: Apply fixed height during AI processing
-      transform: isAnimating 
-        ? 'scale(1)' 
-        : 'scale(1.05)', // Subtle pop-out effect
+      width: Math.max(rect.width, 400),
+      height: '280px', // Compact fixed height for edit mode
+      minWidth: 400,
+      transform: isAnimating ? 'scale(1)' : 'scale(1.05)',
       transformOrigin: 'top left',
       transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       zIndex: 10001
     }
   }
 
+  // Normal positioning with element dimensions
+  const offset = 17
+  return {
+    position: 'fixed' as const,
+    left: rect.left - offset,
+    top: rect.top - offset,
+    width: rect.width,
+    minWidth: Math.max(rect.width, 400),
+    maxHeight: maxHeight,
+    ...(fixedModalHeight && { height: `${fixedModalHeight}px` }),
+    transform: isAnimating ? 'scale(1)' : 'scale(1.05)',
+    transformOrigin: 'top left',
+    transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    zIndex: 10001
+  }
+}
   const modalStyle = getPositioning()
   // FIXED: Use fixed height during AI processing, otherwise use calculated max height
   const maxContentHeight = fixedModalHeight 

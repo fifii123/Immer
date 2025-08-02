@@ -286,21 +286,42 @@ export function EditModalProvider({
   ) => {
     console.log(`🎯 Opening edit modal for element: ${elementId}`)
     
-    // FIXED: Add small delay to ensure DOM is fully stable
-    await new Promise(resolve => setTimeout(resolve, 10))
-    
-    // Sprawdź czy potrzebny scroll - bez delay
-    const needsScroll = await scrollToFitModal(sourceElement, elementType, visualPreview)
-    
-    if (needsScroll) {
-      // FIXED: Add small delay after scroll to ensure position is stable
-      await new Promise(resolve => setTimeout(resolve, 20))
-      // Scroll już się zakończył, otwórz modal
-      originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview, elementId)
-    } else {
-      // Bez scroll - instant otwarcie
-      originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview, elementId)
-    }
+// FIXED: Ensure DOM stability before positioning for granular elements
+const isGranularElement = elementId?.startsWith('li-') || 
+                         elementId?.startsWith('p-') || 
+                         elementId?.startsWith('ul-') ||
+                         elementId?.startsWith('ol-');
+
+if (isGranularElement && sourceElement && sourceElement.isConnected) {
+  // Force layout recalculation for granular elements - only if element is in DOM
+  try {
+    // Force reflow by accessing layout properties
+    sourceElement.offsetHeight;
+    sourceElement.offsetWidth;
+    sourceElement.getBoundingClientRect(); // This also forces layout
+  } catch (error) {
+    console.warn('Could not force layout recalculation:', error);
+  }
+  await new Promise(resolve => setTimeout(resolve, 25));
+} else {
+  await new Promise(resolve => setTimeout(resolve, 10));
+}
+
+// Sprawdź czy potrzebny scroll - bez delay
+const needsScroll = await scrollToFitModal(sourceElement, elementType, visualPreview)
+
+if (needsScroll) {
+  // FIXED: Additional delay for granular elements after scroll
+  const scrollDelay = isGranularElement ? 35 : 20;
+  await new Promise(resolve => setTimeout(resolve, scrollDelay));
+  originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview, elementId)
+} else {
+  // Bez scroll - instant otwarcie z dodatkowym delay dla granular
+  if (isGranularElement) {
+    await new Promise(resolve => setTimeout(resolve, 15));
+  }
+  originalOpenEditModal(content, elementType, sourceElement, clickPosition, visualPreview, elementId)
+}
   }, [originalOpenEditModal])
 
   return (

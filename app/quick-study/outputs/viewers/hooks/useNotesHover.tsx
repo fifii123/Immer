@@ -199,23 +199,51 @@ onMouseOver: (e: React.MouseEvent<HTMLElement>) => {
         }, 150)
       },
 onClick: (e: React.MouseEvent<HTMLElement>) => {
-        e.stopPropagation()
-        e.preventDefault()
-        
-        const element = e.currentTarget
-        
-        // Pobierz wszystkie dane z DOM - single source of truth!
-        const domData = {
-          elementId: element.getAttribute('data-element-id') || `fallback_${Date.now()}`,
-          content: element.textContent?.trim() || '',
-          elementType: element.getAttribute('data-element-type') || elementType,
-          clone: element.cloneNode(true) as HTMLElement
-        }
-        
-        console.log('🎯 DOM-first onClick:', domData)
-        
-        onElementClick(e, domData)
-      }
+  e.stopPropagation()
+  e.preventDefault()
+  
+  const element = e.currentTarget
+  
+  console.log('🎯 === CLICK EVENT START ===', {
+    elementType,
+    timestamp: Date.now()
+  })
+  
+  // FIXED: Zbierz WSZYSTKIE potrzebne dane DOM TERAZ (gdy element jest connected)
+  const elementId = element.getAttribute('data-element-id') || `fallback_${Date.now()}`
+  const structuralId = element.getAttribute('data-structural-id') || 
+                       element.closest('[data-structural-id]')?.getAttribute('data-structural-id')
+  const domElementType = element.getAttribute('data-element-type') || elementType
+  const textContent = element.textContent?.trim() || ''
+  
+  console.log('🔍 Collecting DOM data at click time:', {
+    elementId,
+    structuralId,
+    domElementType,
+    isConnected: element.isConnected,
+    hasTextContent: !!textContent
+  })
+  
+  // Create domData with ALL info needed for AI
+  const domData = {
+    elementId,
+    content: textContent,
+    elementType: domElementType,
+    clone: element.cloneNode(true) as HTMLElement,
+    sourceElement: element,
+    // NEW: Pre-collected DOM info for AI
+    domInfo: structuralId ? {
+      domElementId: elementId,
+      structuralId,
+      elementType: domElementType,
+      content: textContent
+    } : null
+  }
+  
+  console.log('🎯 DOM-first onClick - complete domData:', domData)
+  
+  onElementClick(e, domData)
+}
     }
   }, [onElementClick, isAnimating, startHoverTracking, stopHoverTracking])
 

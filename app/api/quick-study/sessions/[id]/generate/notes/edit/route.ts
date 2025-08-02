@@ -20,8 +20,10 @@ export async function POST(
       context,
       editContext,
       fullDocument,  // LEGACY: full document for intelligent context
-      elementId,     // NEW: element ID for precise context
-      parsedSections // NEW: parsed sections structure from frontend
+      elementId,     // LEGACY: element ID for precise context
+      parsedSections, // LEGACY: parsed sections structure from frontend
+      domInfo,       // NEW: frontend-prepared DOM info
+      useDOMFirst    // NEW: flag for DOM-first processing
     }: {
       operation: 'expand' | 'improve' | 'summarize'
       content: string
@@ -30,6 +32,13 @@ export async function POST(
       fullDocument?: string
       elementId?: string
       parsedSections?: any[]
+      domInfo?: {
+        domElementId: string,
+        structuralId: string,
+        elementType: string,
+        content: string
+      } | null
+      useDOMFirst?: boolean
     } = body
 
     // Walidacja
@@ -41,23 +50,42 @@ export async function POST(
     }
 
     console.log(`🔄 Processing ${operation} operation for session ${params.id}`)
-    console.log(`📊 Enhanced AI mode: ${elementId && parsedSections ? 'ID_BASED' : fullDocument ? 'INTELLIGENT' : editContext ? 'CONTEXTUAL' : context ? 'BASIC' : 'LEGACY'}`)
+    console.log(`📊 Enhanced AI mode: ${useDOMFirst && domInfo ? 'DOM_FIRST' : elementId && parsedSections ? 'ID_BASED' : fullDocument ? 'INTELLIGENT' : editContext ? 'CONTEXTUAL' : context ? 'BASIC' : 'LEGACY'}`)
 
     let userPrompt: string
     let systemPrompt: string
     let contextInfo: any = { mode: 'legacy' }
 
-    // NEW: ID-based intelligent context (most reliable)
-    if (elementId && parsedSections && Array.isArray(parsedSections)) {
-      console.log('🎯 Using ID-based intelligent processing (most reliable)')
-      
-      try {
-        // Extract context using element ID and parsed structure
-        const intelligentContext = MinimalContextService.getEditContextByElementId(
-          elementId, 
-          parsedSections, 
-          fullDocument || ''
-        )
+    // NEW: DOM-first with frontend-prepared data (most reliable)
+   // NEW: DOM-first with frontend-prepared data (most reliable)
+if (useDOMFirst && domInfo && parsedSections) {
+  console.log('🎯 Using DOM-first with frontend-prepared data (no server DOM needed)')
+  console.log('📍 ELEMENT DETAILS:')
+  console.log(`   - DOM Element ID: ${domInfo.domElementId}`)
+  console.log(`   - Structural ID: ${domInfo.structuralId}`)
+  console.log(`   - Element Type: ${domInfo.elementType}`)
+  console.log(`   - Content Length: ${domInfo.content.length} chars`)
+  console.log(`   - Content Preview: "${domInfo.content.substring(0, 100)}${domInfo.content.length > 100 ? '...' : ''}"`)
+  console.log(`   - Parsed Sections Count: ${parsedSections.length}`)
+  console.log(`   - Full Document Length: ${fullDocument?.length || 0} chars`)
+  
+  try {
+    // Use frontend-prepared DOM info (no document.querySelector needed)
+    const intelligentContext = MinimalContextService.getEditContextFromDOMInfo(
+      domInfo,  // Frontend-prepared DOM info
+      parsedSections, 
+      fullDocument || ''
+    )
+    
+    console.log('🔍 CONTEXT EXTRACTED:')
+    console.log(`   - Fragment Type: ${intelligentContext.editingContext.fragmentType}`)
+    console.log(`   - Detail Level: ${intelligentContext.editingContext.suggestedDetailLevel}`)
+    console.log(`   - Section: "${intelligentContext.fragmentPosition.sectionTitle}"`)
+    console.log(`   - Position in Section: ${intelligentContext.fragmentPositionInSection.paragraphIndex + 1}/${intelligentContext.fragmentPositionInSection.totalParagraphs}`)
+    console.log(`   - Before Content: ${intelligentContext.fragmentPositionInSection.beforeFragment ? 'YES' : 'NO'}`)
+    console.log(`   - After Content: ${intelligentContext.fragmentPositionInSection.afterFragment ? 'YES' : 'NO'}`)
+    
+
         
         // Create intelligent prompt
         userPrompt = MinimalContextService.createIntelligentPrompt(operation, intelligentContext)
@@ -82,71 +110,103 @@ NIE myślisz: "Co wiem o tym temacie?"
 - **pogrubienie** dla kluczowych terminów
 - *kursywa* dla podkreśleń
 - $LaTeX$ dla wzorów matematycznych
-- Listy (-) i numerowanie (1.) gdy naturalne
-- Bloki cytat (>) dla definicji
+- Listy (-) i numerowanie (1.)
 
-🚫 ABSOLUTE NEVER LIST:
-- Tytuły/nagłówki (jeśli nie edytujesz nagłówka)
-- "W tej sekcji", "Oto wyjaśnienie", "Podsumowując"
-- Duplikowanie treści z kontekstu
-- Ignorowanie tego co jest bezpośrednio PRZED i POTEM
-- Tworzenie treści "od zera" zamiast kontynuacji
+🚫 ZABRONIONE:
+- "Oto rozwinięcie..." / "Here's an expansion..."
+- "W kontekście tego tematu..." / "In the context of..."
+- "Warto dodać, że..." / "It's worth adding..."
+- "Możemy również..." / "We can also..."
+- Wprowadzenia i podsumowania
+- Meta-komentarze o tym co robisz
 
-🎯 SUCCESS METRIC:
-Czytelnik nie może rozpoznać gdzie kończy się oryginał a zaczyna Twoja edycja.
-
-Odpowiadaj TYLKO przepracowanym fragmentem, bez meta-komentarzy.`
-
-        contextInfo = {
-          mode: 'id_based',
-          elementId: elementId,
-          fragmentType: intelligentContext.editingContext.fragmentType,
-          detailLevel: intelligentContext.editingContext.suggestedDetailLevel,
-          styleContext: intelligentContext.editingContext.styleContext
-        }
-
-        console.log(`📋 ID-based context info:`)
-        console.log(`   - Element ID: ${elementId}`)
-        console.log(`   - Fragment: ${intelligentContext.editingContext.fragmentType}`)
-        console.log(`   - Detail: ${intelligentContext.editingContext.suggestedDetailLevel}`)
-        console.log(`   - Style: ${intelligentContext.editingContext.styleContext.toneLevel}`)
-        console.log(`   - Math: ${intelligentContext.editingContext.styleContext.isMathematical}`)
-        console.log(`   - Max header level: ${intelligentContext.editingContext.structuralConstraints.maxHeaderLevel}`)
+✅ WYMAGANE:
+- Bezpośrednie wejście w treść
+- Płynne przejście z poprzedniego fragmentu
+- Naturalne prowadzenie do następnego fragmentu
+- Dokładnie ten sam styl i ton co otaczający tekst`
         
-        // NEW: Log the complete prompt being sent to AI
-        console.log('🔍 COMPLETE PROMPT BEING SENT TO AI (ID-BASED):')
-        console.log('='.repeat(80))
-        console.log('SYSTEM PROMPT:')
-        console.log(systemPrompt)
-        console.log('='.repeat(80))
-        console.log('USER PROMPT:')
-        console.log(userPrompt)
-        console.log('='.repeat(80))
+        contextInfo = { 
+          mode: 'dom_first_universal', 
+          fragmentType: intelligentContext.editingContext.fragmentType,
+          detailLevel: intelligentContext.editingContext.suggestedDetailLevel
+        }
         
       } catch (error) {
-        console.error('❌ Failed to extract ID-based context:', error)
+        console.error('❌ Failed to extract DOM-first context:', error)
+        
+        // Fallback to legacy ID-based mode
+        if (elementId && parsedSections) {
+          console.log('🔄 Falling back to legacy ID-based mode')
+          try {
+            const intelligentContext = MinimalContextService.getEditContextByElementId(
+              elementId, 
+              parsedSections, 
+              fullDocument || ''
+            )
+            userPrompt = MinimalContextService.createIntelligentPrompt(operation, intelligentContext)
+            systemPrompt = getEnhancedSystemPrompt()
+            contextInfo = { mode: 'id_based_fallback', fragmentType: intelligentContext.editingContext.fragmentType }
+          } catch (idError) {
+            console.log('🔄 Falling back to text-based mode')
+            userPrompt = getBasicPrompt(operation, content, context)
+            systemPrompt = getBasicSystemPrompt()
+            contextInfo = { mode: 'basic_fallback' }
+          }
+        } else {
+          console.log('🔄 Falling back to basic mode')
+          userPrompt = getBasicPrompt(operation, content, context)
+          systemPrompt = getBasicSystemPrompt()
+          contextInfo = { mode: 'basic_fallback' }
+        }
+      }
+    }
+    // LEGACY: ID-based intelligent context (may fail with document error)
+    else if (elementId && parsedSections && Array.isArray(parsedSections)) {
+      console.log('🎯 Using LEGACY ID-based intelligent processing (may fail)')
+      
+      try {
+        // This will likely fail because it tries to access document on server
+        const intelligentContext = MinimalContextService.getEditContextByElementId(
+          elementId, 
+          parsedSections, 
+          fullDocument || ''
+        )
+        
+        userPrompt = MinimalContextService.createIntelligentPrompt(operation, intelligentContext)
+        systemPrompt = getEnhancedSystemPrompt()
+        contextInfo = { 
+          mode: 'id_based_legacy', 
+          fragmentType: intelligentContext.editingContext.fragmentType,
+          detailLevel: intelligentContext.editingContext.suggestedDetailLevel
+        }
+        
+      } catch (error) {
+        console.error('❌ Failed to extract legacy ID-based context:', error)
+        
         // Fallback to text-based intelligent mode
         if (fullDocument) {
           console.log('🔄 Falling back to text-based intelligent mode')
           try {
             const intelligentContext = MinimalContextService.getEditContext(content, fullDocument)
             userPrompt = MinimalContextService.createIntelligentPrompt(operation, intelligentContext)
+            systemPrompt = getEnhancedSystemPrompt()
             contextInfo = { mode: 'intelligent_fallback', fragmentType: intelligentContext.editingContext.fragmentType }
           } catch (textError) {
             console.log('🔄 Falling back to basic mode')
             userPrompt = getBasicPrompt(operation, content, context)
+            systemPrompt = getBasicSystemPrompt()
             contextInfo = { mode: 'basic_fallback' }
           }
         } else {
           console.log('🔄 Falling back to basic mode')
           userPrompt = getBasicPrompt(operation, content, context)
+          systemPrompt = getBasicSystemPrompt()
           contextInfo = { mode: 'basic_fallback' }
         }
-        
-        systemPrompt = getBasicSystemPrompt()
       }
     }
-    // FALLBACK: Text-based intelligent context
+    // LEGACY: Text-based intelligent context
     else if (fullDocument) {
       console.log('🧠 Using intelligent document-aware editing')
       
@@ -158,39 +218,7 @@ Odpowiadaj TYLKO przepracowanym fragmentem, bez meta-komentarzy.`
         userPrompt = MinimalContextService.createIntelligentPrompt(operation, intelligentContext)
         
         // Enhanced system prompt for invisible editing
-        systemPrompt = `Jesteś SEAMLESS CONTINUATION ENGINE - inteligentnym autocomplete dla dokumentów.
-
-🧠 CORE MINDSET:
-Nie jesteś "domain expertem" ani "tutorialem" - jesteś niewidzialnym łącznikiem między fragmentami tekstu.
-
-🎯 TWOJA MISJA:
-Myślisz TYLKO: "Jak gładko przejść z tego co jest PRZED do tego co jest POTEM?"
-NIE myślisz: "Co wiem o tym temacie?"
-
-🔍 POZYCYJNA ŚWIADOMOŚĆ:
-- Fragment type: ${intelligentContext.editingContext.fragmentType}
-- Detail level: ${intelligentContext.editingContext.suggestedDetailLevel}  
-- Style context: ${intelligentContext.editingContext.styleContext.toneLevel}
-- Mathematical content: ${intelligentContext.editingContext.styleContext.isMathematical}
-
-📝 FORMATOWANIE (gdy potrzebne):
-- **pogrubienie** dla kluczowych terminów
-- *kursywa* dla podkreśleń
-- $LaTeX$ dla wzorów matematycznych
-- Listy (-) i numerowanie (1.) gdy naturalne
-- Bloki cytat (>) dla definicji
-
-🚫 ABSOLUTE NEVER LIST:
-- Tytuły/nagłówki (jeśli nie edytujesz nagłówka)
-- "W tej sekcji", "Oto wyjaśnienie", "Podsumowując"
-- Duplikowanie treści z kontekstu
-- Ignorowanie tego co jest bezpośrednio PRZED i POTEM
-- Tworzenie treści "od zera" zamiast kontynuacji
-
-🎯 SUCCESS METRIC:
-Czytelnik nie może rozpoznać gdzie kończy się oryginał a zaczyna Twoja edycja.
-
-Odpowiadaj TYLKO przepracowanym fragmentem, bez meta-komentarzy.`
+        systemPrompt = getEnhancedSystemPrompt()
 
         contextInfo = {
           mode: 'intelligent',
@@ -204,17 +232,6 @@ Odpowiadaj TYLKO przepracowanym fragmentem, bez meta-komentarzy.`
         console.log(`   - Detail: ${intelligentContext.editingContext.suggestedDetailLevel}`)
         console.log(`   - Style: ${intelligentContext.editingContext.styleContext.toneLevel}`)
         console.log(`   - Math: ${intelligentContext.editingContext.styleContext.isMathematical}`)
-        console.log(`   - Max header level: ${intelligentContext.editingContext.structuralConstraints.maxHeaderLevel}`)
-        
-        // NEW: Log the complete prompt being sent to AI
-        console.log('🔍 COMPLETE PROMPT BEING SENT TO AI:')
-        console.log('='.repeat(80))
-        console.log('SYSTEM PROMPT:')
-        console.log(systemPrompt)
-        console.log('='.repeat(80))
-        console.log('USER PROMPT:')
-        console.log(userPrompt)
-        console.log('='.repeat(80))
         
       } catch (error) {
         console.error('❌ Failed to extract intelligent context:', error)
@@ -232,7 +249,7 @@ Odpowiadaj TYLKO przepracowanym fragmentem, bez meta-komentarzy.`
         systemPrompt = getBasicSystemPrompt()
       }
     } 
-    // FALLBACK: Contextual editing (existing system)
+    // LEGACY: Contextual editing (existing system)
     else if (editContext) {
       console.log('🎯 Using contextual prompt with document awareness')
       userPrompt = MinimalContextService.createIntelligentPrompt(operation, editContext)
@@ -255,7 +272,7 @@ Odpowiadaj TYLKO przepracowanym fragmentem, bez meta-komentarzy.`
       contextInfo = { mode: 'basic' }
     }
 
-    // CREATE STREAMING RESPONSE (RESTORED ORIGINAL FUNCTIONALITY)
+    // CREATE STREAMING RESPONSE
     const stream = new ReadableStream({
       async start(controller) {
         try {
@@ -292,7 +309,7 @@ Odpowiadaj TYLKO przepracowanym fragmentem, bez meta-komentarzy.`
             type: 'complete', 
             fullContent: fullResponse,
             operation: operation,
-            contextInfo: contextInfo  // NEW: Include context info for debugging
+            contextInfo: contextInfo  // Include context info for debugging
           })
           controller.enqueue(new TextEncoder().encode(`data: ${completeData}\n\n`))
           controller.close()
@@ -331,6 +348,32 @@ Odpowiadaj TYLKO przepracowanym fragmentem, bez meta-komentarzy.`
   }
 }
 
+// HELPER: Enhanced system prompt for intelligent modes
+function getEnhancedSystemPrompt(): string {
+  return `Jesteś SEAMLESS CONTINUATION ENGINE - inteligentnym autocomplete dla dokumentów.
+
+🧠 CORE MINDSET:
+Nie jesteś "domain expertem" ani "tutorialem" - jesteś niewidzialnym łącznikiem między fragmentami tekstu.
+
+🎯 TWOJA MISJA:
+Myślisz TYLKO: "Jak gładko przejść z tego co jest PRZED do tego co jest POTEM?"
+NIE myślisz: "Co wiem o tym temacie?"
+
+🚫 ZABRONIONE:
+- "Oto rozwinięcie..." / "Here's an expansion..."
+- "W kontekście tego tematu..." / "In the context of..."
+- "Warto dodać, że..." / "It's worth adding..."
+- "Możemy również..." / "We can also..."
+- Wprowadzenia i podsumowania
+- Meta-komentarze o tym co robisz
+
+✅ WYMAGANE:
+- Bezpośrednie wejście w treść
+- Płynne przejście z poprzedniego fragmentu
+- Naturalne prowadzenie do następnego fragmentu
+- Dokładnie ten sam styl i ton co otaczający tekst`
+}
+
 // HELPER: Basic system prompt for fallback modes
 function getBasicSystemPrompt(): string {
   return `Jesteś ekspertem w przetwarzaniu treści edukacyjnych. 
@@ -347,7 +390,7 @@ FORMATOWANIE:
 Odpowiadaj zawsze w języku polskim.`
 }
 
-// HELPER: Basic prompts for legacy mode (RESTORED FROM ORIGINAL)
+// HELPER: Basic prompts for legacy mode
 function getBasicPrompt(operation: 'expand' | 'improve' | 'summarize', content: string, context?: string): string {
   const baseContext = context ? `\n\nKONTEKST:\n${context}` : ''
   

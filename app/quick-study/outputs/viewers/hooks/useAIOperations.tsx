@@ -18,131 +18,173 @@ export function useAIOperations() {
     error: null
   })
 
-  const processContent = useCallback(async (
-    sessionId: string,
-    operation: AIOperationType,
-    content: string,
-    contextOrFullDocumentOrStructure?: string | EditContext | {
-      fullDocument: string,
-      parsedSections: any[],
-      elementId: string
-    }  // NEW: Support structured context with ID and parsed sections
-  ) => {
-    console.log(`🚀 Starting AI operation: ${operation}`)
-    console.log(`📊 Context type: ${typeof contextOrFullDocumentOrStructure} (${contextOrFullDocumentOrStructure ? 'provided' : 'none'})`)
-    
-    setOperationState({
-      isProcessing: true,
-      content: '',
+const processContent = useCallback(async (
+  sessionId: string,
+  operation: AIOperationType,
+  content: string,
+  contextOrDOMContext?: string | EditContext | {
+    domInfo: {
+      domElementId: string,
+      structuralId: string,
+      elementType: string,
+      content: string
+    } | null,
+    parsedSections: any[],
+    fullDocument: string,
+    useDOMFirst: boolean
+  }
+) => {
+  console.log(`🚀 Starting AI operation: ${operation}`)
+  console.log(`📊 Context type: ${typeof contextOrDOMContext} (${contextOrDOMContext ? 'provided' : 'none'})`)
+  
+  setOperationState({
+    isProcessing: true,
+    content: '',
+    operation,
+    error: null
+  })
+
+  try {
+    // Determine request body format based on context type
+    let requestBody: any = {
       operation,
-      error: null
+      content
+    }
+
+    // NEW: DOM-first mode with frontend-prepared data
+    if (typeof contextOrDOMContext === 'object' && 
+        contextOrDOMContext !== null &&
+        'useDOMFirst' in contextOrDOMContext) {
+      
+      console.log('🌟 Using DOM-first with frontend-prepared data')
+      console.log('🎯 DOM Info being sent to API:', contextOrDOMContext.domInfo)
+      
+      requestBody.domInfo = contextOrDOMContext.domInfo
+      requestBody.parsedSections = contextOrDOMContext.parsedSections
+      requestBody.fullDocument = contextOrDOMContext.fullDocument
+      requestBody.useDOMFirst = true
+      
+    } else if (typeof contextOrDOMContext === 'string') {
+      // LEGACY: fullDocument mode - text-based intelligent processing
+      console.log('🧠 Using fullDocument for text-based intelligent processing')
+      requestBody.fullDocument = contextOrDOMContext
+      
+    } else if (typeof contextOrDOMContext === 'object' && contextOrDOMContext !== null) {
+      // LEGACY: editContext mode - structured context
+      console.log('📋 Using structured editContext')
+      requestBody.editContext = contextOrDOMContext
+      
+    } else {
+      // BASIC: No context
+      console.log('⚡ Using basic processing (no context)')
+    }
+
+    const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate/notes/edit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody)
     })
 
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+
+    if (!response.body) {
+      throw new Error('No response body')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let fullContent = ''
+
     try {
-      // NEW: Determine request body format based on context type
-      let requestBody: any = {
-        operation,
-        content
-      }
-
-      if (typeof contextOrFullDocumentOrStructure === 'object' && 
-          contextOrFullDocumentOrStructure !== null &&
-          'parsedSections' in contextOrFullDocumentOrStructure) {
-        // NEW: ID-based mode - most reliable
-        console.log('🎯 Using elementId + parsedSections for ID-based processing')
-        requestBody.elementId = contextOrFullDocumentOrStructure.elementId
-        requestBody.parsedSections = contextOrFullDocumentOrStructure.parsedSections
-        requestBody.fullDocument = contextOrFullDocumentOrStructure.fullDocument // Also pass for fallback
-      } else if (typeof contextOrFullDocumentOrStructure === 'string') {
-        // LEGACY: fullDocument mode - text-based intelligent processing
-        console.log('🧠 Using fullDocument for text-based intelligent processing')
-        requestBody.fullDocument = contextOrFullDocumentOrStructure
-      } else if (typeof contextOrFullDocumentOrStructure === 'object' && contextOrFullDocumentOrStructure !== null) {
-        // LEGACY: editContext mode - contextual processing
-        console.log('🎯 Using editContext for contextual processing')
-        requestBody.editContext = contextOrFullDocumentOrStructure
-      } else {
-        // FALLBACK: basic mode
-        console.log('⚡ Using basic processing mode')
-        requestBody.context = undefined
-      }
-
-      const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate/notes/edit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`API Error: ${response.status} - ${errorText}`)
-      }
-
-      const reader = response.body?.getReader()
-      if (!reader) {
-        throw new Error('No response stream available')
-      }
-
-      let fullContent = ''
-
       while (true) {
         const { done, value } = await reader.read()
         
         if (done) break
-
-        const chunk = new TextDecoder().decode(value)
-        const lines = chunk.split('\n\n')
-
+        
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n')
+        
         for (const line of lines) {
           if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            
+            if (data === '[DONE]') {
+              setOperationState(prev => ({
+                ...prev,
+                isProcessing: false,
+                content: fullContent
+              }))
+              return
+            }
+            
             try {
-              const data = JSON.parse(line.slice(6))
+              const parsed = JSON.parse(data)
               
-              if (data.type === 'chunk') {
-                fullContent += data.content
+              // Handle new streaming format
+              if (parsed.type === 'chunk' && parsed.content) {
+                const deltaContent = parsed.content
+                fullContent += deltaContent
                 
                 setOperationState(prev => ({
                   ...prev,
                   content: fullContent
                 }))
-                
-              } else if (data.type === 'complete') {
-                console.log(`✅ AI operation completed: ${operation}`)
-                console.log(`📋 Context info:`, data.contextInfo || 'No context info')
+              } else if (parsed.type === 'complete') {
+                console.log(`✅ AI operation completed:`, {
+                  operation: parsed.operation,
+                  contextInfo: parsed.contextInfo,
+                  contentLength: parsed.fullContent?.length
+                })
                 
                 setOperationState(prev => ({
                   ...prev,
                   isProcessing: false,
-                  content: data.fullContent
+                  content: parsed.fullContent || fullContent
                 }))
+                return
+              } else if (parsed.type === 'error') {
+                throw new Error(parsed.message || 'AI processing failed')
+              }
+              // LEGACY: Handle old format
+              else if (parsed.choices?.[0]?.delta?.content) {
+                const deltaContent = parsed.choices[0].delta.content
+                fullContent += deltaContent
                 
-                return data.fullContent
-                
-              } else if (data.type === 'error') {
-                throw new Error(data.message || 'Unknown error')
+                setOperationState(prev => ({
+                  ...prev,
+                  content: fullContent
+                }))
               }
             } catch (parseError) {
-              console.warn('Error parsing stream data:', parseError)
-              continue
+              console.warn('Failed to parse streaming data:', parseError)
             }
           }
         }
       }
-
-    } catch (error) {
-      console.error('❌ AI operation failed:', error)
-      
-      setOperationState(prev => ({
-        ...prev,
-        isProcessing: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }))
-      
-      throw error
+    } finally {
+      reader.releaseLock()
     }
-  }, [])
+
+    setOperationState(prev => ({
+      ...prev,
+      isProcessing: false,
+      content: fullContent
+    }))
+
+  } catch (error) {
+    console.error('AI operation failed:', error)
+    setOperationState({
+      isProcessing: false,
+      content: '',
+      operation: null,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    })
+  }
+}, [])
 
   const resetOperation = useCallback(() => {
     setOperationState({

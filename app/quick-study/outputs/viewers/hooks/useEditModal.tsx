@@ -9,7 +9,15 @@ export interface EditModalState {
   sourceElement: HTMLElement | null
   clickPosition: { x: number; y: number } | null
   visualPreview?: HTMLElement | null
-  elementId: string | null  // Add element ID
+  elementId: string | null
+  elementSelector: string | null
+  originalRect: DOMRect | null  // NEW: Store original position
+   domInfo?: {
+    domElementId: string,
+    structuralId: string,
+    elementType: string,
+    content: string
+  } | null  // NEW: Pre-collected DOM info
 }
 
 export function useEditModal() {
@@ -21,9 +29,16 @@ export function useEditModal() {
     sourceElement: HTMLElement,
     clickPosition: { x: number; y: number },
     visualPreview?: HTMLElement,
-    elementId?: string  // Add element ID parameter
+    elementId?: string,
+    domInfo?: {
+      domElementId: string,
+      structuralId: string,
+      elementType: string,
+      content: string
+    } | null  // NEW: Accept pre-collected DOM info
   ) => {
     console.log(`🎯 useEditModal: Opening modal for element: ${elementId}`)
+    console.log(`🎯 Pre-collected DOM info:`, domInfo)
     
     // Create a clean visual preview if provided
     let cleanedPreview: HTMLElement | undefined = undefined
@@ -56,6 +71,12 @@ export function useEditModal() {
       })
     }
 
+    // Create CSS selector for reliable element finding
+    const elementSelector = elementId ? `[data-element-id="${elementId}"]` : null
+
+    // FIXED: Capture original position immediately when modal opens
+    const originalRect = sourceElement.getBoundingClientRect()
+
     setEditModal({
       isOpen: true,
       content,
@@ -64,7 +85,10 @@ export function useEditModal() {
       sourceElement,
       clickPosition,
       visualPreview: cleanedPreview || null,
-      elementId: elementId || null  // Store the ID
+      elementId: elementId || null,
+      elementSelector,
+      originalRect,
+      domInfo  // NEW: Store pre-collected DOM info
     })
   }, [])
 
