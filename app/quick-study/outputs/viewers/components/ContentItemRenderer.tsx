@@ -55,23 +55,11 @@ export function ContentItemRenderer({
   
   // Create markdown components WITHOUT their own IDs
 const markdownComponents = {
-    p: ({ node, children, ...props }: any) => {
-      const elementId = `p-${Math.random().toString(36).substr(2, 9)}`
-      const handlers = hoverHandlers.createHoverHandler('paragraph', '34, 197, 94')
-      
-      return (
-        <p
-          data-element-id={elementId}
-          data-structural-id={id}
-          data-element-type="paragraph"
-          className="mb-4 leading-relaxed text-foreground cursor-pointer section-content-element relative"
-          {...handlers}
-          {...props}
-        >
-          {children}
-        </p>
-      )
-    },
+p: ({ node, children, ...props }: any) => (
+  <p className="mb-4 leading-relaxed text-foreground" {...props}>
+    {children}
+  </p>
+),
 
     ul: ({ node, children, ...props }: any) => {
       const elementId = `ul-${Math.random().toString(36).substr(2, 9)}`
@@ -108,24 +96,11 @@ const markdownComponents = {
         </ol>
       )
     },
-
-    li: ({ node, children, ...props }: any) => {
-      const elementId = `li-${Math.random().toString(36).substr(2, 9)}`
-      const handlers = hoverHandlers.createHoverHandler('list-item', '168, 85, 247')
-      
-      return (
-        <li 
-          data-element-id={elementId}
-          data-structural-id={id}
-          data-element-type="list-item"
-          className="text-foreground leading-relaxed cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors rounded px-2 py-1 -mx-2 -my-1"
-          {...handlers}
-          {...props}
-        >
-          {children}
-        </li>
-      )
-    },
+li: ({ node, children, ...props }: any) => (
+  <li className="text-foreground leading-relaxed" {...props}>
+    {children}
+  </li>
+),
 
     table: ({ node, children, ...props }: any) => {
       const elementId = `table-${Math.random().toString(36).substr(2, 9)}`

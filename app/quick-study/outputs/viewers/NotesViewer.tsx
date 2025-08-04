@@ -116,25 +116,105 @@ export default function NotesViewer({ output, selectedSource, sessionId }: Notes
     const sections: ParsedSection[] = []
     const stack: ParsedSection[] = []
     let currentContent: string[] = []
+// Semantic block splitting - CORE FIX
 
-    const flushContent = () => {
-      if (currentContent.length > 0) {
-        const target = stack.length > 0 ? 
-          stack[stack.length - 1] : 
-          null
-        
-        if (target) {
-          const joinedContent = currentContent.join('\n')
-          // Create ContentItem with ID and type
-          target.content.push({
-            id: generateContentId(),
-            content: joinedContent,
-            type: determineContentType(joinedContent)
-          })
-        }
-        currentContent = []
+const splitIntoSemanticBlocks = (lines: string[]): Array<{content: string, type: ContentItem['type']}> => {
+  const blocks: Array<{content: string, type: ContentItem['type']}> = []
+  let currentBlock: string[] = []
+  let blockType: ContentItem['type'] | null = null
+  
+  const finishBlock = () => {
+    if (currentBlock.length > 0 && blockType) {
+      const content = currentBlock.join('\n').trim()
+      if (content) {
+        blocks.push({ content, type: blockType })
       }
+      currentBlock = []
+      blockType = null
     }
+  }
+  
+  let inCodeBlock = false
+  
+  for (const line of lines) {
+    const trimmedLine = line.trim()
+    
+    // Handle code blocks first
+    if (trimmedLine.startsWith('```')) {
+      if (!inCodeBlock) {
+        if (blockType && blockType !== 'code') finishBlock()
+        inCodeBlock = true
+        blockType = 'code'
+        currentBlock.push(line)
+      } else {
+        currentBlock.push(line)
+        finishBlock()
+        inCodeBlock = false
+      }
+      continue
+    }
+    
+    if (inCodeBlock) {
+      currentBlock.push(line)
+      continue
+    }
+    
+    // Determine line type
+    let lineType: ContentItem['type'] | 'empty' = 'empty'
+    if (!trimmedLine) {
+      lineType = 'empty'
+    } else if (trimmedLine.startsWith('> ')) {
+      lineType = 'quote'
+    } else if (trimmedLine.match(/^[-*+]\s/) || trimmedLine.match(/^\d+\.\s/)) {
+      lineType = 'list'
+    } else if (trimmedLine.includes('|') && trimmedLine.split('|').length >= 3) {
+      lineType = 'other'
+    } else if (trimmedLine) {
+      lineType = 'paragraph'
+    }
+    
+    // Handle line
+    if (lineType === 'empty') {
+      if (currentBlock.length > 0) {
+        currentBlock.push(line)
+      }
+    } else {
+      if (blockType && blockType !== lineType) {
+        finishBlock()
+      }
+      currentBlock.push(line)
+      blockType = lineType
+    }
+  }
+  
+  finishBlock()
+  return blocks
+}
+const flushContent = () => {
+  if (currentContent.length > 0) {
+    const target = stack.length > 0 ? stack[stack.length - 1] : null
+    
+    if (target) {
+      // SEMANTIC SPLIT: Parse mixed content into semantic blocks
+      const semanticBlocks = splitIntoSemanticBlocks(currentContent)
+      
+      // Create separate ContentItem for each semantic block
+semanticBlocks.forEach((block, index) => {
+  console.log(`Block ${index}:`, {
+    type: block.type,
+    content: block.content.substring(0, 50) + '...'
+  })
+  
+  target.content.push({
+    id: generateContentId(),
+    content: block.content,
+    type: block.type
+  })
+})
+    }
+    currentContent = []
+  }
+}
 
     for (const line of lines) {
       const headingMatch = line.match(/^(#{1,6})\s+(.+)$/)
@@ -254,8 +334,9 @@ const handleContentSaved = useCallback((element: HTMLElement, newContent: string
     return
   }
 
-  // Find element in parsed sections
-  const updateResult = findElementById(parsedSections, structuralId)
+console.log('Trying to find element ID:', structuralId)
+const updateResult = findElementById(parsedSections, structuralId)
+console.log('Found:', updateResult)
   if (!updateResult) {
     console.warn(`⚠️ Element ${structuralId} not found in current sections`)
     toast({
@@ -341,6 +422,7 @@ const handleContentSaved = useCallback((element: HTMLElement, newContent: string
     title: "Changes saved",
     description: "Content has been updated successfully",
   })
+  
   
 }, [toast, parsedSections, findElementById, regenerateMarkdown, generateContentId, determineContentType])
 
