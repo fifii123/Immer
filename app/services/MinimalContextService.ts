@@ -163,116 +163,9 @@ private static classifyFromDOMInfo(element: any, domInfo: any): {
       }
   }
 }
-  /**
-   * NEW: Classify element using both DOM attributes and content (more accurate than content-only)
-   */
-  private static classifyFromDOMAndContent(element: any, domElement: HTMLElement): {
-    fragmentType: 'section_header' | 'full_section' | 'paragraph' | 'list_item' | 'definition' | 'formula' | 'sentence_fragment',
-    detailLevel: 'micro' | 'focused' | 'expanded' | 'comprehensive'
-  } {
-    
-    if (element.type === 'section') {
-      return {
-        fragmentType: element.data.children?.length > 0 ? 'full_section' : 'section_header',
-        detailLevel: 'expanded'
-      }
-    }
-    
-    // Get element type from ContentItemRenderer (DOM is source of truth)
-    const elementType = domElement.getAttribute('data-element-type') || element.data.type || 'paragraph'
-    const content = element.data.content || ''
-    const contentLength = content.length
-    
-    console.log(`🔍 Classifying: elementType="${elementType}", contentLength=${contentLength}`)
-    
-    // Use ContentItemRenderer's classification as primary source
-    switch (elementType) {
-      case 'list':
-      case 'list-item':
-        return { 
-          fragmentType: 'list_item', 
-          detailLevel: contentLength < 50 ? 'micro' : 'focused' 
-        }
-      
-      case 'code':
-        return { 
-          fragmentType: 'formula', 
-          detailLevel: 'focused' 
-        }
-      
-      case 'quote':
-        return { 
-          fragmentType: 'definition', 
-          detailLevel: 'focused' 
-        }
-      
-      default: // paragraph, other
-        // Content-based heuristics for paragraphs
-        if (content.includes(':') && content.split(':')[0].length < 50) {
-          return { fragmentType: 'definition', detailLevel: 'focused' }
-        }
-        
-        if (content.includes('$') || content.includes('\\') || content.match(/\b(equation|formula|theorem)\b/)) {
-          return { fragmentType: 'formula', detailLevel: 'focused' }
-        }
-        
-        if (contentLength < 100) {
-          return { fragmentType: 'sentence_fragment', detailLevel: 'micro' }
-        }
-        
-        return { 
-          fragmentType: 'paragraph', 
-          detailLevel: contentLength < 200 ? 'focused' : contentLength < 500 ? 'expanded' : 'comprehensive'
-        }
-    }
-  }
 
-  /**
-   * EXISTING: Extract context using element ID - no hardcoded logic
-   */
-  static getEditContextByElementId(
-    elementId: string,
-    parsedSections: any[],
-    fullDocument: string
-  ): EditContext {
-    console.log(`🎯 Processing element: ${elementId}`)
-    
-    // 1. Find the exact element by ID - no type assumptions
-    const element = this.findElementById(parsedSections, elementId)
-    if (!element) {
-      throw new Error(`Element ${elementId} not found`)
-    }
-    
-    // 2. Get containing section
-    const section = element.type === 'section' ? element.data : element.parentSection
-    if (!section) {
-      throw new Error(`No containing section for element ${elementId}`)
-    }
-    
-    // 3. Get siblings in document structure  
-    const sectionSiblings = this.getSectionSiblings(section, parsedSections)
-    
-    // 4. Get siblings in section content (only for content elements)
-    const contentSiblings = element.type === 'content' 
-      ? this.getContentSiblings(element.data, section)
-      : { before: '', after: '', index: 0, total: 1 }
-    
-    // 5. Classify element type from actual data (not hardcoded!)
-    const classification = this.classifyElementFromData(element)
-    
-    // 6. Build context for AI
-    const context = this.buildEditContext(
-      element,
-      section,
-      sectionSiblings,
-      contentSiblings,
-      classification,
-      parsedSections,
-      fullDocument
-    )
-    
-    return context
-  }
+
+
 
   /**
    * EXISTING: Find element by ID - works with any ID format
@@ -306,44 +199,7 @@ private static classifyFromDOMInfo(element: any, domInfo: any): {
     return null
   }
 
-  /**
-   * EXISTING: Classify element from actual data, not hardcoded prefixes
-   */
-  private static classifyElementFromData(element: any): {
-    fragmentType: 'section_header' | 'full_section' | 'paragraph' | 'list_item' | 'definition' | 'formula' | 'sentence_fragment',
-    suggestedDetailLevel: 'micro' | 'focused' | 'expanded' | 'comprehensive'
-  } {
-    
-    if (element.type === 'section') {
-      return {
-        fragmentType: element.data.children?.length > 0 ? 'full_section' : 'section_header',
-        suggestedDetailLevel: 'expanded'
-      }
-    }
-    
-    // For content elements, analyze the actual content
-    const content = element.data.content.toLowerCase()
-    const contentType = element.data.type || 'paragraph'
-    
-    // Classify based on content type from ContentItemRenderer
-    if (contentType === 'list' || content.includes('- ') || content.includes('* ')) {
-      return { fragmentType: 'list_item', suggestedDetailLevel: 'focused' }
-    }
-    
-    if (content.includes('$') || content.includes('\\') || content.match(/\b(equation|formula|theorem)\b/)) {
-      return { fragmentType: 'formula', suggestedDetailLevel: 'focused' }
-    }
-    
-    if (content.includes(':') && content.split(':')[0].length < 50) {
-      return { fragmentType: 'definition', suggestedDetailLevel: 'focused' }
-    }
-    
-    if (content.length < 100) {
-      return { fragmentType: 'sentence_fragment', suggestedDetailLevel: 'micro' }
-    }
-    
-    return { fragmentType: 'paragraph', suggestedDetailLevel: 'focused' }
-  }
+
   
   /**
    * EXISTING: Get section siblings (previous/next at same level)
@@ -838,62 +694,6 @@ BAD: "## Definicja\nTeoria definiuje..."`
     return guidance
   }
 
-  // LEGACY METHODS - keep for backward compatibility but simplify
-
-// LEGACY METHOD - basic text-based context extraction
-static getEditContext(fragment: string, fullDocument: string): EditContext {
-  console.log('⚠️ Using LEGACY text-based context extraction - consider upgrading to DOM-first')
-  
-  // Simple text-based context extraction for fallback
-  const lines = fullDocument.split('\n')
-  const fragmentIndex = fullDocument.indexOf(fragment)
-  
-  if (fragmentIndex === -1) {
-    throw new Error('Fragment not found in document')
-  }
-  
-  // Basic context extraction
-  const beforeText = fullDocument.substring(0, fragmentIndex).slice(-200)
-  const afterText = fullDocument.substring(fragmentIndex + fragment.length, fragmentIndex + fragment.length + 200)
-  
-  // Simple section detection
-  const sectionMatch = beforeText.match(/#{1,6}\s+([^#\n]+)$/m)
-  const sectionTitle = sectionMatch ? sectionMatch[1].trim() : 'Unknown Section'
-  
-  return {
-    documentStructure: 'Legacy text-based structure (limited)',
-    editedFragment: fragment,
-    currentSectionContent: beforeText + fragment + afterText,
-    fragmentPositionInSection: {
-      beforeFragment: beforeText,
-      afterFragment: afterText,
-      percentPosition: 50,
-      paragraphIndex: 0,
-      totalParagraphs: 1
-    },
-    fragmentPosition: {
-      sectionTitle,
-      sectionLevel: 1,
-      indexInDocument: 0,
-      totalSections: 1
-    },
-    editingContext: {
-      fragmentType: fragment.length < 100 ? 'sentence_fragment' : 'paragraph',
-      suggestedDetailLevel: 'focused',
-      styleContext: {
-        isMathematical: /\$.*\$/.test(fragment),
-        isListBased: /^\s*[-*+]\s+/.test(fragment),
-        isDefinitionHeavy: /:/.test(fragment),
-        toneLevel: 'casual'
-      },
-      structuralConstraints: {
-        maxHeaderLevel: 3,
-        preserveFormat: false,
-        allowNewSections: false
-      }
-    }
-  }
-}
 
   static parseDocumentStructure(content: string): DocumentStructure {
     // Legacy method - kept for compatibility but simplified

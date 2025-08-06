@@ -204,43 +204,46 @@ onClick: (e: React.MouseEvent<HTMLElement>) => {
   
   const element = e.currentTarget
   
-  console.log('🎯 === CLICK EVENT START ===', {
-    elementType,
-    timestamp: Date.now()
-  })
+  console.log('🎯 === CLICK EVENT START ===')
+  console.log('🔍 Element clicked:', element)
+  console.log('🔍 Element tagName:', element.tagName)
+  console.log('🔍 Element className:', element.className)
+  console.log('🔍 Element attributes:', Array.from(element.attributes).map(attr => `${attr.name}="${attr.value}"`))
   
-  // FIXED: Zbierz WSZYSTKIE potrzebne dane DOM TERAZ (gdy element jest connected)
+  // IDENTYCZNA LOGIKA jak w handleContentSaved
   const elementId = element.getAttribute('data-element-id') || `fallback_${Date.now()}`
   const structuralId = element.getAttribute('data-structural-id') || 
                        element.closest('[data-structural-id]')?.getAttribute('data-structural-id')
+  
+  console.log('🔍 Direct getAttribute result:', element.getAttribute('data-structural-id'))
+  console.log('🔍 Closest search result:', element.closest('[data-structural-id]')?.getAttribute('data-structural-id'))
+  console.log('🔍 Final structuralId:', structuralId)
+  
+  // Sprawdź też czy możemy znaleźć element w parsedSections (tak jak robi handleContentSaved)
+  if (structuralId) {
+    console.log('🔍 Would handleContentSaved find this element? Let\'s see...')
+    // Tu możemy dodać test lookup, ale potrzebujemy dostępu do parsedSections
+  }
+  
   const domElementType = element.getAttribute('data-element-type') || elementType
   const textContent = element.textContent?.trim() || ''
   
-  console.log('🔍 Collecting DOM data at click time:', {
-    elementId,
-    structuralId,
-    domElementType,
-    isConnected: element.isConnected,
-    hasTextContent: !!textContent
-  })
-  
-  // Create domData with ALL info needed for AI
+  // Create domData
   const domData = {
     elementId,
     content: textContent,
     elementType: domElementType,
     clone: element.cloneNode(true) as HTMLElement,
     sourceElement: element,
-    // NEW: Pre-collected DOM info for AI
     domInfo: structuralId ? {
       domElementId: elementId,
-      structuralId,
+      structuralId: structuralId,
       elementType: domElementType,
       content: textContent
     } : null
   }
   
-  console.log('🎯 DOM-first onClick - complete domData:', domData)
+  console.log('🎯 Final domData.domInfo:', domData.domInfo)
   
   onElementClick(e, domData)
 }

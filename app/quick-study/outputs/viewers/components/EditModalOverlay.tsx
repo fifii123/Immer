@@ -94,70 +94,69 @@ export function EditModalOverlay({
       previewRef.current.appendChild(clonedElement)
     }
   }, [viewMode, editModal.visualPreview])
+  
 const handleAIOperation = useCallback(async (operation: AIOperationType) => {
-  if (!editModal?.content || !sessionId) {
-    console.warn('Missing content or sessionId for AI operation')
+  if (!editModal?.content || !sessionId || !getParsedSections) {
+    console.error('❌ Missing required basic data for AI operation')
     return
   }
 
   try {
-    // Clear the visual preview before starting AI processing
+    // Clear visual preview before AI processing
     if (previewRef.current) {
       previewRef.current.innerHTML = ''
     }
     
     setViewMode('ai-processing')
     
-    // NEW: Use pre-collected DOM info (no DOM access needed)
-    if (editModal.elementId && getParsedSections && editModal.domInfo) {
-      console.log('🎯 Using pre-collected DOM info for AI processing')
-      
-      try {
-        const parsedSections = getParsedSections()
-        const fullDocument = getCurrentDocumentContent ? getCurrentDocumentContent() : ''
-        
-        console.log('🎯 Pre-collected DOM info available:', editModal.domInfo)
-        
-        // Use pre-collected DOM info (no DOM access needed!)
-        await processContent(sessionId, operation, editModal.content, {
-          domInfo: editModal.domInfo, // Use pre-collected data
-          parsedSections: parsedSections,
-          fullDocument: fullDocument,
-          useDOMFirst: true
-        })
-        
-      } catch (error) {
-        console.warn('❌ Pre-collected DOM processing failed, falling back:', error)
-        // Fallback to text-based processing
-        if (getCurrentDocumentContent) {
-          const fullDocument = getCurrentDocumentContent()
-          await processContent(sessionId, operation, editModal.content, fullDocument)
-        } else {
-          await processContent(sessionId, operation, editModal.content)
-        }
-      }
-    } else {
-      console.log('🔍 No pre-collected DOM info, using fallback:', {
-        hasElementId: !!editModal.elementId,
-        hasGetParsedSections: !!getParsedSections,
-        hasDomInfo: !!editModal.domInfo
-      })
-      // Fallback to basic processing
-      if (getCurrentDocumentContent) {
-        const fullDocument = getCurrentDocumentContent()
-        await processContent(sessionId, operation, editModal.content, fullDocument)
-      } else {
-        await processContent(sessionId, operation, editModal.content)
-      }
+    console.log('🎯 Starting AI operation with IDENTICAL logic as save')
+    
+    // IDENTICAL logic to handleContentSaved - NO isConnected check!
+    const sourceElement = editModal.sourceElement
+    if (!sourceElement) {
+      console.error('❌ Source element is null')
+      setViewMode('edit')
+      return
     }
+
+    // IDENTICAL logic to save - just use element.getAttribute directly
+    const structuralId = sourceElement.getAttribute('data-structural-id') || 
+                         sourceElement.closest('[data-structural-id]')?.getAttribute('data-structural-id')
+
+    if (!structuralId) {
+      console.error('❌ No structural ID found')
+      setViewMode('edit')
+      return
+    }
+
+    console.log('🎯 IDENTICAL access successful - structuralId:', structuralId)
+
+    // Rest identical to save logic...
+    const elementId = sourceElement.getAttribute('data-element-id') || editModal.elementId || `fallback_${Date.now()}`
+    const elementType = sourceElement.getAttribute('data-element-type') || editModal.elementType
+    const textContent = sourceElement.textContent?.trim() || editModal.content
+
+    const freshDomInfo = {
+      domElementId: elementId,
+      structuralId: structuralId,
+      elementType: elementType,
+      content: textContent
+    }
+
+    const parsedSections = getParsedSections()
+    const fullDocument = getCurrentDocumentContent ? getCurrentDocumentContent() : ''
+    
+    await processContent(sessionId, operation, editModal.content, {
+      domInfo: freshDomInfo,
+      parsedSections,
+      fullDocument
+    })
     
   } catch (error) {
-    console.error('AI operation failed:', error)
-    setViewMode('visual')
+    console.error('❌ AI operation failed:', error)
+    setViewMode('edit')
   }
-}, [editModal, sessionId, processContent, getCurrentDocumentContent, getParsedSections])
-
-
+}, [sessionId, editModal, processContent, getCurrentDocumentContent, getParsedSections])
   // Calculate maximum modal height based on viewport (more compact)
   const getMaxModalHeight = () => {
     const viewportHeight = window.innerHeight
