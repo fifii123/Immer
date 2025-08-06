@@ -24,10 +24,19 @@ interface UseNotesHoverProps {
     content: string
     elementType: string
     clone: HTMLElement
+    sourceElement: HTMLElement
+    domInfo?: {
+      domElementId: string,
+      structuralId: string,
+      elementType: string,
+      content: string
+    } | null
   }) => void
+  // ONLY ADD: Smart Preview handler (OPTIONAL)
+  onSmartPreviewClick?: (event: React.MouseEvent<HTMLElement>, sectionId: string, sectionContent: string) => void
 }
 
-export function useNotesHover({ isAnimating, onElementClick }: UseNotesHoverProps): HoverHandlers {
+export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick }: UseNotesHoverProps): HoverHandlers {
   // Refs for performance
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastHoveredRef = useRef<string | null>(null)
@@ -87,6 +96,83 @@ export function useNotesHover({ isAnimating, onElementClick }: UseNotesHoverProp
     elementToMark.appendChild(pencilIcon)
   }, [])
 
+  // NEW: Funkcja do wyświetlania Smart Preview button
+  const showSmartPreviewIcon = useCallback((container: HTMLElement, targetElement?: HTMLElement) => {
+    // ONLY if Smart Preview handler is provided AND element is a section header
+    if (!onSmartPreviewClick) return
+    
+    const elementToMark = targetElement || container
+    const sectionId = elementToMark.getAttribute('data-section-id')
+    
+    if (!sectionId) return // Only show on section headers
+    if (elementToMark.querySelector('.smart-preview-icon')) return
+
+    // Create Smart Preview button with text
+    const brainIcon = document.createElement('div')
+    brainIcon.className = 'smart-preview-icon'
+    brainIcon.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-right: 6px;">
+        <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/>
+        <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/>
+      </svg>
+      <span style="font-size: 12px; font-weight: 500; white-space: nowrap;">Smart Review</span>
+    `
+    
+    // Green theme, positioned INSIDE the hover area with text
+    Object.assign(brainIcon.style, {
+      position: 'absolute',
+      right: '8px', // Small margin from edge
+      top: '50%',
+      transform: 'translateY(-50%)',
+      height: '26px', // Slightly taller for text
+      padding: '0 8px', // Horizontal padding for text
+      backgroundColor: 'rgba(34, 197, 94, 0.9)', // Green
+      borderRadius: '6px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: 'white',
+      fontSize: '12px',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+      cursor: 'pointer',
+      opacity: '0',
+      animation: 'fadeIn 0.2s ease-out forwards',
+      zIndex: '1000',
+      pointerEvents: 'auto',
+      minWidth: 'fit-content'
+    })
+
+    // Click handler
+    brainIcon.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const sectionContent = elementToMark.getAttribute('data-content') || ''
+      const syntheticEvent = {
+        ...e,
+        currentTarget: elementToMark,
+      } as React.MouseEvent<HTMLElement>
+      onSmartPreviewClick(syntheticEvent, sectionId, sectionContent)
+    })
+
+    // Hover effects
+    brainIcon.addEventListener('mouseenter', () => {
+      brainIcon.style.backgroundColor = 'rgba(34, 197, 94, 1)'
+      brainIcon.style.transform = 'translateY(-50%) scale(1.02)'
+      brainIcon.style.transition = 'all 0.15s ease-in-out'
+    })
+    
+    brainIcon.addEventListener('mouseleave', () => {
+      brainIcon.style.backgroundColor = 'rgba(34, 197, 94, 0.9)'
+      brainIcon.style.transform = 'translateY(-50%) scale(1)'
+    })
+
+    // Ensure relative positioning
+    if (getComputedStyle(elementToMark).position === 'static') {
+      elementToMark.style.position = 'relative'
+    }
+
+    elementToMark.appendChild(brainIcon)
+  }, [onSmartPreviewClick])
+
   // Funkcja do sprawdzania czy należy pokazać ołówek
   const checkPencilDisplay = useCallback(() => {
     if (!hoverStartTimeRef.current || !currentHoveredElementRef.current) return
@@ -103,6 +189,8 @@ export function useNotesHover({ isAnimating, onElementClick }: UseNotesHoverProp
       if (deepestHovered === currentHoveredElementRef.current || !deepestHovered.closest('[data-section-id]')) {
         const sectionContainer = currentHoveredElementRef.current.closest('.section-container') as HTMLElement
         showEditIcon(sectionContainer || currentHoveredElementRef.current, currentHoveredElementRef.current)
+        // NEW: ONLY show Smart Preview if it's a section header
+        showSmartPreviewIcon(sectionContainer || currentHoveredElementRef.current, currentHoveredElementRef.current)
       }
       
       // Zatrzymaj sprawdzanie - ołówek już wyświetlony
@@ -111,7 +199,7 @@ export function useNotesHover({ isAnimating, onElementClick }: UseNotesHoverProp
         pencilCheckIntervalRef.current = null
       }
     }
-  }, [showEditIcon])
+  }, [showEditIcon, showSmartPreviewIcon])
 
   // Funkcja do rozpoczęcia śledzenia czasu na elemencie
   const startHoverTracking = useCallback((element: HTMLElement) => {
@@ -124,6 +212,9 @@ export function useNotesHover({ isAnimating, onElementClick }: UseNotesHoverProp
     // Usuń wszystkie istniejące ikonki
     const existingIcons = document.querySelectorAll('.edit-pencil-icon')
     existingIcons.forEach(icon => icon.remove())
+    // NEW: Remove Smart Preview icons too
+    const existingSmartIcons = document.querySelectorAll('.smart-preview-icon')
+    existingSmartIcons.forEach(icon => icon.remove())
     
     // Rozpocznij nowe śledzenie
     hoverStartTimeRef.current = Date.now()
@@ -146,6 +237,9 @@ export function useNotesHover({ isAnimating, onElementClick }: UseNotesHoverProp
     // Usuń wszystkie ikonki ołówka
     const existingIcons = document.querySelectorAll('.edit-pencil-icon')
     existingIcons.forEach(icon => icon.remove())
+    // NEW: Remove Smart Preview icons too
+    const existingSmartIcons = document.querySelectorAll('.smart-preview-icon')
+    existingSmartIcons.forEach(icon => icon.remove())
   }, [])
 
   // Optimized hover handler for markdown elements
@@ -204,46 +298,43 @@ onClick: (e: React.MouseEvent<HTMLElement>) => {
   
   const element = e.currentTarget
   
-  console.log('🎯 === CLICK EVENT START ===')
-  console.log('🔍 Element clicked:', element)
-  console.log('🔍 Element tagName:', element.tagName)
-  console.log('🔍 Element className:', element.className)
-  console.log('🔍 Element attributes:', Array.from(element.attributes).map(attr => `${attr.name}="${attr.value}"`))
+  console.log('🎯 === CLICK EVENT START ===', {
+    elementType,
+    timestamp: Date.now()
+  })
   
-  // IDENTYCZNA LOGIKA jak w handleContentSaved
+  // FIXED: Zbierz WSZYSTKIE potrzebne dane DOM TERAZ (gdy element jest connected)
   const elementId = element.getAttribute('data-element-id') || `fallback_${Date.now()}`
   const structuralId = element.getAttribute('data-structural-id') || 
                        element.closest('[data-structural-id]')?.getAttribute('data-structural-id')
-  
-  console.log('🔍 Direct getAttribute result:', element.getAttribute('data-structural-id'))
-  console.log('🔍 Closest search result:', element.closest('[data-structural-id]')?.getAttribute('data-structural-id'))
-  console.log('🔍 Final structuralId:', structuralId)
-  
-  // Sprawdź też czy możemy znaleźć element w parsedSections (tak jak robi handleContentSaved)
-  if (structuralId) {
-    console.log('🔍 Would handleContentSaved find this element? Let\'s see...')
-    // Tu możemy dodać test lookup, ale potrzebujemy dostępu do parsedSections
-  }
-  
   const domElementType = element.getAttribute('data-element-type') || elementType
   const textContent = element.textContent?.trim() || ''
   
-  // Create domData
+  console.log('🔍 Collecting DOM data at click time:', {
+    elementId,
+    structuralId,
+    domElementType,
+    isConnected: element.isConnected,
+    hasTextContent: !!textContent
+  })
+  
+  // Create domData with ALL info needed for AI
   const domData = {
     elementId,
     content: textContent,
     elementType: domElementType,
     clone: element.cloneNode(true) as HTMLElement,
     sourceElement: element,
+    // NEW: Pre-collected DOM info for AI
     domInfo: structuralId ? {
       domElementId: elementId,
-      structuralId: structuralId,
+      structuralId,
       elementType: domElementType,
       content: textContent
     } : null
   }
   
-  console.log('🎯 Final domData.domInfo:', domData.domInfo)
+  console.log('🎯 DOM-first onClick - complete domData:', domData)
   
   onElementClick(e, domData)
 }
