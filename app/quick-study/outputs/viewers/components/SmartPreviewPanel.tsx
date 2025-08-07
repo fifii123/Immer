@@ -1,7 +1,8 @@
 // app/quick-study/outputs/viewers/components/SmartPreviewPanel.tsx
 "use client"
 
-import React, { useCallback, useEffect } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
+import ReactDOM from 'react-dom'
 import { 
   Brain, 
   HelpCircle, 
@@ -9,13 +10,12 @@ import {
   Loader2, 
   X, 
   ChevronRight,
+  ChevronDown,
   Sparkles,
   CheckCircle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useSmartPreview, SmartPreviewOperation } from '../hooks/useSmartPreview'
 
 interface SmartPreviewPanelProps {
   sectionId: string
@@ -23,37 +23,132 @@ interface SmartPreviewPanelProps {
   position: { top: number; left: number } | null
   onClose: () => void
   focusElement?: string  // Element that was clicked before opening preview
+  sectionContainer?: HTMLElement | null // Container for sticky positioning
 }
 
-export function SmartPreviewPanel({ sectionId, sectionContent, position, onClose, focusElement }: SmartPreviewPanelProps) {
-  const { 
-    isLoading, 
-    loadOperation, 
-    getResponse, 
-    isLoaded, 
-    getError, 
-    clearAll 
-  } = useSmartPreview()
+// Mock data - same as stable version
+const getMockData = (operation: string, sectionContent: string) => {
+  const sectionLength = sectionContent.length
+  
+  switch (operation) {
+    case 'concepts':
+      return {
+        concepts: [
+          "Główne pojęcie z tej sekcji",
+          "Kluczowy termin techniczny", 
+          "Ważna definicja"
+        ],
+        definitions: [
+          { term: "Termin 1", definition: "Definicja pierwszego terminu" },
+          { term: "Termin 2", definition: "Definicja drugiego terminu" }
+        ]
+      }
+    
+    case 'questions':
+      return {
+        questions: [
+          "Co to jest [główne pojęcie] i dlaczego jest ważne?",
+          "Jakie są praktyczne zastosowania opisywanej metody?",
+          "Czym różni się to podejście od alternatywnych rozwiązań?"
+        ],
+        recommendedTime: sectionLength > 500 ? "5-7 minut" : "2-3 minuty"
+      }
+    
+    case 'eli5':
+      return {
+        simplifiedText: "To jest uproszczone wyjaśnienie tej sekcji, napisane prostym językiem tak, jakby tłumaczyło się to dziecku. Używa prostych słów i analogii z codziennego życia.",
+        readingLevel: "Podstawowy",
+        estimatedReadingTime: "1-2 minuty",
+        keyAnalogies: [
+          "Jak budowanie domu - najpierw fundament",
+          "Podobne do przepisu kulinarnego - krok po kroku"
+        ]
+      }
+    
+    default:
+      return null
+  }
+}
 
-  // Clear previous data when section changes
+export function SmartPreviewPanel({ 
+  sectionId, 
+  sectionContent, 
+  position, 
+  onClose, 
+  focusElement, 
+  sectionContainer 
+}: SmartPreviewPanelProps) {
+  // State for controlling rendering and collapsible sections
+  const [isPortalReady, setIsPortalReady] = useState(false)
+  const [isVisible, setIsVisible] = useState(false)
+  const [loadedOperations, setLoadedOperations] = useState<Set<string>>(new Set())
+  const [loadingOperations, setLoadingOperations] = useState<Set<string>>(new Set())
+  const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set())
+
+  // Prepare portal on mount
   useEffect(() => {
-    clearAll()
-  }, [sectionId, clearAll])
-
-  // Load content for specific operation
-  const loadContent = useCallback(async (operation: SmartPreviewOperation) => {
-    try {
-      await loadOperation({
-        operation,
-        sectionId,
-        sectionContent,
-        focusElement
-      })
-    } catch (error) {
-      // Error is already handled by the hook
-      console.log(`Failed to load ${operation}:`, error)
+    if (sectionContainer && typeof document !== 'undefined') {
+      // Ensure section container has proper styles
+      if (getComputedStyle(sectionContainer).position === 'static') {
+        sectionContainer.style.position = 'relative'
+      }
+      if (getComputedStyle(sectionContainer).overflow === 'hidden') {
+        sectionContainer.style.overflow = 'visible'
+      }
+      
+      setIsPortalReady(true)
+      // Delay visibility to prevent flash
+      setTimeout(() => setIsVisible(true), 10)
+    } else {
+      // No portal needed, render immediately
+      setIsPortalReady(true)
+      setIsVisible(true)
     }
-  }, [loadOperation, sectionId, sectionContent, focusElement])
+  }, [sectionContainer])
+
+  // Load content for specific operation (mock with loading)
+  const loadContent = useCallback(async (operation: string) => {
+    if (loadingOperations.has(operation) || loadedOperations.has(operation)) return
+    
+    // Start loading
+    setLoadingOperations(prev => new Set([...prev, operation]))
+    setExpandedBlocks(prev => new Set([...prev, operation]))
+    
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000))
+    
+    // Finish loading
+    setLoadingOperations(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(operation)
+      return newSet
+    })
+    setLoadedOperations(prev => new Set([...prev, operation]))
+  }, [loadingOperations, loadedOperations])
+
+  // Toggle block expansion
+  const toggleBlock = useCallback((operation: string) => {
+    const isLoading = loadingOperations.has(operation)
+    const isLoaded = loadedOperations.has(operation)
+    
+    if (isLoading) return // Don't do anything if loading
+    
+    if (isLoaded) {
+      // Toggle expansion for loaded content
+      setExpandedBlocks(prev => {
+        const newSet = new Set(prev)
+        if (newSet.has(operation)) {
+          newSet.delete(operation)
+        } else {
+          newSet.add(operation)
+        }
+        return newSet
+      })
+    } else {
+      // Start loading content
+      loadContent(operation)
+    }
+  }, [loadingOperations, loadedOperations, loadContent])
 
   // Handle click outside to close
   const handleClick = useCallback((e: React.MouseEvent) => {
@@ -83,29 +178,26 @@ export function SmartPreviewPanel({ sectionId, sectionContent, position, onClose
   }
 
   // Render individual block
-  const renderBlock = useCallback((operation: SmartPreviewOperation) => {
-    const config = blockConfigs[operation]
-    const response = getResponse(operation)
-    const error = getError(operation)
-    const loaded = isLoaded(operation)
-    
-    // Determine status for this operation
-    const operationLoading = isLoading // Note: hook tracks overall loading, could be improved
-    const status = error ? 'error' : loaded ? 'loaded' : operationLoading ? 'loading' : 'idle'
+  const renderBlock = useCallback((operation: string) => {
+    const config = blockConfigs[operation as keyof typeof blockConfigs]
+    const isLoading = loadingOperations.has(operation)
+    const isLoaded = loadedOperations.has(operation)
+    const isExpanded = expandedBlocks.has(operation)
+    const mockData = isLoaded ? getMockData(operation, sectionContent) : null
     
     return (
       <div key={operation} className="smart-preview-block">
         {/* Block Header - Always visible */}
         <Button
           variant="ghost"
-          className={`w-full justify-start gap-2 ${config.bgColor} transition-colors`}
-          onClick={() => status === 'idle' ? loadContent(operation) : undefined}
-          disabled={status === 'loading'}
+          className={`w-full justify-start gap-2 transition-all duration-200 hover:bg-white/20 dark:hover:bg-white/10 hover:backdrop-blur-sm ${config.bgColor}`}
+          onClick={() => toggleBlock(operation)}
+          disabled={isLoading}
         >
           <div className={`${config.color} flex items-center gap-2`}>
-            {status === 'loading' ? (
+            {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
-            ) : status === 'loaded' ? (
+            ) : isLoaded ? (
               <CheckCircle className="h-4 w-4" />
             ) : (
               config.icon
@@ -113,36 +205,46 @@ export function SmartPreviewPanel({ sectionId, sectionContent, position, onClose
             <span className="font-medium">{config.title}</span>
           </div>
           
-          {status === 'idle' && (
+          {isLoading ? (
+            <Loader2 className="h-3 w-3 ml-auto animate-spin opacity-60" />
+          ) : isLoaded ? (
+            isExpanded ? (
+              <ChevronDown className="h-3 w-3 ml-auto opacity-60" />
+            ) : (
+              <ChevronRight className="h-3 w-3 ml-auto opacity-60" />
+            )
+          ) : (
             <ChevronRight className="h-3 w-3 ml-auto opacity-60" />
-          )}
-          
-          {status === 'loaded' && response?.metadata && (
-            <Badge variant="secondary" className="ml-auto text-xs">
-              {Math.round((response.metadata.confidence || 0.8) * 100)}%
-            </Badge>
           )}
         </Button>
 
-        {/* Block Content - Show when loaded */}
-        {status === 'loaded' && response && (
+        {/* Loading state */}
+        {isLoading && isExpanded && (
+          <div className="mt-2 pl-6 pr-2 flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Loading AI insights...</span>
+          </div>
+        )}
+
+        {/* Block Content - Show when loaded and expanded */}
+        {isLoaded && isExpanded && mockData && (
           <div className="mt-2 pl-6 pr-2">
             {operation === 'concepts' && (
               <div className="space-y-1">
-                {response.content.concepts.map((concept: string, index: number) => (
+                {mockData.concepts.map((concept: string, index: number) => (
                   <div key={index} className="flex items-center gap-2 text-sm">
                     <div className="w-1.5 h-1.5 bg-blue-400 rounded-full flex-shrink-0" />
                     <span className="text-muted-foreground">{concept}</span>
-                    {response.relatedElements?.includes(focusElement || `paragraph-${index + 1}`) && (
+                    {focusElement && index === 0 && (
                       <Sparkles className="h-3 w-3 text-green-500 ml-auto" title="Related to focused element" />
                     )}
                   </div>
                 ))}
                 
-                {response.content.definitions && response.content.definitions.length > 0 && (
+                {mockData.definitions && mockData.definitions.length > 0 && (
                   <div className="mt-3 pt-2 border-t border-border/30">
                     <p className="text-xs text-muted-foreground font-medium mb-1">Definicje:</p>
-                    {response.content.definitions.slice(0, 2).map((def: any, index: number) => (
+                    {mockData.definitions.slice(0, 2).map((def: any, index: number) => (
                       <div key={index} className="text-xs text-muted-foreground mb-1">
                         <strong>{def.term}:</strong> {def.definition}
                       </div>
@@ -154,20 +256,16 @@ export function SmartPreviewPanel({ sectionId, sectionContent, position, onClose
             
             {operation === 'questions' && (
               <div className="space-y-2">
-                {response.content.questions.map((q: any, index: number) => (
+                {mockData.questions.map((question: string, index: number) => (
                   <div key={index} className="text-sm border-l-2 border-green-200 pl-3">
-                    <p className="text-muted-foreground font-medium">{q.question}</p>
-                    <div className="flex gap-1 mt-1">
-                      <Badge variant="outline" className="text-xs">{q.difficulty || q.level}</Badge>
-                      <Badge variant="outline" className="text-xs">{q.type || q.focus}</Badge>
-                    </div>
+                    <p className="text-muted-foreground">{question}</p>
                   </div>
                 ))}
                 
-                {response.content.recommendedTime && (
+                {mockData.recommendedTime && (
                   <div className="mt-2 pt-2 border-t border-border/30">
                     <p className="text-xs text-muted-foreground">
-                      ⏱️ Szacowany czas: {response.content.recommendedTime}
+                      ⏱️ Szacowany czas: {mockData.recommendedTime}
                     </p>
                   </div>
                 )}
@@ -177,24 +275,22 @@ export function SmartPreviewPanel({ sectionId, sectionContent, position, onClose
             {operation === 'eli5' && (
               <div className="text-sm text-muted-foreground">
                 <div className="border-l-2 border-orange-200 pl-3">
-                  <div className="whitespace-pre-line mb-2">{response.content.simplifiedText}</div>
+                  <div className="whitespace-pre-line mb-2">{mockData.simplifiedText}</div>
                   
                   <div className="flex flex-wrap gap-1 mt-2">
                     <Badge variant="outline" className="text-xs">
-                      📚 {response.content.readingLevel}
+                      📚 {mockData.readingLevel}
                     </Badge>
-                    {response.content.estimatedReadingTime && (
-                      <Badge variant="outline" className="text-xs">
-                        ⏱️ {response.content.estimatedReadingTime}
-                      </Badge>
-                    )}
+                    <Badge variant="outline" className="text-xs">
+                      ⏱️ {mockData.estimatedReadingTime}
+                    </Badge>
                   </div>
                   
-                  {response.content.keyAnalogies && response.content.keyAnalogies.length > 0 && (
+                  {mockData.keyAnalogies && mockData.keyAnalogies.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-border/30">
                       <p className="text-xs font-medium mb-1">Analogie:</p>
                       <div className="text-xs space-y-0.5">
-                        {response.content.keyAnalogies.map((analogy: string, index: number) => (
+                        {mockData.keyAnalogies.map((analogy: string, index: number) => (
                           <div key={index}>• {analogy}</div>
                         ))}
                       </div>
@@ -205,67 +301,93 @@ export function SmartPreviewPanel({ sectionId, sectionContent, position, onClose
             )}
           </div>
         )}
-
-        {/* Error state */}
-        {status === 'error' && (
-          <div className="mt-2 pl-6 text-sm text-red-500">
-            {error || 'Failed to load'}. <button 
-              onClick={() => loadContent(operation)}
-              className="underline hover:no-underline"
-            >
-              Try again
-            </button>
-          </div>
-        )}
       </div>
     )
-  }, [getResponse, getError, isLoaded, isLoading, loadContent, focusElement])
+  }, [loadingOperations, loadedOperations, expandedBlocks, toggleBlock, sectionContent, focusElement])
 
-  if (!position) return null
+  if (!position || !isPortalReady) return null
 
-  return (
-    <div
-      className="fixed z-50 smart-preview-panel"
-      style={{
-        top: `${position.top}px`,
-        left: `${position.left}px`,
-        transform: 'translateX(-50%)', // Center horizontally
-      }}
-      onClick={handleClick}
-    >
-      <Card className="w-80 bg-background/95 backdrop-blur-sm shadow-xl border border-border/50">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Brain className="h-4 w-4 text-blue-600" />
-              Smart Preview
-              {focusElement && (
-                <Sparkles className="h-3 w-3 text-green-500" title="Context-aware for focused element" />
-              )}
-            </CardTitle>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-6 w-6 p-0 hover:bg-muted"
-              onClick={onClose}
-            >
-              <X className="h-3 w-3" />
-            </Button>
+  // Determine if we should use portal or direct rendering
+  const shouldUsePortal = sectionContainer && typeof document !== 'undefined'
+
+  // Create the panel content once
+  const panelContent = (
+    <>
+      {/* Test background - czy blur w ogóle działa */}
+      <div 
+        className="absolute inset-0 opacity-30"
+        style={{
+          backgroundImage: 'repeating-linear-gradient(45deg, #ff0000 0px, #ff0000 10px, #0000ff 10px, #0000ff 20px)',
+          pointerEvents: 'none',
+          zIndex: -1
+        }}
+      />
+      
+      <div
+        className={shouldUsePortal ? "absolute z-50 smart-preview-panel" : "fixed z-50 smart-preview-panel"}
+        style={{
+          top: `${position.top}px`,
+          left: `${position.left}px`,
+          transform: 'translateX(-85%)',
+          opacity: isVisible ? 1 : 0,
+          visibility: isVisible ? 'visible' : 'hidden',
+          transition: 'opacity 0.2s ease-out, visibility 0.2s ease-out',
+        }}
+        onClick={handleClick}
+      >
+        {/* Fallback: Strong semi-transparent background instead of blur */}
+        <div 
+          className="w-80 shadow-2xl border border-white/40 rounded-lg overflow-hidden"
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            boxShadow: '0 8px 32px rgba(31, 38, 135, 0.37), 0 2px 8px rgba(0, 0, 0, 0.1)',
+          }}
+        >
+          {/* Subtle gradient overlay for depth */}
+          <div className="absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-black/5 pointer-events-none" />
+          
+          {/* Header */}
+          <div className="p-4 pb-3 relative bg-white/20">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold flex items-center gap-2 text-gray-900">
+                <Brain className="h-4 w-4 text-blue-600" />
+                Smart Preview
+                {focusElement && (
+                  <Sparkles className="h-3 w-3 text-green-500" title="Context-aware for focused element" />
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0 hover:bg-black/10 transition-colors text-gray-700"
+                onClick={onClose}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+            <p className="text-xs text-gray-600 mt-1">
+              {focusElement 
+                ? "AI insights for your selected content" 
+                : "Click to load AI-generated insights"
+              }
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {focusElement 
-              ? "AI insights for your selected content" 
-              : "Click to load AI-generated insights"
-            }
-          </p>
-        </CardHeader>
-        
-        <CardContent className="space-y-3">
-          {renderBlock('concepts')}
-          {renderBlock('questions')}
-          {renderBlock('eli5')}
-        </CardContent>
-      </Card>
-    </div>
+          
+          {/* Content */}
+          <div className="px-4 pb-4 space-y-3 relative">
+            {renderBlock('concepts')}
+            {renderBlock('questions')}
+            {renderBlock('eli5')}
+          </div>
+        </div>
+      </div>
+    </>
   )
+
+  // Return portal or direct content
+  if (shouldUsePortal) {
+    return ReactDOM.createPortal(panelContent, sectionContainer)
+  }
+
+  return panelContent
 }

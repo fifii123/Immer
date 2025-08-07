@@ -85,17 +85,18 @@ export default function NotesViewer({ output, selectedSource, sessionId }: Notes
   const [isAnimating, setIsAnimating] = useState(false)
   const [localContent, setLocalContent] = useState(output?.content || '')
 
-  // Smart Preview state - ONLY ADDITION
-  const [smartPreviewState, setSmartPreviewState] = useState<{
+const [smartPreviewState, setSmartPreviewState] = useState<{
     isOpen: boolean
     sectionId: string | null
     sectionContent: string
     position: { top: number; left: number } | null
+    sectionContainer: HTMLElement | null
   }>({
     isOpen: false,
     sectionId: null,
     sectionContent: '',
-    position: null
+    position: null,
+    sectionContainer: null
   })
 
   // Update lokalnego content gdy output się zmienia
@@ -423,34 +424,45 @@ export default function NotesViewer({ output, selectedSource, sessionId }: Notes
     return content
   }, [])
 
-  // Smart Preview handlers - ONLY ADDITION
-  const handleSmartPreviewClick = useCallback((
+const handleSmartPreviewClick = useCallback((
     event: React.MouseEvent<HTMLElement>, 
     sectionId: string, 
     sectionContent: string
   ) => {
     console.log('🧠 Smart Preview clicked:', sectionId)
     
-    const rect = event.currentTarget.getBoundingClientRect()
-    const scrollY = window.scrollY || document.documentElement.scrollTop
+    // Find the section container for sticky positioning
+    const sectionContainer = event.currentTarget.closest('.section-container') as HTMLElement
+    const smartButton = event.currentTarget.querySelector('.smart-preview-icon') as HTMLElement
     
-    setSmartPreviewState({
-      isOpen: true,
-      sectionId,
-      sectionContent,
-      position: {
-        top: rect.top + scrollY + rect.height + 8,
-        left: rect.left + rect.width / 2
-      }
-    })
+    if (sectionContainer && smartButton) {
+      const sectionRect = sectionContainer.getBoundingClientRect()
+      const buttonRect = smartButton.getBoundingClientRect()
+      
+      // Position relative to section container, not viewport
+      const sectionRelativeTop = buttonRect.bottom - sectionRect.top + 8
+      const sectionRelativeLeft = buttonRect.left - sectionRect.left + (buttonRect.width * 0.75) // More to the right
+      
+      setSmartPreviewState({
+        isOpen: true,
+        sectionId,
+        sectionContent,
+        position: {
+          top: sectionRelativeTop,
+          left: sectionRelativeLeft
+        },
+        sectionContainer: sectionContainer // Add reference to section container
+      })
+    }
   }, [])
 
-  const handleSmartPreviewClose = useCallback(() => {
+const handleSmartPreviewClose = useCallback(() => {
     setSmartPreviewState({
       isOpen: false,
       sectionId: null,
       sectionContent: '',
-      position: null
+      position: null,
+      sectionContainer: null
     })
   }, [])
 
@@ -766,12 +778,13 @@ export default function NotesViewer({ output, selectedSource, sessionId }: Notes
               </div>
 
               {/* Smart Preview Panel - ONLY ADDITION */}
-              {smartPreviewState.isOpen && (
+{smartPreviewState.isOpen && (
                 <SmartPreviewPanel
                   sectionId={smartPreviewState.sectionId!}
                   sectionContent={smartPreviewState.sectionContent}
                   position={smartPreviewState.position}
                   onClose={handleSmartPreviewClose}
+                  sectionContainer={smartPreviewState.sectionContainer}
                 />
               )}
             </div>
