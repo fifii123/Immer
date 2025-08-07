@@ -12,62 +12,22 @@ import {
   ChevronRight,
   ChevronDown,
   Sparkles,
-  CheckCircle
+  CheckCircle,
+  AlertCircle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { useSmartPreview, SmartPreviewOperation } from '../hooks/useSmartPreview'
 
 interface SmartPreviewPanelProps {
   sectionId: string
   sectionContent: string
   position: { top: number; left: number } | null
   onClose: () => void
-  focusElement?: string  // Element that was clicked before opening preview
-  sectionContainer?: HTMLElement | null // Container for sticky positioning
-}
-
-// Mock data - same as stable version
-const getMockData = (operation: string, sectionContent: string) => {
-  const sectionLength = sectionContent.length
-  
-  switch (operation) {
-    case 'concepts':
-      return {
-        concepts: [
-          "Główne pojęcie z tej sekcji",
-          "Kluczowy termin techniczny", 
-          "Ważna definicja"
-        ],
-        definitions: [
-          { term: "Termin 1", definition: "Definicja pierwszego terminu" },
-          { term: "Termin 2", definition: "Definicja drugiego terminu" }
-        ]
-      }
-    
-    case 'questions':
-      return {
-        questions: [
-          "Co to jest [główne pojęcie] i dlaczego jest ważne?",
-          "Jakie są praktyczne zastosowania opisywanej metody?",
-          "Czym różni się to podejście od alternatywnych rozwiązań?"
-        ],
-        recommendedTime: sectionLength > 500 ? "5-7 minut" : "2-3 minuty"
-      }
-    
-    case 'eli5':
-      return {
-        simplifiedText: "To jest uproszczone wyjaśnienie tej sekcji, napisane prostym językiem tak, jakby tłumaczyło się to dziecku. Używa prostych słów i analogii z codziennego życia.",
-        readingLevel: "Podstawowy",
-        estimatedReadingTime: "1-2 minuty",
-        keyAnalogies: [
-          "Jak budowanie domu - najpierw fundament",
-          "Podobne do przepisu kulinarnego - krok po kroku"
-        ]
-      }
-    
-    default:
-      return null
-  }
+  focusElement?: string  
+  sectionContainer?: HTMLElement | null 
+  parsedSections?: any[]  // NEW: For context
+  fullDocument?: string   // NEW: For context
 }
 
 export function SmartPreviewPanel({ 
@@ -76,14 +36,31 @@ export function SmartPreviewPanel({
   position, 
   onClose, 
   focusElement, 
-  sectionContainer 
+  sectionContainer,
+  parsedSections,    // NEW
+  fullDocument       // NEW
 }: SmartPreviewPanelProps) {
   // State for controlling rendering and collapsible sections
   const [isPortalReady, setIsPortalReady] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
-  const [loadedOperations, setLoadedOperations] = useState<Set<string>>(new Set())
-  const [loadingOperations, setLoadingOperations] = useState<Set<string>>(new Set())
   const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set())
+  const [loadingOperations, setLoadingOperations] = useState<Set<SmartPreviewOperation>>(new Set()) // NEW: Per-operation loading
+  
+  // NEW: Use the Smart Preview hook
+  const { 
+    loadOperation, 
+    getResponse, 
+    isLoaded, 
+    getError,
+    clearAll 
+  } = useSmartPreview()
+
+  // Clear data when section changes
+  useEffect(() => {
+    clearAll()
+    setExpandedBlocks(new Set())
+    setLoadingOperations(new Set()) // NEW: Clear loading operations
+  }, [sectionId, clearAll])
 
   // Prepare portal on mount
   useEffect(() => {
@@ -106,35 +83,45 @@ export function SmartPreviewPanel({
     }
   }, [sectionContainer])
 
-  // Load content for specific operation (mock with loading)
-  const loadContent = useCallback(async (operation: string) => {
-    if (loadingOperations.has(operation) || loadedOperations.has(operation)) return
+  // Load content for specific operation using real API
+  const loadContent = useCallback((operation: SmartPreviewOperation) => {
+    if (isLoaded(operation) || loadingOperations.has(operation)) return
     
-    // Start loading
-    setLoadingOperations(prev => new Set([...prev, operation]))
     setExpandedBlocks(prev => new Set([...prev, operation]))
+    setLoadingOperations(prev => new Set([...prev, operation])) // Start loading this operation
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000))
-    
-    // Finish loading
-    setLoadingOperations(prev => {
-      const newSet = new Set(prev)
-      newSet.delete(operation)
-      return newSet
+    // Fire and forget - async loading
+    loadOperation({
+      operation,
+      sectionId,
+      sectionContent,
+      focusElement
+    }, {
+      parsedSections,
+      fullDocument
+    }).then(() => {
+      setLoadingOperations(prev => {
+        const next = new Set(prev)
+        next.delete(operation)
+        return next
+      })
+    }).catch(error => {
+      console.error(`Failed to load ${operation}:`, error)
+      setLoadingOperations(prev => {
+        const next = new Set(prev)
+        next.delete(operation)
+        return next
+      })
     })
-    setLoadedOperations(prev => new Set([...prev, operation]))
-  }, [loadingOperations, loadedOperations])
+  }, [loadOperation, sectionId, sectionContent, focusElement, parsedSections, fullDocument, isLoaded, loadingOperations])
 
   // Toggle block expansion
-  const toggleBlock = useCallback((operation: string) => {
-    const isLoading = loadingOperations.has(operation)
-    const isLoaded = loadedOperations.has(operation)
+  const toggleBlock = useCallback((operation: SmartPreviewOperation) => {
+    const isCurrentlyLoaded = isLoaded(operation)
+    const hasError = getError(operation)
     
-    if (isLoading) return // Don't do anything if loading
-    
-    if (isLoaded) {
-      // Toggle expansion for loaded content
+    if (isCurrentlyLoaded || hasError) {
+      // Toggle expansion for loaded content or errors
       setExpandedBlocks(prev => {
         const newSet = new Set(prev)
         if (newSet.has(operation)) {
@@ -148,7 +135,7 @@ export function SmartPreviewPanel({
       // Start loading content
       loadContent(operation)
     }
-  }, [loadingOperations, loadedOperations, loadContent])
+  }, [isLoaded, getError, loadContent])
 
   // Handle click outside to close
   const handleClick = useCallback((e: React.MouseEvent) => {
@@ -178,12 +165,15 @@ export function SmartPreviewPanel({
   }
 
   // Render individual block
-  const renderBlock = useCallback((operation: string) => {
-    const config = blockConfigs[operation as keyof typeof blockConfigs]
-    const isLoading = loadingOperations.has(operation)
-    const isLoaded = loadedOperations.has(operation)
+  const renderBlock = useCallback((operation: SmartPreviewOperation) => {
+    const config = blockConfigs[operation]
+    const isCurrentlyLoaded = isLoaded(operation)
     const isExpanded = expandedBlocks.has(operation)
-    const mockData = isLoaded ? getMockData(operation, sectionContent) : null
+    const response = getResponse(operation)
+    const error = getError(operation)
+    
+    // Check if this specific operation is loading (using local state)
+    const isOperationLoading = loadingOperations.has(operation)
     
     return (
       <div key={operation} className="smart-preview-block">
@@ -192,12 +182,14 @@ export function SmartPreviewPanel({
           variant="ghost"
           className={`w-full justify-start gap-2 transition-all duration-200 hover:bg-white/20 dark:hover:bg-white/10 hover:backdrop-blur-sm ${config.bgColor}`}
           onClick={() => toggleBlock(operation)}
-          disabled={isLoading}
+          disabled={isOperationLoading}
         >
           <div className={`${config.color} flex items-center gap-2`}>
-            {isLoading ? (
+            {isOperationLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
-            ) : isLoaded ? (
+            ) : error ? (
+              <AlertCircle className="h-4 w-4" />
+            ) : isCurrentlyLoaded ? (
               <CheckCircle className="h-4 w-4" />
             ) : (
               config.icon
@@ -205,9 +197,9 @@ export function SmartPreviewPanel({
             <span className="font-medium">{config.title}</span>
           </div>
           
-          {isLoading ? (
+          {isOperationLoading ? (
             <Loader2 className="h-3 w-3 ml-auto animate-spin opacity-60" />
-          ) : isLoaded ? (
+          ) : (isCurrentlyLoaded || error) ? (
             isExpanded ? (
               <ChevronDown className="h-3 w-3 ml-auto opacity-60" />
             ) : (
@@ -218,20 +210,24 @@ export function SmartPreviewPanel({
           )}
         </Button>
 
-        {/* Loading state */}
-        {isLoading && isExpanded && (
-          <div className="mt-2 pl-6 pr-2 flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Loading AI insights...</span>
+        {/* Usunięty cały panel ładowania */}
+
+        {/* Error state */}
+        {error && isExpanded && (
+          <div className="mt-2 pl-6 pr-2">
+            <div className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <span>Error: {error}</span>
+            </div>
           </div>
         )}
 
         {/* Block Content - Show when loaded and expanded */}
-        {isLoaded && isExpanded && mockData && (
+        {isCurrentlyLoaded && isExpanded && response && (
           <div className="mt-2 pl-6 pr-2">
-            {operation === 'concepts' && (
+            {operation === 'concepts' && response.content && (
               <div className="space-y-1">
-                {mockData.concepts.map((concept: string, index: number) => (
+                {response.content.concepts?.map((concept: string, index: number) => (
                   <div key={index} className="flex items-center gap-2 text-sm">
                     <div className="w-1.5 h-1.5 bg-blue-400 rounded-full flex-shrink-0" />
                     <span className="text-muted-foreground">{concept}</span>
@@ -241,69 +237,92 @@ export function SmartPreviewPanel({
                   </div>
                 ))}
                 
-                {mockData.definitions && mockData.definitions.length > 0 && (
+                {response.content.definitions && response.content.definitions.length > 0 && (
                   <div className="mt-3 pt-2 border-t border-border/30">
                     <p className="text-xs text-muted-foreground font-medium mb-1">Definicje:</p>
-                    {mockData.definitions.slice(0, 2).map((def: any, index: number) => (
-                      <div key={index} className="text-xs text-muted-foreground mb-1">
-                        <strong>{def.term}:</strong> {def.definition}
-                      </div>
-                    ))}
+                    <div className="space-y-2">
+                      {response.content.definitions.map((def: any, index: number) => (
+                        <div key={index} className="text-xs">
+                          <span className="font-medium text-foreground">{def.term}:</span>{' '}
+                          <span className="text-muted-foreground">{def.definition}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
             )}
-            
-            {operation === 'questions' && (
+
+            {operation === 'questions' && response.content && (
               <div className="space-y-2">
-                {mockData.questions.map((question: string, index: number) => (
-                  <div key={index} className="text-sm border-l-2 border-green-200 pl-3">
-                    <p className="text-muted-foreground">{question}</p>
+                {response.content.questions?.map((q: any, index: number) => (
+                  <div key={index} className="text-sm">
+                    <div className="flex items-start gap-2">
+                      <span className="text-green-500 font-medium flex-shrink-0">{index + 1}.</span>
+                      <span className="text-muted-foreground">{q.question || q}</span>
+                      {focusElement && index === 0 && (
+                        <Sparkles className="h-3 w-3 text-green-500 ml-auto mt-0.5" title="Related to focused element" />
+                      )}
+                    </div>
+                    {q.type && q.difficulty && (
+                      <div className="ml-5 mt-1 flex gap-1">
+                        <Badge variant="outline" className="text-xs px-1 py-0">
+                          {q.type}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs px-1 py-0">
+                          {q.difficulty}
+                        </Badge>
+                      </div>
+                    )}
                   </div>
                 ))}
                 
-                {mockData.recommendedTime && (
-                  <div className="mt-2 pt-2 border-t border-border/30">
-                    <p className="text-xs text-muted-foreground">
-                      ⏱️ Szacowany czas: {mockData.recommendedTime}
-                    </p>
+                {response.content.recommendedTime && (
+                  <div className="mt-3 pt-2 border-t border-border/30">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>⏱️ Zalecany czas:</span>
+                      <span className="font-medium">{response.content.recommendedTime}</span>
+                    </div>
                   </div>
                 )}
               </div>
             )}
-            
-            {operation === 'eli5' && (
-              <div className="text-sm text-muted-foreground">
-                <div className="border-l-2 border-orange-200 pl-3">
-                  <div className="whitespace-pre-line mb-2">{mockData.simplifiedText}</div>
-                  
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    <Badge variant="outline" className="text-xs">
-                      📚 {mockData.readingLevel}
-                    </Badge>
-                    <Badge variant="outline" className="text-xs">
-                      ⏱️ {mockData.estimatedReadingTime}
-                    </Badge>
-                  </div>
-                  
-                  {mockData.keyAnalogies && mockData.keyAnalogies.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-border/30">
-                      <p className="text-xs font-medium mb-1">Analogie:</p>
-                      <div className="text-xs space-y-0.5">
-                        {mockData.keyAnalogies.map((analogy: string, index: number) => (
-                          <div key={index}>• {analogy}</div>
-                        ))}
-                      </div>
-                    </div>
+
+            {operation === 'eli5' && response.content && (
+              <div className="space-y-2">
+                <div className="text-sm text-muted-foreground leading-relaxed">
+                  {response.content.simplifiedText}
+                  {focusElement && (
+                    <Sparkles className="h-3 w-3 text-green-500 ml-2 inline" title="Adapted for focused element" />
                   )}
                 </div>
+                
+                <div className="flex gap-1 mt-2">
+                  <Badge variant="outline" className="text-xs">
+                    📚 {response.content.readingLevel}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs">
+                    ⏱️ {response.content.estimatedReadingTime}
+                  </Badge>
+                </div>
+                
+                {response.content.keyAnalogies && response.content.keyAnalogies.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-border/30">
+                    <p className="text-xs font-medium mb-1">Analogie:</p>
+                    <div className="text-xs space-y-0.5">
+                      {response.content.keyAnalogies.map((analogy: string, index: number) => (
+                        <div key={index}>• {analogy}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
       </div>
     )
-  }, [loadingOperations, loadedOperations, expandedBlocks, toggleBlock, sectionContent, focusElement])
+  }, [loadingOperations, expandedBlocks, toggleBlock, sectionContent, focusElement, isLoaded, getResponse, getError])
 
   if (!position || !isPortalReady) return null
 
@@ -313,16 +332,6 @@ export function SmartPreviewPanel({
   // Create the panel content once
   const panelContent = (
     <>
-      {/* Test background - czy blur w ogóle działa */}
-      <div 
-        className="absolute inset-0 opacity-30"
-        style={{
-          backgroundImage: 'repeating-linear-gradient(45deg, #ff0000 0px, #ff0000 10px, #0000ff 10px, #0000ff 20px)',
-          pointerEvents: 'none',
-          zIndex: -1
-        }}
-      />
-      
       <div
         className={shouldUsePortal ? "absolute z-50 smart-preview-panel" : "fixed z-50 smart-preview-panel"}
         style={{

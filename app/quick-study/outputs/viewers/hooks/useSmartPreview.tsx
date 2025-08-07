@@ -29,6 +29,11 @@ export interface SmartPreviewState {
   errors: Record<SmartPreviewOperation, string | null>
 }
 
+export interface SmartPreviewContext {
+  parsedSections?: any[]
+  fullDocument?: string
+}
+
 // Mock API service - easily replaceable with real API
 class SmartPreviewMockAPI {
   static async generateConcepts(request: SmartPreviewRequest): Promise<SmartPreviewResponse> {
@@ -84,22 +89,21 @@ class SmartPreviewMockAPI {
       },
       {
         question: "Jak można zoptymalizować przedstawione rozwiązanie?",
-        type: "optimization",
-        difficulty: "expert",
-        expectedAnswer: "Możliwe optymalizacje to..."
+        type: "analysis",
+        difficulty: "advanced", 
+        expectedAnswer: "Optymalizacje mogą obejmować..."
       }
     ]
     
     return {
       operation: 'questions',
       content: {
-        questions: questions.slice(0, 2 + Math.floor(Math.random() * 2)),
-        totalDifficulty: "medium",
-        recommendedTime: "5-8 minutes"
+        questions,
+        recommendedTime: request.sectionContent.length > 500 ? "5-7 minut" : "2-3 minuty"
       },
       relatedElements: request.focusElement ? [request.focusElement] : ["paragraph-2", "paragraph-4"],
       metadata: {
-        confidence: 0.78 + Math.random() * 0.15,
+        confidence: 0.88 + Math.random() * 0.08,
         sourceLength: request.sectionContent.length,
         generatedAt: new Date().toISOString()
       }
@@ -107,18 +111,12 @@ class SmartPreviewMockAPI {
   }
 
   static async generateELI5(request: SmartPreviewRequest): Promise<SmartPreviewResponse> {
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 500))
+    await new Promise(resolve => setTimeout(resolve, 900 + Math.random() * 500))
     
     const simplifiedText = `
-**Prosty sposób myślenia o tym:**
+To jest uproszczone wyjaśnienie tej sekcji. Wyobraź sobie, że tłumaczysz to swojemu młodszemu rodzeństwu.
 
-Wyobraź sobie, że masz stos nieposortowanych kart i chcesz je ułożyć. To właśnie robią algorytmy sortowania, ale każdy na swój sposób.
-
-🔄 **Pierwszy sposób (Bubble Sort)**: Porównujesz każdą kartę z sąsiednią i zamieniasz miejscami jeśli są w złej kolejności. Robisz to w kółko aż wszystko będzie na miejscu.
-
-⚡ **Drugi sposób (Quick Sort)**: Wybierasz jedną kartę jako "wzorzec" i układasz wszystkie mniejsze po lewej, a większe po prawej. Potem robisz to samo z każdą grupą.
-
-🔗 **Trzeci sposób (Merge Sort)**: Dzielisz stos na pół, sortujesz każdą połowę osobno, a potem łączysz je w prawidłowej kolejności.
+Główna idea to coś jak ${request.sectionContent.length > 300 ? 'organizowanie dużej biblioteki' : 'porządkowanie szuflady'}. 
 
 Każdy sposób ma swoje zalety - niektóre są szybsze, inne łatwiejsze do zrozumienia.
     `.trim()
@@ -145,11 +143,12 @@ Każdy sposób ma swoje zalety - niektóre są szybsze, inne łatwiejsze do zroz
   }
 }
 
-// Real API service interface - for future implementation
+// Real API service interface
 class SmartPreviewRealAPI {
-  static async callAPI(request: SmartPreviewRequest): Promise<SmartPreviewResponse> {
-    // TODO: Replace with actual API call
-    const response = await fetch(`/api/quick-study/sessions/${request.sectionId.split('-')[1]}/generate/notes/smart-preview`, {
+  static async callAPI(request: SmartPreviewRequest, parsedSections?: any[], fullDocument?: string): Promise<SmartPreviewResponse> {
+    const sessionId = request.sectionId.includes('-') ? request.sectionId.split('-')[1] : request.sectionId
+    
+    const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate/notes/edit/smart-preview`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -158,12 +157,15 @@ class SmartPreviewRealAPI {
         operation: request.operation,
         sectionId: request.sectionId,
         sectionContent: request.sectionContent,
-        focusElement: request.focusElement
+        focusElement: request.focusElement,
+        parsedSections,
+        fullDocument
       })
     })
 
     if (!response.ok) {
-      throw new Error(`Smart Preview API error: ${response.status}`)
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+      throw new Error(`Smart Preview API error: ${response.status} - ${errorData.error}`)
     }
 
     return await response.json()
@@ -187,7 +189,7 @@ export function useSmartPreview() {
   })
 
   // Load content for specific operation
-  const loadOperation = useCallback(async (request: SmartPreviewRequest) => {
+  const loadOperation = useCallback(async (request: SmartPreviewRequest, context?: SmartPreviewContext) => {
     console.log(`🧠 useSmartPreview: Loading ${request.operation} for section ${request.sectionId}`)
     
     // Set loading state
@@ -203,10 +205,11 @@ export function useSmartPreview() {
     try {
       let response: SmartPreviewResponse
 
-      // TODO: Switch between mock and real API based on environment
-      const USE_MOCK_API = true // Change to false when backend is ready
+      // Switch between mock and real API based on environment
+      const USE_MOCK_API = process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_USE_MOCK_SMART_PREVIEW === 'true'
       
       if (USE_MOCK_API) {
+        console.log('🎭 Using Mock Smart Preview API')
         // Use mock API
         switch (request.operation) {
           case 'concepts':
@@ -222,8 +225,9 @@ export function useSmartPreview() {
             throw new Error(`Unknown operation: ${request.operation}`)
         }
       } else {
+        console.log('🚀 Using Real Smart Preview API')
         // Use real API
-        response = await SmartPreviewRealAPI.callAPI(request)
+        response = await SmartPreviewRealAPI.callAPI(request, context?.parsedSections, context?.fullDocument)
       }
 
       // Update state with successful response
