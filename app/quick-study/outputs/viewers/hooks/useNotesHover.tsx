@@ -1,4 +1,4 @@
-// app/quick-study/outputs/viewers/hooks/useNotesHover.tsx
+// app/quick-study/outputs/viewers/hooks/useNotesHover.tsx - COMPLETE FIXED VERSION
 import { useCallback, useRef } from 'react'
 
 export interface HoverState {
@@ -32,11 +32,11 @@ interface UseNotesHoverProps {
       content: string
     } | null
   }) => void
-  // ONLY ADD: Smart Preview handler (OPTIONAL)
   onSmartPreviewClick?: (event: React.MouseEvent<HTMLElement>, sectionId: string, sectionContent: string) => void
+  onQuickActionsClick?: (event: React.MouseEvent<HTMLElement>, contentId: string, contentData: any) => void
 }
 
-export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick }: UseNotesHoverProps): HoverHandlers {
+export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick, onQuickActionsClick }: UseNotesHoverProps): HoverHandlers {
   // Refs for performance
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastHoveredRef = useRef<string | null>(null)
@@ -48,13 +48,10 @@ export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick
 
   // Funkcja do wyświetlania ikonki ołówka
   const showEditIcon = useCallback((container: HTMLElement, targetElement?: HTMLElement) => {
-    // Użyj targetElement jeśli podany, inaczej container
     const elementToMark = targetElement || container
     
-    // Sprawdź czy ikonka już istnieje na tym konkretnym elemencie
     if (elementToMark.querySelector('.edit-pencil-icon')) return
 
-    // Stwórz element ikonki
     const pencilIcon = document.createElement('div')
     pencilIcon.className = 'edit-pencil-icon'
     pencilIcon.innerHTML = `
@@ -64,10 +61,9 @@ export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick
       </svg>
     `
     
-    // Styling ikonki - pozycjonowanie poza kontenerem z lewej strony
     Object.assign(pencilIcon.style, {
       position: 'absolute',
-      left: '-28px', // Poza kontenerem z lewej strony
+      left: '-28px',
       top: '50%',
       transform: 'translateY(-50%)',
       width: '22px',
@@ -87,27 +83,23 @@ export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick
       pointerEvents: 'auto'
     })
 
-    // Upewnij się że element ma position relative
     if (getComputedStyle(elementToMark).position === 'static') {
       elementToMark.style.position = 'relative'
     }
 
-    // Dodaj ikonkę do konkretnego elementu
     elementToMark.appendChild(pencilIcon)
   }, [])
 
-  // NEW: Funkcja do wyświetlania Smart Preview button
+  // Smart Preview button
   const showSmartPreviewIcon = useCallback((container: HTMLElement, targetElement?: HTMLElement) => {
-    // ONLY if Smart Preview handler is provided AND element is a section header
     if (!onSmartPreviewClick) return
     
     const elementToMark = targetElement || container
     const sectionId = elementToMark.getAttribute('data-section-id')
     
-    if (!sectionId) return // Only show on section headers
+    if (!sectionId) return
     if (elementToMark.querySelector('.smart-preview-icon')) return
 
-    // Create Smart Preview button with text
     const brainIcon = document.createElement('div')
     brainIcon.className = 'smart-preview-icon'
     brainIcon.innerHTML = `
@@ -118,15 +110,14 @@ export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick
       <span style="font-size: 12px; font-weight: 500; white-space: nowrap;">Smart Review</span>
     `
     
-    // Green theme, positioned INSIDE the hover area with text
     Object.assign(brainIcon.style, {
       position: 'absolute',
-      right: '8px', // Small margin from edge
+      right: '8px',
       top: '50%',
       transform: 'translateY(-50%)',
-      height: '26px', // Slightly taller for text
-      padding: '0 8px', // Horizontal padding for text
-      backgroundColor: 'rgba(34, 197, 94, 0.9)', // Green
+      height: '26px',
+      padding: '0 8px',
+      backgroundColor: 'rgba(34, 197, 94, 0.9)',
       borderRadius: '6px',
       display: 'flex',
       alignItems: 'center',
@@ -142,7 +133,6 @@ export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick
       minWidth: 'fit-content'
     })
 
-    // Click handler
     brainIcon.addEventListener('click', (e) => {
       e.stopPropagation()
       const sectionContent = elementToMark.getAttribute('data-content') || ''
@@ -153,7 +143,6 @@ export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick
       onSmartPreviewClick(syntheticEvent, sectionId, sectionContent)
     })
 
-    // Hover effects
     brainIcon.addEventListener('mouseenter', () => {
       brainIcon.style.backgroundColor = 'rgba(34, 197, 94, 1)'
       brainIcon.style.transform = 'translateY(-50%) scale(1.02)'
@@ -165,7 +154,6 @@ export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick
       brainIcon.style.transform = 'translateY(-50%) scale(1)'
     })
 
-    // Ensure relative positioning
     if (getComputedStyle(elementToMark).position === 'static') {
       elementToMark.style.position = 'relative'
     }
@@ -173,58 +161,176 @@ export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick
     elementToMark.appendChild(brainIcon)
   }, [onSmartPreviewClick])
 
-  // Funkcja do sprawdzania czy należy pokazać ołówek
+  // Quick Actions button
+  const showQuickActionsIcon = useCallback((container: HTMLElement, targetElement?: HTMLElement) => {
+    if (!onQuickActionsClick) return
+    
+    const elementToMark = targetElement || container
+    const contentId = elementToMark.getAttribute('data-content-id') || elementToMark.getAttribute('data-element-id')
+    
+    if (!contentId) return
+    if (elementToMark.getAttribute('data-section-id')) return
+    if (elementToMark.querySelector('.quick-actions-icon')) return
+
+    const quickIcon = document.createElement('div')
+    quickIcon.className = 'quick-actions-icon'
+    quickIcon.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-right: 6px;">
+        <path d="m13 2-2 2.5h3L12 7"/>
+        <path d="M10.5 17.5 8 15l1.5-1.5L8 12l1.5-1.5L8 9l1.5-1.5L8 6l2.5-2.5"/>
+        <path d="m17 6-2.5 2.5L16 10l-1.5 1.5L16 13l-1.5 1.5L16 16l-2.5 2.5"/>
+        <path d="M22 18v-2a4 4 0 0 0-4-4H2"/>
+      </svg>
+      <span style="font-size: 12px; font-weight: 500; white-space: nowrap;">Quick Actions</span>
+    `
+    
+    Object.assign(quickIcon.style, {
+      position: 'absolute',
+      right: '8px',
+      top: '8px',
+      height: '28px',
+      padding: '0 10px',
+      backgroundColor: 'rgba(147, 51, 234, 0.9)',
+      borderRadius: '6px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: 'white',
+      fontSize: '12px',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+      cursor: 'pointer',
+      opacity: '0',
+      animation: 'fadeIn 0.2s ease-out forwards',
+      zIndex: '1000',
+      pointerEvents: 'auto',
+      minWidth: 'fit-content'
+    })
+
+    quickIcon.addEventListener('click', (e) => {
+      e.stopPropagation()
+      
+      const contentData = {
+        contentId,
+        content: elementToMark.getAttribute('data-content') || elementToMark.textContent || '',
+        elementType: elementToMark.getAttribute('data-element-type') || 'paragraph',
+        contentType: elementToMark.getAttribute('data-content-type') || 'paragraph'
+      }
+      
+      const syntheticEvent = {
+        ...e,
+        currentTarget: elementToMark,
+      } as React.MouseEvent<HTMLElement>
+      
+      onQuickActionsClick(syntheticEvent, contentId, contentData)
+    })
+
+    quickIcon.addEventListener('mouseenter', () => {
+      quickIcon.style.backgroundColor = 'rgba(147, 51, 234, 1)'
+      quickIcon.style.transform = 'translateY(-1px) scale(1.05)'
+    })
+
+    quickIcon.addEventListener('mouseleave', () => {
+      quickIcon.style.backgroundColor = 'rgba(147, 51, 234, 0.9)'
+      quickIcon.style.transform = 'translateY(0) scale(1)'
+    })
+
+    if (getComputedStyle(elementToMark).position === 'static') {
+      elementToMark.style.position = 'relative'
+    }
+
+    // NEW: Ensure minimum height for button
+    if (elementToMark.offsetHeight < 36) {
+      elementToMark.style.minHeight = '36px'
+      elementToMark.style.display = elementToMark.style.display || 'block'
+    }
+
+    elementToMark.appendChild(quickIcon)
+  }, [onQuickActionsClick])
+
+  // NEW: Content item cleanup logic (like sections have)
+  const clearContentItemHoverEffects = useCallback((currentElementId: string) => {
+    const allContentItems = document.querySelectorAll('[data-element-id]:not([data-section-id])')
+    
+    allContentItems.forEach((element) => {
+      const elementId = element.getAttribute('data-element-id')
+      if (elementId && elementId !== currentElementId) {
+        // Reset visual styles
+        Object.assign((element as HTMLElement).style, {
+          backgroundColor: '',
+          borderLeft: '',
+          borderRadius: '',
+          padding: '',
+          margin: '',
+          transition: 'all 0.15s ease-in-out'
+        })
+      }
+    })
+    
+    // Clean up old icons (except current element)
+    const existingIcons = document.querySelectorAll('.edit-pencil-icon, .quick-actions-icon')
+    existingIcons.forEach(icon => {
+      const parentElement = icon.closest('[data-element-id]')
+      const parentId = parentElement?.getAttribute('data-element-id')
+      if (parentId !== currentElementId) {
+        icon.remove()
+      }
+    })
+  }, [])
+
+  // Check pencil display logic
   const checkPencilDisplay = useCallback(() => {
     if (!hoverStartTimeRef.current || !currentHoveredElementRef.current) return
     
     const timeOnElement = Date.now() - hoverStartTimeRef.current
+    const element = currentHoveredElementRef.current
     
-    // Jeśli jesteśmy na elemencie dłużej niż 500ms I element nadal jest hoverowany
-    if (timeOnElement >= 500 && currentHoveredElementRef.current.matches(':hover')) {
-      // Sprawdź czy to najgłębszy element (żeby uniknąć duplikacji)
-      const hoveredChildren = currentHoveredElementRef.current.querySelectorAll(':hover')
-      const deepestHovered = hoveredChildren.length > 0 ? hoveredChildren[hoveredChildren.length - 1] : currentHoveredElementRef.current
+    if (timeOnElement >= 500) {
+      const sectionContainer = element.closest('.section-container') as HTMLElement
+      const isSection = !!element.getAttribute('data-section-id')
       
-      // Pokaż ołówek tylko jeśli to najgłębszy element
-      if (deepestHovered === currentHoveredElementRef.current || !deepestHovered.closest('[data-section-id]')) {
-        const sectionContainer = currentHoveredElementRef.current.closest('.section-container') as HTMLElement
-        showEditIcon(sectionContainer || currentHoveredElementRef.current, currentHoveredElementRef.current)
-        // NEW: ONLY show Smart Preview if it's a section header
-        showSmartPreviewIcon(sectionContainer || currentHoveredElementRef.current, currentHoveredElementRef.current)
+      // For sections - use strict hover check
+      if (isSection && element.matches(':hover')) {
+        showEditIcon(sectionContainer || element, element)
+        showSmartPreviewIcon(sectionContainer || element, element)
       }
       
-      // Zatrzymaj sprawdzanie - ołówek już wyświetlony
+      // For content items - no hover dependency
+      if (!isSection) {
+        showEditIcon(sectionContainer || element, element)
+        showQuickActionsIcon(sectionContainer || element, element)
+      }
+      
       if (pencilCheckIntervalRef.current) {
         clearInterval(pencilCheckIntervalRef.current)
         pencilCheckIntervalRef.current = null
       }
     }
-  }, [showEditIcon, showSmartPreviewIcon])
+  }, [showEditIcon, showSmartPreviewIcon, showQuickActionsIcon])
 
-  // Funkcja do rozpoczęcia śledzenia czasu na elemencie
+  // Start hover tracking
   const startHoverTracking = useCallback((element: HTMLElement) => {
-    // Wyczyść poprzednie śledzenie
     if (pencilCheckIntervalRef.current) {
       clearInterval(pencilCheckIntervalRef.current)
       pencilCheckIntervalRef.current = null
     }
     
-    // Usuń wszystkie istniejące ikonki
+    // Clean all existing icons
     const existingIcons = document.querySelectorAll('.edit-pencil-icon')
     existingIcons.forEach(icon => icon.remove())
-    // NEW: Remove Smart Preview icons too
+    
     const existingSmartIcons = document.querySelectorAll('.smart-preview-icon')
     existingSmartIcons.forEach(icon => icon.remove())
     
-    // Rozpocznij nowe śledzenie
+    const existingQuickIcons = document.querySelectorAll('.quick-actions-icon')
+    existingQuickIcons.forEach(icon => icon.remove())
+    
     hoverStartTimeRef.current = Date.now()
     currentHoveredElementRef.current = element
     
-    // Sprawdzaj co 100ms czy należy pokazać ołówek
     pencilCheckIntervalRef.current = setInterval(checkPencilDisplay, 100)
   }, [checkPencilDisplay])
 
-  // Funkcja do zatrzymania śledzenia
+  // Stop hover tracking
   const stopHoverTracking = useCallback(() => {
     hoverStartTimeRef.current = null
     currentHoveredElementRef.current = null
@@ -234,49 +340,50 @@ export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick
       pencilCheckIntervalRef.current = null
     }
     
-    // Usuń wszystkie ikonki ołówka
     const existingIcons = document.querySelectorAll('.edit-pencil-icon')
     existingIcons.forEach(icon => icon.remove())
-    // NEW: Remove Smart Preview icons too
+    
     const existingSmartIcons = document.querySelectorAll('.smart-preview-icon')
     existingSmartIcons.forEach(icon => icon.remove())
+    
+    const existingQuickIcons = document.querySelectorAll('.quick-actions-icon')
+    existingQuickIcons.forEach(icon => icon.remove())
   }, [])
 
-  // Optimized hover handler for markdown elements
+  // FIXED: Create hover handler with proper onClick implementation
   const createHoverHandler = useCallback((elementType: string, color: string) => {
     return {
-onMouseOver: (e: React.MouseEvent<HTMLElement>) => {
-  if (isAnimating) return
+      onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+        if (isAnimating) return
+        e.stopPropagation()
+        const element = e.currentTarget
+        const elementId = element.getAttribute('data-element-id')
 
-  e.stopPropagation()
-  const element = e.currentTarget
+        // NEW: Clean up other content items first
+        if (elementId) {
+          clearContentItemHoverEffects(elementId)
+        }
 
-  // ⛔️ Ważne: ignoruj zdarzenia pochodzące z dzieci (bo onMouseOver bąbelkuje!)
-  if (!element.contains(e.target as Node)) return
+        // Visual styles
+        const intensity = 0.06
+        Object.assign(element.style, {
+          backgroundColor: `rgba(${color}, ${intensity})`,
+          borderLeft: `3px solid rgba(${color}, ${intensity * 4})`,
+          borderRadius: '6px',
+          padding: '8px 12px',
+          margin: '4px -12px',
+          transition: 'all 0.15s ease-in-out'
+        })
 
-  const section = element.closest('.section-container')
-  if (!section) return
-
-  startHoverTracking(element)
-
-  const intensity = 0.06
-  Object.assign(element.style, {
-    backgroundColor: `rgba(${color}, ${intensity})`,
-    borderLeft: `3px solid rgba(${color}, ${intensity * 4})`,
-    borderRadius: '6px',
-    padding: '8px 12px',
-    margin: '4px -12px',
-    transition: 'all 0.15s ease-in-out'
-  })
-}
-,
+        startHoverTracking(element)
+      },
+      
       onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+        if (isAnimating) return
         e.stopPropagation()
         const element = e.currentTarget
         
-        // Zatrzymaj śledzenie ołówka
-        stopHoverTracking()
-
+        // Remove visual styles only
         Object.assign(element.style, {
           backgroundColor: '',
           borderLeft: '',
@@ -286,62 +393,64 @@ onMouseOver: (e: React.MouseEvent<HTMLElement>) => {
           transition: 'all 0.15s ease-in-out'
         })
         
+        // Don't call stopHoverTracking immediately
         setTimeout(() => {
           if (element.style.transition) {
             element.style.transition = ''
           }
         }, 150)
       },
-onClick: (e: React.MouseEvent<HTMLElement>) => {
-  e.stopPropagation()
-  e.preventDefault()
-  
-  const element = e.currentTarget
-  
-  console.log('🎯 === CLICK EVENT START ===', {
-    elementType,
-    timestamp: Date.now()
-  })
-  
-  // FIXED: Zbierz WSZYSTKIE potrzebne dane DOM TERAZ (gdy element jest connected)
-  const elementId = element.getAttribute('data-element-id') || `fallback_${Date.now()}`
-  const structuralId = element.getAttribute('data-structural-id') || 
-                       element.closest('[data-structural-id]')?.getAttribute('data-structural-id')
-  const domElementType = element.getAttribute('data-element-type') || elementType
-  const textContent = element.textContent?.trim() || ''
-  
-  console.log('🔍 Collecting DOM data at click time:', {
-    elementId,
-    structuralId,
-    domElementType,
-    isConnected: element.isConnected,
-    hasTextContent: !!textContent
-  })
-  
-  // Create domData with ALL info needed for AI
-  const domData = {
-    elementId,
-    content: textContent,
-    elementType: domElementType,
-    clone: element.cloneNode(true) as HTMLElement,
-    sourceElement: element,
-    // NEW: Pre-collected DOM info for AI
-    domInfo: structuralId ? {
-      domElementId: elementId,
-      structuralId,
-      elementType: domElementType,
-      content: textContent
-    } : null
-  }
-  
-  console.log('🎯 DOM-first onClick - complete domData:', domData)
-  
-  onElementClick(e, domData)
-}
+      
+      // FIXED: Restored complete onClick implementation
+      onClick: (e: React.MouseEvent<HTMLElement>) => {
+        e.stopPropagation()
+        e.preventDefault()
+        
+        const element = e.currentTarget
+        
+        console.log('🎯 === CLICK EVENT START ===', {
+          elementType,
+          timestamp: Date.now()
+        })
+        
+        // Collect DOM data
+        const elementId = element.getAttribute('data-element-id') || `fallback_${Date.now()}`
+        const structuralId = element.getAttribute('data-structural-id') || 
+                             element.closest('[data-structural-id]')?.getAttribute('data-structural-id')
+        const domElementType = element.getAttribute('data-element-type') || elementType
+        const textContent = element.textContent?.trim() || ''
+        
+        console.log('🔍 Collecting DOM data at click time:', {
+          elementId,
+          structuralId,
+          domElementType,
+          isConnected: element.isConnected,
+          hasTextContent: !!textContent
+        })
+        
+        // Create domData
+        const domData = {
+          elementId,
+          content: textContent,
+          elementType: domElementType,
+          clone: element.cloneNode(true) as HTMLElement,
+          sourceElement: element,
+          domInfo: structuralId ? {
+            domElementId: elementId,
+            structuralId,
+            elementType: domElementType,
+            content: textContent
+          } : null
+        }
+        
+        console.log('🎯 DOM-first onClick - complete domData:', domData)
+        
+        onElementClick(e, domData)
+      }
     }
-  }, [onElementClick, isAnimating, startHoverTracking, stopHoverTracking])
+  }, [onElementClick, isAnimating, startHoverTracking, clearContentItemHoverEffects])
 
-  // Hover handlery dla sekcji
+  // Section hover handlers (unchanged)
   const applySectionHoverStyles = useCallback((event: React.MouseEvent<HTMLElement>, sectionId: string, level: number) => {
     if (isAnimating) return
     
@@ -350,28 +459,25 @@ onClick: (e: React.MouseEvent<HTMLElement>) => {
     const sectionContainer = targetElement.closest('.section-container') as HTMLElement
     if (!sectionContainer) return
 
-    // Wyczyść poprzedni timeout
     if (hoverTimeoutRef.current) {
       clearTimeout(hoverTimeoutRef.current)
       hoverTimeoutRef.current = null
     }
 
-    // Jeśli poprzedni element był highlighted, wyczyść go
     if (lastHoveredRef.current && lastHoveredRef.current !== sectionId) {
       const prevElement = document.querySelector(`[data-section-id="${lastHoveredRef.current}"]`)
       const prevContainer = prevElement?.closest('.section-container') as HTMLElement
       if (prevContainer) {
-      Object.assign(sectionContainer.style, {
-  backgroundColor: `rgba(59, 130, 246, 0.08)`,
-  borderRadius: '8px',
-  transform: 'scale(1.01)', // lub translateY, zamiast margin/padding
-  boxShadow: `inset 3px 0 0 rgba(59, 130, 246, 0.3), 0 1px 3px rgba(59, 130, 246, 0.1)`,
-  transition: 'all 0.15s ease-in-out'
-})
+        Object.assign(sectionContainer.style, {
+          backgroundColor: `rgba(59, 130, 246, 0.08)`,
+          borderRadius: '8px',
+          transform: 'scale(1.01)',
+          boxShadow: `inset 3px 0 0 rgba(59, 130, 246, 0.3), 0 1px 3px rgba(59, 130, 246, 0.1)`,
+          transition: 'all 0.15s ease-in-out'
+        })
       }
     }
 
-    // Apply hover styles do kontenera
     Object.assign(sectionContainer.style, {
       backgroundColor: `rgba(59, 130, 246, 0.08)`,
       borderLeft: `3px solid rgba(59, 130, 246, 0.3)`,
@@ -383,8 +489,6 @@ onClick: (e: React.MouseEvent<HTMLElement>) => {
     })
 
     lastHoveredRef.current = sectionId
-
-    // Rozpocznij śledzenie dla ołówka
     startHoverTracking(targetElement)
   }, [isAnimating, startHoverTracking])
 
@@ -394,16 +498,13 @@ onClick: (e: React.MouseEvent<HTMLElement>) => {
     const sectionContainer = targetElement.closest('.section-container') as HTMLElement
     if (!sectionContainer) return
 
-    // Zatrzymaj śledzenie ołówka
     stopHoverTracking()
 
-    // Wyczyść timeout
     if (hoverTimeoutRef.current) {
       clearTimeout(hoverTimeoutRef.current)
       hoverTimeoutRef.current = null
     }
 
-    // Usuń style hover
     Object.assign(sectionContainer.style, {
       backgroundColor: '',
       borderLeft: '',
@@ -413,10 +514,8 @@ onClick: (e: React.MouseEvent<HTMLElement>) => {
       transition: 'all 0.15s ease-in-out'
     })
 
-    // Wyczyść reference
     lastHoveredRef.current = null
 
-    // Usuń transition po animacji
     setTimeout(() => {
       if (sectionContainer.style.transition) {
         sectionContainer.style.transition = ''

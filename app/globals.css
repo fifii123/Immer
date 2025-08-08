@@ -629,3 +629,68 @@ body {
 .dark .smart-preview-panel button:hover {
   background: rgba(255, 255, 255, 0.1) !important;
 }
+
+
+/* Quick Actions Panel Animation */
+.quick-actions-panel {
+  animation: quick-actions-appear 0.2s ease-out;
+}
+
+@keyframes quick-actions-appear {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Quick Actions Icon Hover */
+.quick-actions-icon:hover {
+  background-color: rgba(147, 51, 234, 1) !important;
+  transform: translateY(-1px) scale(1.05) !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+/* Quick Action Block Animations */
+.quick-action-block {
+  transition: all 0.15s ease-in-out;
+}
+
+.quick-action-block:hover {
+  transform: translateX(2px);
+  box-shadow: 0 2px 8px rgba(147, 51, 234, 0.15);
+}
+
+/* Dark mode adjustments */
+.dark .quick-actions-panel > div {
+  background-color: rgba(17, 24, 39, 0.9) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .quick-action-block {
+  background: rgba(30, 41, 59, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .quick-actions-panel {
+    width: calc(100vw - 2rem) !important;
+    left: 1rem !important;
+    transform: none !important;
+  }
+  
+  .quick-actions-icon span {
+    display: none; /* Hide text on mobile */
+  }
+  
+  .quick-actions-icon {
+    width: 32px !important;
+    min-width: 32px !important;
+    padding: 0 6px !important;
+  }
+}
+

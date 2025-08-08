@@ -1,4 +1,4 @@
-// app/quick-study/outputs/viewers/components/ContentItemRenderer.tsx
+// app/quick-study/outputs/viewers/components/ContentItemRenderer.tsx - FIXED VERSION
 import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -53,74 +53,51 @@ export function ContentItemRenderer({
   const hoverColor = getHoverColor(type)
   const handlers = hoverHandlers.createHoverHandler(elementType, hoverColor)
   
-  // Create markdown components WITHOUT their own IDs
-const markdownComponents = {
-p: ({ node, children, ...props }: any) => (
-  <p className="mb-4 leading-relaxed text-foreground" {...props}>
-    {children}
-  </p>
-),
+  // FIXED: Create markdown components WITHOUT any hover handlers
+  const markdownComponents = {
+    p: ({ node, children, ...props }: any) => (
+      <p className="mb-4 leading-relaxed text-foreground" {...props}>
+        {children}
+      </p>
+    ),
 
-    ul: ({ node, children, ...props }: any) => {
-      const elementId = `ul-${Math.random().toString(36).substr(2, 9)}`
-      const handlers = hoverHandlers.createHoverHandler('unordered-list', '168, 85, 247')
-      
-      return (
-        <ul
-          data-element-id={elementId}
-          data-structural-id={id}
-          data-element-type="unordered-list"
-          className="list-disc list-inside space-y-2 mb-4 ml-4 cursor-pointer section-content-element relative"
-          {...handlers}
+    // FIXED: No handlers, no data-element-id, just styling
+    ul: ({ node, children, ...props }: any) => (
+      <ul
+        className="list-disc list-inside space-y-2 mb-4 ml-4"
+        {...props}
+      >
+        {children}
+      </ul>
+    ),
+
+    // FIXED: No handlers, no data-element-id, just styling  
+    ol: ({ node, children, ...props }: any) => (
+      <ol
+        className="list-decimal list-inside space-y-2 mb-4 ml-4"
+        {...props}
+      >
+        {children}
+      </ol>
+    ),
+
+    li: ({ node, children, ...props }: any) => (
+      <li className="text-foreground leading-relaxed" {...props}>
+        {children}
+      </li>
+    ),
+
+    // FIXED: No handlers, just table styling
+    table: ({ node, children, ...props }: any) => (
+      <div className="overflow-x-auto mb-6">
+        <table
+          className="min-w-full border-collapse bg-background"
           {...props}
         >
           {children}
-        </ul>
-      )
-    },
-
-    ol: ({ node, children, ...props }: any) => {
-      const elementId = `ol-${Math.random().toString(36).substr(2, 9)}`
-      const handlers = hoverHandlers.createHoverHandler('ordered-list', '250, 204, 21')
-      
-      return (
-        <ol
-          data-element-id={elementId}
-          data-structural-id={id}
-          data-element-type="ordered-list"
-          className="list-decimal list-inside space-y-2 mb-4 ml-4 cursor-pointer section-content-element relative"
-          {...handlers}
-          {...props}
-        >
-          {children}
-        </ol>
-      )
-    },
-li: ({ node, children, ...props }: any) => (
-  <li className="text-foreground leading-relaxed" {...props}>
-    {children}
-  </li>
-),
-
-    table: ({ node, children, ...props }: any) => {
-      const elementId = `table-${Math.random().toString(36).substr(2, 9)}`
-      const handlers = hoverHandlers.createHoverHandler('table', '239, 68, 68')
-      
-      return (
-        <div className="overflow-x-auto mb-6">
-          <table
-            data-element-id={elementId}
-            data-structural-id={id}
-            data-element-type="table"
-            className="min-w-full border-collapse bg-background cursor-pointer section-content-element relative"
-            {...handlers}
-            {...props}
-          >
-            {children}
-          </table>
-        </div>
-      )
-    },
+        </table>
+      </div>
+    ),
 
     th: ({ node, children, ...props }: any) => (
       <th
@@ -140,41 +117,24 @@ li: ({ node, children, ...props }: any) => (
       </td>
     ),
 
-    blockquote: ({ node, children, ...props }: any) => {
-      const elementId = `blockquote-${Math.random().toString(36).substr(2, 9)}`
-      const handlers = hoverHandlers.createHoverHandler('blockquote', '156, 163, 175')
-      
-      return (
-        <blockquote
-          data-element-id={elementId}
-          data-structural-id={id}
-          data-element-type="blockquote"
-          className="border-l-4 border-gray-400 dark:border-gray-500 pl-4 py-2 mb-4 text-gray-700 dark:text-gray-300 italic bg-gray-50 dark:bg-gray-800/50 cursor-pointer section-content-element relative"
-          {...handlers}
-          {...props}
-        >
-          {children}
-        </blockquote>
-      )
-    },
+    // FIXED: No handlers, just blockquote styling
+    blockquote: ({ node, children, ...props }: any) => (
+      <blockquote
+        className="border-l-4 border-gray-400 dark:border-gray-500 pl-4 py-2 mb-4 text-gray-700 dark:text-gray-300 italic bg-gray-50 dark:bg-gray-800/50"
+        {...props}
+      >
+        {children}
+      </blockquote>
+    ),
 
+    // FIXED: No handlers for code blocks
     code: ({ node, inline, className, children, ...props }: any) => {
       const match = /language-(\w+)/.exec(className || '')
       const language = match ? match[1] : ''
 
       if (!inline && language) {
-        const elementId = `code-block-${Math.random().toString(36).substr(2, 9)}`
-        const handlers = hoverHandlers.createHoverHandler('code-block', '99, 102, 241')
-        
         return (
-          <div
-            data-element-id={elementId}
-            data-structural-id={id}
-            data-content={String(children)}
-            data-element-type="code-block"
-            className="mb-4 cursor-pointer section-content-element relative"
-            {...handlers}
-          >
+          <div className="mb-4">
             <SyntaxHighlighter
               style={tomorrow}
               language={language}
@@ -204,7 +164,7 @@ li: ({ node, children, ...props }: any) => (
       </strong>
     ),
 
-em: ({ node, children, ...props }: any) => (
+    em: ({ node, children, ...props }: any) => (
       <em className="italic text-foreground" {...props}>
         {children}
       </em>
@@ -262,7 +222,8 @@ em: ({ node, children, ...props }: any) => (
       </h6>
     ),
   }
-return (
+
+  return (
     <div
       key={id}
       data-element-id={id}

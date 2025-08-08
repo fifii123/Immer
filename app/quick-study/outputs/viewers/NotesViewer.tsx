@@ -15,11 +15,12 @@ import { useNotesHover } from './hooks/useNotesHover'
 import { ContentItemRenderer } from './components/ContentItemRenderer'
 import { EditModalProvider } from './components/EditModalProvider'
 import { SmartPreviewPanel } from './components/SmartPreviewPanel'
+import { QuickActionsPanel } from './components/QuickActionsPanel'
+
 
 interface Output {
   id: string;
   type: string;
-  title: string;
   content?: string;
   sourceId: string;
   createdAt: Date;
@@ -98,6 +99,22 @@ const [smartPreviewState, setSmartPreviewState] = useState<{
     position: null,
     sectionContainer: null
   })
+
+  interface QuickActionsState {
+  isOpen: boolean
+  contentId: string | null
+  contentData: any
+  position: { top: number; left: number } | null
+  contentContainer: HTMLElement | null
+}
+
+const [quickActionsState, setQuickActionsState] = useState<QuickActionsState>({
+  isOpen: false,
+  contentId: null,  
+  contentData: null,
+  position: null,
+  contentContainer: null
+})
 
   // Update lokalnego content gdy output się zmienia
   useEffect(() => {
@@ -466,6 +483,48 @@ const handleSmartPreviewClose = useCallback(() => {
     })
   }, [])
 
+  const handleQuickActionsClick = useCallback((
+  event: React.MouseEvent<HTMLElement>,
+  contentId: string,
+  contentData: any
+) => {
+  console.log('⚡ Quick Actions clicked:', contentId, contentData)
+  
+  // Find the content container for sticky positioning
+  const contentContainer = event.currentTarget.closest('[data-element-id]') as HTMLElement
+  const quickButton = event.currentTarget.querySelector('.quick-actions-icon') as HTMLElement
+  
+  if (contentContainer && quickButton) {
+    const containerRect = contentContainer.getBoundingClientRect()
+    const buttonRect = quickButton.getBoundingClientRect()
+    
+    // Position panel relative to container, similar to Smart Preview logic
+    const containerRelativeTop = buttonRect.bottom - containerRect.top + 8
+    const containerRelativeLeft = buttonRect.left - containerRect.left + (buttonRect.width * 0.75)
+    
+    setQuickActionsState({
+      isOpen: true,
+      contentId,
+      contentData,
+      position: {
+        top: containerRelativeTop,
+        left: containerRelativeLeft  
+      },
+      contentContainer: contentContainer
+    })
+  }
+}, [])
+
+const handleQuickActionsClose = useCallback(() => {
+  setQuickActionsState({
+    isOpen: false,
+    contentId: null,
+    contentData: null,
+    position: null,
+    contentContainer: null
+  })
+}, [])
+
   // Handle click outside for Smart Preview - ONLY ADDITION
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -484,6 +543,24 @@ const handleSmartPreviewClose = useCallback(() => {
       }
     }
   }, [smartPreviewState.isOpen, handleSmartPreviewClose])
+
+  useEffect(() => {
+  const handleClickOutside = (event: MouseEvent) => {
+    if (quickActionsState.isOpen) {
+      const target = event.target as Element
+      if (!target.closest('.quick-actions-panel') && !target.closest('.quick-actions-icon')) {
+        handleQuickActionsClose()
+      }
+    }
+  }
+
+  if (quickActionsState.isOpen) {
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }
+}, [quickActionsState.isOpen, handleQuickActionsClose])
 
   const handleHoverClick = useCallback((event: React.MouseEvent<HTMLElement>, domData: {
     elementId: string | null
@@ -522,7 +599,8 @@ const handleSmartPreviewClose = useCallback(() => {
   const hoverHandlers = useNotesHover({
     isAnimating,
     onElementClick: handleHoverClick,
-    onSmartPreviewClick: handleSmartPreviewClick // ADD Smart Preview handler
+    onSmartPreviewClick: handleSmartPreviewClick, 
+    onQuickActionsClick: handleQuickActionsClick 
   })
 
   // Section handlers (UNCHANGED)
@@ -787,6 +865,18 @@ const handleSmartPreviewClose = useCallback(() => {
                   sectionContainer={smartPreviewState.sectionContainer}
                 />
               )}
+
+              {quickActionsState.isOpen && (
+  <QuickActionsPanel
+    contentId={quickActionsState.contentId!}
+    contentData={quickActionsState.contentData}
+    position={quickActionsState.position}
+    onClose={handleQuickActionsClose}
+    contentContainer={quickActionsState.contentContainer}
+    parsedSections={parsedSections}
+    fullDocument={localContent}
+  />
+)}
             </div>
           )
         }}
