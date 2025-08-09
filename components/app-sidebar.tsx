@@ -64,7 +64,7 @@ export function AppSidebar() {
 
   return (
     <>
-      <Sidebar className="border-r bg-white/80 dark:bg-gray-900/80 backdrop-blur-md">
+      <Sidebar className="border-r bg-white/70 dark:bg-gray-900/80 backdrop-blur-md">
         <SidebarHeader className="border-b bg-gradient-to-br from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 p-6">
           <div className="flex items-center gap-4">
             <motion.div
