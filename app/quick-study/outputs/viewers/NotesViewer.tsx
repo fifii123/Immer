@@ -663,6 +663,30 @@ const handleQuickActionsClose = useCallback(() => {
     return 'paragraph'
   }, [])
 
+  const handleTransformComplete = useCallback((transformedContent: string, elementId: string) => {
+  console.log(`🔄 Transform complete for element: ${elementId}`)
+  console.log(`📝 New content length: ${transformedContent.length} chars`)
+  
+  // Find the DOM element to trigger handleContentSaved
+const domElement = document.querySelector(`[data-element-id="${elementId}"]`) as HTMLElement
+  if (!domElement) {
+    console.warn(`❌ DOM element not found: ${elementId}`)
+    toast({
+      title: "Transform failed",
+      description: "Could not locate content element",
+      variant: "destructive"
+    })
+    return
+  }
+    handleContentSaved(domElement, transformedContent, elementId)
+  
+  // Close QuickActions panel after successful transform
+  handleQuickActionsClose()
+  
+  console.log(`✅ Transform applied via handleContentSaved`)
+}, [handleContentSaved, handleQuickActionsClose, toast])
+
+
   // Modified renderSection - teraz używa hoverHandlers dla wszystkich elementów
   const renderSection = useCallback((section: ParsedSection, openEditModal: any): React.ReactNode => {
     const isCollapsed = collapsedSections.has(section.id)
@@ -828,7 +852,7 @@ const handleQuickActionsClose = useCallback(() => {
                     <div className="flex items-center gap-2 text-muted-foreground">
                       {noteTypeInfo.icon}
                       <span className="text-sm font-medium">
-                        {"Tip: Click to edit"}
+                        {"Tip: Hover section for overview, element for transforms, click to personalize"}
                       </span>
                     </div>
                   </div>
@@ -866,7 +890,7 @@ const handleQuickActionsClose = useCallback(() => {
                 />
               )}
 
-              {quickActionsState.isOpen && (
+{quickActionsState.isOpen && (
   <QuickActionsPanel
     contentId={quickActionsState.contentId!}
     contentData={quickActionsState.contentData}
@@ -875,6 +899,7 @@ const handleQuickActionsClose = useCallback(() => {
     contentContainer={quickActionsState.contentContainer}
     parsedSections={parsedSections}
     fullDocument={localContent}
+    onTransformComplete={handleTransformComplete}
   />
 )}
             </div>
@@ -882,4 +907,4 @@ const handleQuickActionsClose = useCallback(() => {
         }}
       </EditModalProvider>
     )
-}
+  }

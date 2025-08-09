@@ -1,4 +1,4 @@
-// app/quick-study/outputs/viewers/components/QuickActionsPanel.tsx
+// app/quick-study/outputs/viewers/components/QuickActionsPanel.tsx - UPDATED WITH REAL API
 "use client"
 
 import React, { useCallback, useEffect, useState } from 'react'
@@ -19,7 +19,7 @@ import {
   FileText,
   ArrowLeft,
   RefreshCw,
-    Quote,       
+  Quote,       
   Code,      
   BookOpen     
 } from "lucide-react"
@@ -60,6 +60,8 @@ interface QuickActionsPanelProps {
   contentContainer?: HTMLElement | null 
   parsedSections?: any[]
   fullDocument?: string
+  // NEW: Callback to apply transformation
+  onTransformComplete?: (transformedContent: string, elementId: string) => void
 }
 
 // Quick Actions definitions - MVP set with unified Convert action
@@ -126,19 +128,13 @@ const CONVERT_OPTIONS: ConvertOption[] = [
     excludeFromTypes: ['other', 'table'] // 'other' zawiera tabele
   },
   {
-    id: 'quote',
-    label: 'Quote Block',
-    description: 'Highlighted quote or citation',
+    id: 'text',
+    label: 'Plain Text',
+    description: 'Clean text without formatting',
     icon: <Quote className="h-4 w-4" />,
     excludeFromTypes: ['quote', 'blockquote']
   },
-  {
-    id: 'code',
-    label: 'Code Block',
-    description: 'Formatted code with syntax highlighting',
-    icon: <Code className="h-4 w-4" />,
-    excludeFromTypes: ['code', 'code-block']
-  },
+
   {
     id: 'definition',
     label: 'Definition',
@@ -155,7 +151,8 @@ export function QuickActionsPanel({
   onClose, 
   contentContainer,
   parsedSections,
-  fullDocument
+  fullDocument,
+  onTransformComplete
 }: QuickActionsPanelProps) {
   const [isPortalReady, setIsPortalReady] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
@@ -219,7 +216,58 @@ export function QuickActionsPanel({
     )
   })
 
-  // Execute conversion with specific target format
+  // NEW: Real API call for transformation
+  const callTransformAPI = useCallback(async (
+    operation: string, 
+    targetFormat?: string
+  ): Promise<{ transformedContent: string; newContentType: string }> => {
+    // Extract session ID from contentId (assuming format like "content-123-session-456")
+    const sessionIdMatch = contentId.match(/session-(\w+)/) || window.location.pathname.match(/sessions\/([^\/]+)/)
+    const sessionId = sessionIdMatch?.[1] || 'default'
+    
+    console.log(`🚀 Calling Transform API: ${operation}${targetFormat ? ` -> ${targetFormat}` : ''}`)
+    console.log(`📍 Session: ${sessionId}, Element: ${contentId}`)
+    
+    // Prepare DOM info (same structure as in edit system)
+    const domInfo = {
+      domElementId: contentId,
+      structuralId: contentId,
+      elementType: contentData.elementType,
+      content: contentData.content
+    }
+    
+    const response = await fetch(`/api/quick-study/sessions/${sessionId}/generate/notes/edit/quick-actions/transform`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        operation,
+        targetFormat,
+        domInfo,
+        parsedSections: parsedSections || [],
+        fullDocument: fullDocument || ''
+      })
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Network error' }))
+      throw new Error(`Transform API error: ${response.status} - ${errorData.error}`)
+    }
+
+    const result = await response.json()
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Transform operation failed')
+    }
+    
+    return {
+      transformedContent: result.transformedContent,
+      newContentType: result.newContentType
+    }
+  }, [contentId, contentData, parsedSections, fullDocument])
+
+  // Execute conversion with specific target format - NOW WITH REAL API
   const executeConversion = useCallback(async (targetFormat: string) => {
     console.log(`⚡ Converting to ${targetFormat} for content:`, contentData.content.substring(0, 100))
     
@@ -227,64 +275,20 @@ export function QuickActionsPanel({
     setLoadingActions(prev => new Set(prev).add(actionId))
     
     try {
-      // MOCK delay
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // 🚀 REAL API CALL
+      const { transformedContent, newContentType } = await callTransformAPI('convert', targetFormat)
       
-      // MOCK response based on target format
-      let mockResult = ''
-      
-switch (targetFormat) {
-  case 'table':
-    mockResult = `| Element | Description | Example |
-|---------|-------------|---------|
-| First item | Based on original content | Sample data |
-| Second item | Converted from text | More data |`
-    break
-    
-  case 'list':
-    mockResult = `**Key Points:**
-- First main idea extracted
-- Second important concept  
-- Third essential element`
-    break
-    
-  case 'paragraph':
-    mockResult = `This content has been restructured into a flowing paragraph format. The main ideas are presented in a coherent narrative that connects the concepts smoothly and provides better readability for continuous text consumption.`
-    break
-    
-  case 'quote':
-    mockResult = `> ${contentData.content.split('\n')[0]}
-> 
-> *Key insight extracted from the original content*`
-    break
-    
-  case 'code':
-    mockResult = `\`\`\`
-# Structured representation of the content
-content_structure = {
-    "main_idea": "extracted concept",
-    "details": ["point 1", "point 2", "point 3"]
-}
-\`\`\``
-    break
-    
-  case 'definition':
-    mockResult = `**Term**: Clear, concise definition based on the content
-
-**Key Characteristics**: Main attributes and properties
-
-**Example**: Practical application or use case`
-    break
-    
-  default:
-    mockResult = `**Converted to ${targetFormat}:**\n\n[Transformed content would appear here]`
-}
-
       setCompletedActions(prev => new Map(prev).set(actionId, {
         success: true,
-        result: mockResult,
-        targetFormat
+        result: transformedContent,
+        targetFormat,
+        newContentType
       }))
+      
+      // 🎯 APPLY TRANSFORMATION via callback
+      if (onTransformComplete) {
+        onTransformComplete(transformedContent, contentId)
+      }
       
       toast({
         title: `Converted to ${targetFormat}!`,
@@ -295,6 +299,8 @@ content_structure = {
       setConvertSubmenu(null)
       
     } catch (error) {
+      console.error(`❌ Conversion to ${targetFormat} failed:`, error)
+      
       setCompletedActions(prev => new Map(prev).set(actionId, {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -303,7 +309,7 @@ content_structure = {
       
       toast({
         title: `Conversion to ${targetFormat} failed`,
-        description: 'Something went wrong',
+        description: error instanceof Error ? error.message : 'Something went wrong',
         variant: "destructive"
       })
     } finally {
@@ -313,9 +319,9 @@ content_structure = {
         return newSet
       })
     }
-  }, [contentData, toast])
+  }, [contentData, toast, callTransformAPI, onTransformComplete, contentId])
 
-  // Execute Quick Action - updated to handle convert submenu
+  // Execute Quick Action - NOW WITH REAL API
   const executeAction = useCallback(async (action: QuickActionDefinition) => {
     // Special handling for convert action - open submenu
     if (action.id === 'convert') {
@@ -328,37 +334,19 @@ content_structure = {
     setLoadingActions(prev => new Set(prev).add(action.id))
     
     try {
-      // MOCK delay
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // 🚀 REAL API CALL
+      const { transformedContent, newContentType } = await callTransformAPI(action.id)
       
-      // MOCK response based on action type
-      let mockResult = ''
-      
-      switch (action.id) {
-        case 'make-memorable':
-          mockResult = `🧠 **Memory Palace Version:**
-
-Think of this like walking through your house - each room represents a key idea. Use familiar objects to remember concepts.`
-          break
-          
-        case 'add-example':
-          mockResult = `${contentData.content}
-
-**🌟 Real-World Example:** Consider how Netflix recommends movies - it takes complex data and shows only what's relevant to you.`
-          break
-          
-        case 'simplify-eli5':
-          mockResult = `**Simple Version:** Imagine you have LEGO blocks. This concept is like having a sorter that puts each color in its own box, making it easier to build!`
-          break
-          
-        default:
-          mockResult = `**${action.label} Result:**\n\n[Transformed content would appear here]`
-      }
-
       setCompletedActions(prev => new Map(prev).set(action.id, {
         success: true,
-        result: mockResult
+        result: transformedContent,
+        newContentType
       }))
+      
+      // 🎯 APPLY TRANSFORMATION via callback
+      if (onTransformComplete) {
+        onTransformComplete(transformedContent, contentId)
+      }
       
       toast({
         title: `${action.label} complete!`,
@@ -366,6 +354,8 @@ Think of this like walking through your house - each room represents a key idea.
       })
       
     } catch (error) {
+      console.error(`❌ ${action.label} failed:`, error)
+      
       setCompletedActions(prev => new Map(prev).set(action.id, {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -373,7 +363,7 @@ Think of this like walking through your house - each room represents a key idea.
       
       toast({
         title: `${action.label} failed`,
-        description: 'Something went wrong',
+        description: error instanceof Error ? error.message : 'Something went wrong',
         variant: "destructive"
       })
     } finally {
@@ -383,7 +373,7 @@ Think of this like walking through your house - each room represents a key idea.
         return newSet
       })
     }
-  }, [contentData, toast])
+  }, [contentData, toast, callTransformAPI, onTransformComplete, contentId])
 
   // Toggle expanded state
   const toggleExpanded = useCallback((actionId: string) => {
@@ -411,7 +401,7 @@ Think of this like walking through your house - each room represents a key idea.
 
   const panelContent = (
     <div 
-      className="quick-actions-panel absolute z-50 animate-in fade-in-0 duration-200"
+      className="quick-actions-panel absolute z-[9999] animate-in fade-in-0 duration-200"
       style={{
         top: position?.top || 0,
         right: 8,
@@ -423,195 +413,160 @@ Think of this like walking through your house - each room represents a key idea.
         <div className="flex items-center justify-between p-4 border-b border-gray-200/50">
           <div className="flex items-center gap-2">
             {convertSubmenu ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={closeSubmenu}
-                className="h-6 w-6 p-0 hover:bg-gray-100 mr-1"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            ) : (
-              <div className="p-1.5 bg-purple-100 rounded-md">
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={closeSubmenu}
+                  className="h-6 w-6 p-0 hover:bg-gray-100"
+                >
+                  <ArrowLeft className="h-3 w-3" />
+                </Button>
                 <Zap className="h-4 w-4 text-purple-600" />
-              </div>
+                <span className="font-medium text-sm">Convert to Format</span>
+              </>
+            ) : (
+              <>
+                <Zap className="h-4 w-4 text-blue-600" />
+                <span className="font-medium text-sm">Quick Actions</span>
+              </>
             )}
-            <h3 className="font-medium text-gray-900">
-              {convertSubmenu ? 'Convert To' : 'Quick Actions'}
-            </h3>
-            <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 border-purple-200">
-              {convertSubmenu ? `${availableConversions.length} options` : `${availableActions.length} available`}
-            </Badge>
           </div>
           <Button
             variant="ghost"
             size="sm"
             onClick={onClose}
-            className="h-8 w-8 p-0 hover:bg-gray-100"
+            className="h-6 w-6 p-0 hover:bg-gray-100"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3 w-3" />
           </Button>
         </div>
 
-        {/* Actions List or Convert Submenu */}
-        <div className="max-h-80 overflow-y-auto p-2">
-          <div className="space-y-2">
-            {convertSubmenu ? (
-              // Convert submenu - show conversion options
-              availableConversions.map(option => {
-                const actionId = `convert-${option.id}`
-                const isLoading = loadingActions.has(actionId)
-                const result = completedActions.get(actionId)
-                const isCompleted = !!result
-                const isExpanded = expandedActions.has(actionId)
+        {/* Content */}
+        <div className="max-h-80 overflow-y-auto">
+          {convertSubmenu ? (
+            /* Convert Submenu */
+            <div className="p-3">
+              <div className="text-xs text-gray-600 mb-3 px-1">
+                Choose target format for conversion:
+              </div>
+              <div className="space-y-1">
+                {availableConversions.map((option) => {
+                  const actionId = `convert-${option.id}`
+                  const isLoading = loadingActions.has(actionId)
+                  const result = completedActions.get(actionId)
+                  const isCompleted = !!result
 
-                return (
-                  <div key={option.id} className="quick-action-block border rounded-lg bg-white/80 backdrop-blur-sm">
-                    <div className="p-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-1">
-                          <div className="p-2 rounded-md border bg-purple-100 text-purple-700 border-purple-200">
-                            {isLoading ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : isCompleted ? (
-                              result?.success ? (
-                                <CheckCircle className="h-4 w-4 text-green-600" />
-                              ) : (
-                                <AlertCircle className="h-4 w-4 text-red-600" />
-                              )
-                            ) : (
-                              option.icon
-                            )}
-                          </div>
-                          
-                          <div className="flex-1">
-                            <h4 className="font-medium text-sm text-gray-900">{option.label}</h4>
-                            <p className="text-xs text-gray-600 mt-0.5">{option.description}</p>
-                          </div>
-                        </div>
-
+                  return (
+                    <button
+                      key={option.id}
+                      onClick={() => !isLoading && executeConversion(option.id)}
+                      disabled={isLoading}
+                      className="w-full flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50/50 transition-all duration-200 text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2">
-                          {isCompleted && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => toggleExpanded(actionId)}
-                              className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600"
-                            >
-                              {isExpanded ? (
-                                <ChevronDown className="h-4 w-4" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4" />
-                              )}
-                            </Button>
+                          {isLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-purple-600" />
+                          ) : isCompleted && result?.success ? (
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                          ) : isCompleted && !result?.success ? (
+                            <AlertCircle className="h-4 w-4 text-red-600" />
+                          ) : (
+                            option.icon
                           )}
-                          
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => executeConversion(option.id)}
-                            disabled={isLoading}
-                            className="h-8 px-3 text-xs font-medium hover:bg-purple-50"
-                          >
-                            {isLoading ? 'Converting...' : isCompleted ? 'Redo' : 'Convert'}
-                          </Button>
+                        </div>
+                        <div>
+                          <div className="font-medium text-sm">{option.label}</div>
+                          <div className="text-xs text-gray-500">{option.description}</div>
                         </div>
                       </div>
-
-                      {/* Result */}
-                      {isCompleted && isExpanded && result && result.success && (
-                        <div className="mt-3 p-3 bg-gray-50 rounded-md border">
-                          <div className="text-sm text-gray-800 whitespace-pre-wrap">
-                            {result.result}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })
-            ) : (
-              // Main actions list
-              availableActions.map(action => {
+                      <div className="text-xs text-gray-400">
+                        {isLoading ? 'Processing...' : 'Convert'}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ) : (
+            /* Main Actions */
+            <div className="p-3 space-y-1">
+              {availableActions.map((action) => {
                 const isLoading = loadingActions.has(action.id)
                 const result = completedActions.get(action.id)
                 const isCompleted = !!result
                 const isExpanded = expandedActions.has(action.id)
 
                 return (
-                  <div key={action.id} className="quick-action-block border rounded-lg bg-white/80 backdrop-blur-sm">
-                    <div className="p-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-1">
-                          <div className={`p-2 rounded-md border ${action.color}`}>
-                            {isLoading ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : isCompleted ? (
-                              result?.success ? (
-                                <CheckCircle className="h-4 w-4 text-green-600" />
-                              ) : (
-                                <AlertCircle className="h-4 w-4 text-red-600" />
-                              )
-                            ) : (
-                              action.icon
-                            )}
-                          </div>
-                          
-                          <div className="flex-1">
-                            <h4 className="font-medium text-sm text-gray-900">{action.label}</h4>
-                            <p className="text-xs text-gray-600 mt-0.5">{action.description}</p>
-                          </div>
-                        </div>
-
+                  <div key={action.id} className="rounded-lg border border-gray-200 overflow-hidden">
+                    <div className="flex items-center justify-between p-3">
+                      <div className="flex items-center gap-3 flex-1">
                         <div className="flex items-center gap-2">
-                          {isCompleted && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => toggleExpanded(action.id)}
-                              className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600"
-                            >
-                              {isExpanded ? (
-                                <ChevronDown className="h-4 w-4" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4" />
-                              )}
-                            </Button>
+                          {isLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                          ) : isCompleted && result?.success ? (
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                          ) : isCompleted && !result?.success ? (
+                            <AlertCircle className="h-4 w-4 text-red-600" />
+                          ) : (
+                            action.icon
                           )}
-                          
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">{action.label}</div>
+                          <div className="text-xs text-gray-500">{action.description}</div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        {isCompleted && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => executeAction(action)}
-                            disabled={isLoading}
-                            className="h-8 px-3 text-xs font-medium hover:bg-purple-50"
+                            onClick={() => toggleExpanded(action.id)}
+                            className="h-6 w-6 p-0"
                           >
-                            {action.id === 'convert' ? (
-                              <div className="flex items-center gap-1">
-                                <span>{isLoading ? 'Processing...' : isCompleted ? 'Redo' : 'Transform'}</span>
-                                <ChevronRight className="h-3 w-3" />
-                              </div>
+                            {isExpanded ? (
+                              <ChevronDown className="h-3 w-3" />
                             ) : (
-                              isLoading ? 'Processing...' : isCompleted ? 'Redo' : 'Transform'
+                              <ChevronRight className="h-3 w-3" />
                             )}
                           </Button>
+                        )}
+                        
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => executeAction(action)}
+                          disabled={isLoading}
+                          className="h-8 text-xs flex items-center gap-1.5"
+                        >
+                          {action.id === 'convert' ? (
+                            <div className="flex items-center gap-1">
+                              <span>{isLoading ? 'Processing...' : isCompleted ? 'Redo' : 'Transform'}</span>
+                              <ChevronRight className="h-3 w-3" />
+                            </div>
+                          ) : (
+                            isLoading ? 'Processing...' : isCompleted ? 'Redo' : 'Transform'
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Result Preview */}
+                    {isCompleted && isExpanded && result && result.success && (
+                      <div className="mt-3 p-3 bg-gray-50 rounded-md border">
+                        <div className="text-sm text-gray-800 whitespace-pre-wrap">
+                          {result.result}
                         </div>
                       </div>
-
-                      {/* Result */}
-                      {isCompleted && isExpanded && result && result.success && (
-                        <div className="mt-3 p-3 bg-gray-50 rounded-md border">
-                          <div className="text-sm text-gray-800 whitespace-pre-wrap">
-                            {result.result}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
                 )
-              })
-            )}
-          </div>
+              })}
+            </div>
+          )}
         </div>
 
         {/* Footer */}

@@ -333,7 +333,7 @@ export function SmartPreviewPanel({
   const panelContent = (
     <>
       <div
-        className={shouldUsePortal ? "absolute z-50 smart-preview-panel" : "fixed z-50 smart-preview-panel"}
+        className={shouldUsePortal ? "absolute z-[9999] smart-preview-panel" : "fixed z-[9999] smart-preview-panel"}
         style={{
           top: `${position.top}px`,
           left: `${position.left}px`,

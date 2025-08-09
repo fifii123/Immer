@@ -45,10 +45,10 @@ export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick
   const hoverStartTimeRef = useRef<number | null>(null)
   const pencilCheckIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const currentHoveredElementRef = useRef<HTMLElement | null>(null)
-
   // Funkcja do wyświetlania ikonki ołówka
   const showEditIcon = useCallback((container: HTMLElement, targetElement?: HTMLElement) => {
     const elementToMark = targetElement || container
+   
     
     if (elementToMark.querySelector('.edit-pencil-icon')) return
 
@@ -250,11 +250,14 @@ quickIcon.addEventListener('mouseleave', () => {
 
   // NEW: Content item cleanup logic (like sections have)
   const clearContentItemHoverEffects = useCallback((currentElementId: string) => {
+    
     const allContentItems = document.querySelectorAll('[data-element-id]:not([data-section-id])')
     
     allContentItems.forEach((element) => {
+      
       const elementId = element.getAttribute('data-element-id')
       if (elementId && elementId !== currentElementId) {
+  
         // Reset visual styles
         Object.assign((element as HTMLElement).style, {
           backgroundColor: '',
@@ -273,6 +276,38 @@ quickIcon.addEventListener('mouseleave', () => {
       const parentElement = icon.closest('[data-element-id]')
       const parentId = parentElement?.getAttribute('data-element-id')
       if (parentId !== currentElementId) {
+        icon.remove()
+      }
+    })
+  }, [])
+
+   const clearAllContentItemHoverEffects = useCallback(() => {
+    
+    const allContentItems = document.querySelectorAll('[data-element-id]:not([data-section-id])')
+    
+    allContentItems.forEach((element) => {
+      
+      const elementId = element.getAttribute('data-element-id')
+      if (true) {
+  
+        // Reset visual styles
+        Object.assign((element as HTMLElement).style, {
+          backgroundColor: '',
+          borderLeft: '',
+          borderRadius: '',
+          padding: '',
+          margin: '',
+          transition: 'all 0.15s ease-in-out'
+        })
+      }
+    })
+    
+    // Clean up old icons (except current element)
+    const existingIcons = document.querySelectorAll('.edit-pencil-icon, .quick-actions-icon')
+    existingIcons.forEach(icon => {
+      const parentElement = icon.closest('[data-element-id]')
+      const parentId = parentElement?.getAttribute('data-element-id')
+      if (true) {
         icon.remove()
       }
     })
@@ -383,7 +418,13 @@ quickIcon.addEventListener('mouseleave', () => {
         if (isAnimating) return
         e.stopPropagation()
         const element = e.currentTarget
+        const elementId = element.getAttribute('data-element-id')
+
+        // NEW: Clean up other content items first
+       
+          clearAllContentItemHoverEffects()
         
+
         // Remove visual styles only
         Object.assign(element.style, {
           backgroundColor: '',
@@ -393,11 +434,14 @@ quickIcon.addEventListener('mouseleave', () => {
           margin: '',
           transition: 'all 0.15s ease-in-out'
         })
+
+        
         
         // Don't call stopHoverTracking immediately
         setTimeout(() => {
           if (element.style.transition) {
             element.style.transition = ''
+            
           }
         }, 150)
       },
