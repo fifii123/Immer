@@ -89,7 +89,10 @@ export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick
 
     elementToMark.appendChild(pencilIcon)
   }, [])
-
+const clearAllQuickActionButtons = useCallback(() => {
+  const existingQuickIcons = document.querySelectorAll('.quick-actions-icon')
+  existingQuickIcons.forEach(icon => icon.remove())
+}, [])
   // Smart Preview button
   const showSmartPreviewIcon = useCallback((container: HTMLElement, targetElement?: HTMLElement) => {
     if (!onSmartPreviewClick) return
@@ -224,15 +227,13 @@ export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick
       onQuickActionsClick(syntheticEvent, contentId, contentData)
     })
 
-    quickIcon.addEventListener('mouseenter', () => {
-      quickIcon.style.backgroundColor = 'rgba(147, 51, 234, 1)'
-      quickIcon.style.transform = 'translateY(-1px) scale(1.05)'
-    })
+quickIcon.addEventListener('mouseenter', () => {
+  quickIcon.style.backgroundColor = 'rgba(147, 51, 234, 1)'
+})
 
-    quickIcon.addEventListener('mouseleave', () => {
-      quickIcon.style.backgroundColor = 'rgba(147, 51, 234, 0.9)'
-      quickIcon.style.transform = 'translateY(0) scale(1)'
-    })
+quickIcon.addEventListener('mouseleave', () => {
+  quickIcon.style.backgroundColor = 'rgba(147, 51, 234, 0.9)'
+})
 
     if (getComputedStyle(elementToMark).position === 'static') {
       elementToMark.style.position = 'relative'
@@ -408,6 +409,8 @@ export function useNotesHover({ isAnimating, onElementClick, onSmartPreviewClick
         
         const element = e.currentTarget
         
+  clearAllQuickActionButtons()
+
         console.log('🎯 === CLICK EVENT START ===', {
           elementType,
           timestamp: Date.now()

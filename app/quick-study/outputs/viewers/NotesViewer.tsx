@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/components/ui/use-toast"
-
+import { createPortal } from 'react-dom'
 // Import our extracted components and hooks
 import { useNotesHover } from './hooks/useNotesHover'
 import { ContentItemRenderer } from './components/ContentItemRenderer'
