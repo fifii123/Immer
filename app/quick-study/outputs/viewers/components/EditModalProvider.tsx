@@ -21,7 +21,7 @@ interface EditModalProviderProps {
 const getModalDimensions = () => {
   return {
     headerHeight: 60,
-    footerHeight: 60,
+    footerHeight: 120,
     padding: 17
   }
 }

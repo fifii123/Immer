@@ -1,4 +1,4 @@
-// app/quick-study/outputs/viewers/components/QuickActionsPanel.tsx - UPDATED WITH REAL API
+// app/quick-study/outputs/viewers/components/QuickActionsPanel.tsx - WITH RESTORED COLORS
 "use client"
 
 import React, { useCallback, useEffect, useState } from 'react'
@@ -502,9 +502,9 @@ export function QuickActionsPanel({
                   <div key={action.id} className="rounded-lg border border-gray-200 overflow-hidden">
                     <div className="flex items-center justify-between p-3">
                       <div className="flex items-center gap-3 flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className={`p-2 rounded-md border ${action.color}`}>
                           {isLoading ? (
-                            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                            <Loader2 className="h-4 w-4 animate-spin" />
                           ) : isCompleted && result?.success ? (
                             <CheckCircle className="h-4 w-4 text-green-600" />
                           ) : isCompleted && !result?.success ? (
