@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { EditModalState } from '../hooks/useEditModal'
 import { useAIOperations, AIOperationType } from '../hooks/useAIOperations'
 import { MinimalContextService } from '@/app/services/MinimalContextService'
+import { ContentMorphingPanel, MorphingParams } from './ContentMorphingPanel'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -94,69 +95,53 @@ export function EditModalOverlay({
       previewRef.current.appendChild(clonedElement)
     }
   }, [viewMode, editModal.visualPreview])
-  
-const handleAIOperation = useCallback(async (operation: AIOperationType) => {
-  if (!editModal?.content || !sessionId || !getParsedSections) {
-    console.error('❌ Missing required basic data for AI operation')
+
+
+
+const handleMorphGenerate = useCallback(async (params: MorphingParams) => {
+  if (!editModal?.content || !sessionId) {
+    console.error('❌ Missing required data for morphing')
     return
   }
 
   try {
-    // Clear visual preview before AI processing
-    if (previewRef.current) {
-      previewRef.current.innerHTML = ''
-    }
+    console.log('🚀 MORPH GENERATE CLICKED!')
+    console.log('🎛️ Morphing params:', params)
+    console.log('📝 Original content:', editModal.content)
+    console.log('🎯 Element type:', editModal.elementType)
+    console.log('📍 Element ID:', editModal.elementId)
     
+    // Mock response based on density and tone
+    const densityLabels = ['Minimal', 'Concise', 'Balanced', 'Detailed', 'Comprehensive']
+    const mockResponse = `**[MOCK MORPH RESPONSE]**
+
+**Settings Applied:**
+- Density: ${params.density}/5 (${densityLabels[params.density - 1]})  
+- Tone: ${params.tone}
+
+**Original Content Length:** ${editModal.content.length} characters
+**Element Type:** ${editModal.elementType}
+
+**Mock Morphed Content:**
+${editModal.content}
+
+*This is a frontend mock response. Backend integration coming next.*`
+    
+    console.log('✅ Mock morph response generated:', mockResponse)
+    
+    // Set to AI processing mode to show the mock response
     setViewMode('ai-processing')
-    
-    console.log('🎯 Starting AI operation with IDENTICAL logic as save')
-    
-    // IDENTICAL logic to handleContentSaved - NO isConnected check!
-    const sourceElement = editModal.sourceElement
-    if (!sourceElement) {
-      console.error('❌ Source element is null')
-      setViewMode('edit')
-      return
-    }
-
-    // IDENTICAL logic to save - just use element.getAttribute directly
-    const structuralId = sourceElement.getAttribute('data-structural-id') || 
-                         sourceElement.closest('[data-structural-id]')?.getAttribute('data-structural-id')
-
-    if (!structuralId) {
-      console.error('❌ No structural ID found')
-      setViewMode('edit')
-      return
-    }
-
-    console.log('🎯 IDENTICAL access successful - structuralId:', structuralId)
-
-    // Rest identical to save logic...
-    const elementId = sourceElement.getAttribute('data-element-id') || editModal.elementId || `fallback_${Date.now()}`
-    const elementType = sourceElement.getAttribute('data-element-type') || editModal.elementType
-    const textContent = sourceElement.textContent?.trim() || editModal.content
-
-    const freshDomInfo = {
-      domElementId: elementId,
-      structuralId: structuralId,
-      elementType: elementType,
-      content: textContent
-    }
-
-    const parsedSections = getParsedSections()
-    const fullDocument = getCurrentDocumentContent ? getCurrentDocumentContent() : ''
-    
-    await processContent(sessionId, operation, editModal.content, {
-      domInfo: freshDomInfo,
-      parsedSections,
-      fullDocument
-    })
+      if (previewRef.current) {
+    previewRef.current.innerHTML = ''
+    // USUŃ: previewRef.current.style.display = 'none'  ← To psuło layout
+  }
+    // Update content to show mock response
+    onContentChange(mockResponse)
     
   } catch (error) {
-    console.error('❌ AI operation failed:', error)
-    setViewMode('edit')
+    console.error('❌ Morph generation failed:', error)
   }
-}, [sessionId, editModal, processContent, getCurrentDocumentContent, getParsedSections])
+}, [editModal, sessionId, onContentChange, setViewMode])
   // Calculate maximum modal height based on viewport (more compact)
   const getMaxModalHeight = () => {
     const viewportHeight = window.innerHeight
@@ -363,6 +348,10 @@ const getPositioning = () => {
                   variant={viewMode === 'edit' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => {
+                      if (previewRef.current) {
+    previewRef.current.innerHTML = ''
+    // USUŃ: previewRef.current.style.display = 'none'  ← To psuło layout
+  }
                     setViewMode('edit')
                     resetOperation()
                   }}
@@ -423,7 +412,7 @@ const getPositioning = () => {
                     <div className="flex items-center justify-center py-8">
                       <div className="flex items-center gap-3 text-blue-600 dark:text-blue-400">
                         <Loader2 className="h-5 w-5 animate-spin" />
-                        <span>Starting AI enhancement...</span>
+                        {/* <span>Starting AI enhancement...</span> */}
                       </div>
                     </div>
                   )}
@@ -459,97 +448,16 @@ const getPositioning = () => {
             )}
           </div>
 
-          {/* AI Enhancements - shown when NOT in ai-processing mode */}
-          {viewMode !== 'ai-processing' && (
-            <div className="border-t border-gray-200 dark:border-gray-700 p-3 bg-gradient-to-r from-blue-50/50 to-purple-50/50 dark:from-blue-950/20 dark:to-purple-950/20">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    AI Enhancements
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleAIOperation('improve')}
-                    disabled={operationState.isProcessing}
-                    className="h-7 text-xs flex items-center gap-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50"
-                  >
-                    <Wand2 className="h-3 w-3" />
-                    Improve
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleAIOperation('expand')}
-                    disabled={operationState.isProcessing}
-                    className="h-7 text-xs flex items-center gap-1.5 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/50"
-                  >
-                    <FileText className="h-3 w-3" />
-                    Expand
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleAIOperation('summarize')}
-                    disabled={operationState.isProcessing}
-                    className="h-7 text-xs flex items-center gap-1.5 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/50"
-                  >
-                    <Type className="h-3 w-3" />
-                    Summarize
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
+
+<ContentMorphingPanel 
+  onGenerate={handleMorphGenerate}
+  onSave={onSave}
+  hasChanges={hasChanges}
+  isProcessing={operationState.isProcessing}
+  disabled={!editModal?.content}
+/>
         </div>
 
-        {/* Footer Actions - positioned absolutely below the clone */}
-        <div 
-          className="absolute left-0 bg-white dark:bg-gray-900 rounded-b-2xl shadow-lg border border-gray-200 dark:border-gray-700 border-t-0 flex items-center justify-between p-4 pt-3"
-          style={{
-            bottom: '-60px',
-            width: '100%',
-            minWidth: '400px',
-            zIndex: 1
-          }}
-        >
-          <div className="flex items-center gap-2">
-            {operationState.isProcessing && (
-              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
-                <Clock className="h-4 w-4" />
-                <span className="text-sm">Processing...</span>
-              </div>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-2">
-            {hasChanges && !operationState.isProcessing && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onReset}
-                className="h-8 text-xs flex items-center gap-1.5"
-              >
-                <RotateCcw className="h-3 w-3" />
-                Reset
-              </Button>
-            )}
-            
-            <Button
-              variant="default"
-              size="sm"
-              onClick={onSave}
-              disabled={operationState.isProcessing}
-              className="h-8 text-xs flex items-center gap-1.5"
-            >
-              <Save className="h-3 w-3" />
-              {operationState.isProcessing ? 'Processing...' : 'Save Changes'}
-            </Button>
-          </div>
-        </div>
       </div>
     </>
   )

@@ -1,7 +1,13 @@
 // app/quick-study/outputs/viewers/hooks/useAIOperations.tsx
 import { useState, useCallback } from 'react'
 
-export type AIOperationType = 'expand' | 'improve' | 'summarize'
+export type AIOperationType = 'expand' | 'improve' | 'summarize' | 'morph'
+
+// Add morphing interface
+export interface MorphingParams {
+  density: number  
+  tone: 'formal' | 'casual' | 'explanatory' | 'academic' | 'technical'
+}
 
 export interface AIOperationState {
   isProcessing: boolean
@@ -143,9 +149,24 @@ export function useAIOperations() {
     })
   }, [])
 
-  return {
-    operationState,
-    processContent,
-    resetOperation
-  }
+const processMorphing = useCallback(async (
+  sessionId: string,
+  content: string,
+  morphingParams: MorphingParams,
+  domContext: DOMContext
+) => {
+  console.log(`🎛️ TODO: Implement morphing backend`)
+  console.log('Params:', morphingParams)
+  console.log('Context:', domContext)
+  
+  // Placeholder - backend implementation will come later
+  return Promise.resolve()
+}, [])
+
+return {
+  operationState,
+  processContent,
+  processMorphing, // NEW: Export placeholder
+  resetOperation
+}
 }
