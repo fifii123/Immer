@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const prompt = buildExplanationPrompt(selectedText, context);
     
     const stream = await openai.chat.completions.create({
-      model: "gpt-4-1106-preview",
+      model: "gpt-4o",
       messages: [
         {
           role: "system",

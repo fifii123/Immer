@@ -214,7 +214,7 @@ Zwróć odpowiedź w formacie JSON z następującą strukturą:
 
     // Wywołaj API OpenAI
     const response = await openai.chat.completions.create({
-      model: "gpt-4-1106-preview", // lub inny dostępny model
+      model: "gpt-3.5-turbo", // lub inny dostępny model
       messages: [
         { 
           role: "system", 
@@ -289,7 +289,7 @@ Zwróć odpowiedź w formacie JSON z następującą strukturą:
 
     // Wywołaj API OpenAI
     const response = await openai.chat.completions.create({
-      model: "gpt-4-1106-preview", // lub inny dostępny model
+      model: "gpt-4o", // lub inny dostępny model
       messages: [
         { 
           role: "system", 

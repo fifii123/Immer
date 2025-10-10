@@ -1,7 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
+@import '../styles/themes.css';
 body {
   font-family: Arial, Helvetica, sans-serif;
 }
@@ -49,38 +49,31 @@ body {
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --background: 0 0% 7%;      /* #121212 – tło główne */
+    --card: 0 0% 13.7%;         /* #222222 – panele / karty */
+    --popover: 0 0% 13.7%;
+    --border: 0 0% 15.7%;       /* #272727 – obramowania */
+    --input: 0 0% 11.76%;       /* #1E1E1E – inputy, sekcja sidebar */
+    --ring: 217 91% 60%;        /* niebieski akcent Google */
+    --foreground: 0 0% 94%;     /* #F0F0F0 – jasny tekst */
+  
+    --primary: 217 91% 60%;     
+    --primary-foreground: 0 0% 100%;
     --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --secondary-foreground: 0 0% 94%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 60%;
     --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --accent-foreground: 0 0% 94%;
+    --destructive: 0 85% 60%;
+    --destructive-foreground: 0 0% 94%;
+  
+    /* Sidebar dopasowany do karty */
+    --sidebar-background: 0 0% 13.7%;
+    --sidebar-foreground: 0 0% 94%;
+    --sidebar-accent: 217 91% 60%;
+    --sidebar-ring: 217 91% 60%;
+    --sidebar-border: 0 0% 15.7%;
   }
 }
 
@@ -90,6 +83,599 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Professional Flashcard Styles - Quizlet-like */
+.flashcard-container {
+  perspective: 1000px;
+  transform-style: preserve-3d;
+}
+
+.flashcard-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transform-style: preserve-3d;
+}
+
+.flashcard-inner.flipped {
+  transform: rotateY(180deg);
+}
+
+.flashcard-face {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  transition: all 0.3s ease;
+}
+
+.flashcard-face:hover {
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  translate: 0 -2px;
+}
+
+.flashcard-front {
+  background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(var(--muted)/0.3) 100%);
+  border: 2px solid hsl(var(--border));
+}
+
+.flashcard-back {
+  background: linear-gradient(135deg, hsl(var(--primary)/0.05) 0%, hsl(var(--secondary)/0.8) 100%);
+  border: 2px solid hsl(var(--primary)/0.2);
+  transform: rotateY(180deg);
+}
+
+/* Dark mode adjustments */
+.dark .flashcard-front {
+  background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(var(--muted)/0.1) 100%);
+  border: 2px solid hsl(var(--border));
+}
+
+.dark .flashcard-back {
+  background: linear-gradient(135deg, hsl(var(--primary)/0.1) 0%, hsl(var(--secondary)/0.2) 100%);
+  border: 2px solid hsl(var(--primary)/0.3);
+}
+
+/* Study progress animations */
+@keyframes slideInFromBottom {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseSuccess {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes pulseError {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(0.95); }
+}
+
+.study-enter {
+  animation: slideInFromBottom 0.6s ease-out;
+}
+
+.card-success {
+  animation: pulseSuccess 0.6s ease-in-out;
+}
+
+.card-error {
+  animation: pulseError 0.6s ease-in-out;
+}
+
+/* Custom scrollbar for flashcard content */
+.flashcard-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.flashcard-content::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: 3px;
+}
+
+.flashcard-content::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary));
+  border-radius: 3px;
+}
+
+.flashcard-content::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary)/0.8);
+}
+
+/* Quiz result animations */
+@keyframes scoreReveal {
+  0% { transform: scale(0.8); opacity: 0; }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.score-reveal {
+  animation: scoreReveal 0.8s ease-out;
+}
+
+/* Button hover effects */
+.flashcard-action-btn {
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.flashcard-action-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.flashcard-action-btn:hover::before {
+  left: 100%;
+}
+
+/* Progress bar enhancement */
+.study-progress {
+  background: linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--primary)/0.8) 100%);
+  transition: width 0.3s ease;
+}
+/* Płynne animacje dla ReactFlow */
+.react-flow__viewport {
+  transition: transform 0.15s ease-in-out;
+}
+
+.react-flow__node {
+  transition: transform 0.3s ease-in-out;
+}
+
+.react-flow__edge {
+  transition: all 0.3s ease-in-out;
+}
+/* app/globals.css - dodaj na końcu pliku */
+
+/* Enhanced Markdown Styles for Notes */
+.markdown-content {
+  @apply text-foreground leading-relaxed;
+}
+
+.markdown-content h1 {
+  @apply text-3xl font-bold mb-6 mt-8 pb-3 border-b-2 border-gray-200 dark:border-gray-700;
+}
+
+.markdown-content h2 {
+  @apply text-2xl font-bold mb-4 mt-8 text-foreground;
+}
+
+.markdown-content h3 {
+  @apply text-xl font-semibold mb-3 mt-6 text-foreground;
+}
+
+.markdown-content h4 {
+  @apply text-lg font-semibold mb-3 mt-4 text-foreground border-b border-gray-200 dark:border-gray-700 pb-2;
+}
+
+.markdown-content p {
+  @apply mb-4 leading-relaxed text-foreground;
+}
+
+.markdown-content ul {
+  @apply list-disc list-inside space-y-2 mb-4 ml-4;
+}
+
+.markdown-content ol {
+  @apply list-decimal list-inside space-y-2 mb-4 ml-4;
+}
+
+.markdown-content li {
+  @apply mb-1 leading-relaxed;
+}
+
+.markdown-content li ul,
+.markdown-content li ol {
+  @apply mt-2 ml-6 mb-0;
+}
+
+.markdown-content blockquote {
+  @apply border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-900/20 pl-4 py-3 mb-4 italic;
+}
+
+.markdown-content code {
+  @apply bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-sm font-mono;
+}
+
+.markdown-content pre {
+  @apply bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 rounded-lg overflow-x-auto mb-6;
+}
+
+.markdown-content pre code {
+  @apply bg-transparent p-0 text-gray-100;
+}
+
+.markdown-content table {
+  @apply min-w-full border-collapse border border-gray-300 dark:border-gray-600 mb-6;
+}
+
+.markdown-content th {
+  @apply border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 px-4 py-3 text-left font-semibold;
+}
+
+.markdown-content td {
+  @apply border border-gray-300 dark:border-gray-600 px-4 py-3;
+}
+
+.markdown-content tr:hover {
+  @apply bg-gray-50 dark:bg-gray-800/50;
+}
+
+.markdown-content hr {
+  @apply my-8 border-gray-300 dark:border-gray-600;
+}
+
+.markdown-content a {
+  @apply text-blue-600 dark:text-blue-400 hover:underline;
+}
+
+.markdown-content strong {
+  @apply font-semibold text-foreground;
+}
+
+.markdown-content em {
+  @apply italic;
+}
+
+/* Special styling for definition lists */
+.markdown-content .definition-term {
+  @apply font-semibold text-primary mb-1;
+}
+
+.markdown-content .definition-desc {
+  @apply ml-4 mb-3 text-muted-foreground;
+}
+
+/* Styling for note type indicators */
+.markdown-content .note-type-badge {
+  @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary mb-4;
+}
+
+/* Enhanced table styling for summary tables */
+.markdown-content .summary-table {
+  @apply shadow-sm rounded-lg overflow-hidden border-0;
+}
+
+.markdown-content .summary-table th {
+  @apply bg-primary/10 text-primary font-semibold;
+}
+
+.markdown-content .summary-table td {
+  @apply border-t border-gray-200 dark:border-gray-700;
+}
+
+/* Improved blockquote styling for different types */
+.markdown-content .info-block {
+  @apply border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-900/20;
+}
+
+.markdown-content .warning-block {
+  @apply border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20;
+}
+
+.markdown-content .success-block {
+  @apply border-l-4 border-green-500 bg-green-50 dark:bg-green-900/20;
+}
+
+/* Responsive table wrapper */
+.markdown-content .table-wrapper {
+  @apply overflow-x-auto -mx-4 px-4 mb-6;
+}
+
+@media (min-width: 768px) {
+  .markdown-content .table-wrapper {
+    @apply mx-0 px-0;
+  }
+}
+
+/* Print styles for notes */
+@media print {
+  .markdown-content {
+    @apply text-black;
+  }
+  
+  .markdown-content blockquote {
+    @apply border-l-4 border-gray-400 bg-gray-100;
+  }
+  
+  .markdown-content code {
+    @apply bg-gray-200;
+  }
+  
+  .markdown-content pre {
+    @apply bg-gray-100 text-black border border-gray-300;
+  }
+}
+/* Professional Note Type Modal Styles */
+[data-radix-dialog-overlay] {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+}
+
+.note-type-option {
+  transition: all 0.15s ease;
+}
+
+.note-type-option:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.dark .note-type-option:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.note-icon-container {
+  transition: transform 0.15s ease;
+}
+
+.note-type-option:hover .note-icon-container {
+  transform: scale(1.05);
+}
+
+.selection-check {
+  animation: check-appear 0.2s ease-out;
+}
+
+.pro-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+@keyframes check-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.katex {
+  font-size: 1.1em;
+}
+
+.katex-display {
+  margin: 1rem 0;
+  text-align: center;
+}
+
+.katex-display > .katex {
+  display: inline-block;
+  text-align: initial;
+}
+
+/* Math in tables */
+.markdown-content table .katex {
+  font-size: 0.9em;
+}
+
+/* Math in lists */
+.markdown-content li .katex {
+  font-size: 1em;
+}
+
+/* Dark mode support for math */
+.dark .katex {
+  color: rgb(248 250 252); /* slate-50 */
+}
+
+.dark .katex .base {
+  color: rgb(248 250 252);
+}
+/* Animacja dla ikonki ołówka */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+}
+
+/* Hover efekt dla ikonki ołówka */
+.edit-pencil-icon:hover {
+  background-color: rgba(59, 130, 246, 1) !important;
+  transform: translateY(-50%) scale(1.1) !important;
+  transition: all 0.15s ease-in-out !important;
+}
+.smart-preview-btn {
+  transition: opacity 0.2s ease-in-out, background-color 0.15s ease-in-out;
+}
+
+.section-container:hover .smart-preview-btn {
+  opacity: 1 !important;
+}
+
+.smart-preview-btn:hover {
+  transform: scale(1.05);
+}
+
+/* Smart Preview Panel */
+.smart-preview-panel {
+  animation: smart-preview-appear 0.2s ease-out;
+}
+
+
+
+/* Smart Preview Block Animations */
+.smart-preview-block {
+  transition: all 0.15s ease-in-out;
+}
+
+.smart-preview-block:hover {
+  transform: translateX(2px);
+}
+
+/* Loading states */
+.smart-preview-block .animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Content reveal animation */
+.smart-preview-block div[class*="mt-2 pl-6"] {
+  animation: content-reveal 0.3s ease-out;
+}
+
+@keyframes content-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .smart-preview-panel {
+    width: calc(100vw - 2rem) !important;
+    left: 1rem !important;
+    transform: none !important;
+  }
+}
+
+/* Enhanced section hover with Smart Preview */
+.section-container {
+  position: relative;
+  transition: all 0.15s ease-in-out;
+}
+
+.section-container:hover {
+  background-color: rgba(59, 130, 246, 0.02);
+  border-radius: 8px;
+}
+
+/* Integration with existing edit pencil */
+.section-container:hover .edit-pencil-icon {
+  opacity: 0.8;
+}
+
+.section-container:hover .smart-preview-btn {
+  opacity: 1;
+}
+
+/* Backdrop for panel positioning */
+.smart-preview-panel-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: transparent;
+  z-index: 40;
+}
+
+.smart-preview-icon:hover {
+  background-color: rgba(34, 197, 94, 1) !important;
+  transform: translateY(-50%) scale(1.1) !important;
+  transition: all 0.15s ease-in-out !important;
+}
+/* Simplified glassmorphism - ensure no conflicts */
+.smart-preview-panel {
+  will-change: opacity, visibility, transform;
+  backface-visibility: hidden;
+}
+
+/* Dark mode adjustments */
+.dark .smart-preview-panel > div {
+  background-color: rgba(17, 24, 39, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Hover effects for buttons */
+.smart-preview-panel button:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(-1px);
+  transition: all 0.2s ease-out;
+}
+
+.dark .smart-preview-panel button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+
+/* Quick Actions Panel Animation */
+.quick-actions-panel {
+  animation: quick-actions-appear 0.2s ease-out;
+}
+
+@keyframes quick-actions-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+
+/* Quick Action Block Animations */
+.quick-action-block {
+  transition: all 0.15s ease-in-out;
+}
+
+.quick-action-block:hover {
+  transform: translateX(2px);
+  box-shadow: 0 2px 8px rgba(147, 51, 234, 0.15);
+}
+
+/* Dark mode adjustments */
+.dark .quick-actions-panel > div {
+  background-color: rgba(17, 24, 39, 0.9) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .quick-action-block {
+  background: rgba(30, 41, 59, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .quick-actions-panel {
+    width: calc(100vw - 2rem) !important;
+    left: 1rem !important;
+    transform: none !important;
+  }
+  
+  .quick-actions-icon span {
+    display: none; /* Hide text on mobile */
+  }
+  
+  .quick-actions-icon {
+    width: 32px !important;
+    min-width: 32px !important;
+    padding: 0 6px !important;
   }
 }
 

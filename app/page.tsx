@@ -1,46 +1,53 @@
+'use client';
 
 import React from 'react';
-import { useAuth } from '../context/auth/AuthContext';
+import { usePreferences } from '@/context/preferences-context';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import ActionButtons from '@/components/action-buttons';
 import ProjectList from '@/components/project-list';
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import WelcomeHeader from '@/components/welcome-header';
-import DashboardSidebar from '@/components/dashboard-sidebar';
-
+import { useTheme } from '@/hooks/use-theme';
 
 const DashboardPage = () => {
+  const { getDashboardBackgroundClass, getDashboardBlurClass } = useTheme();
+  const { darkMode } = usePreferences();
+
+  // Definiujemy klasy dla light i dark mode (możesz dopasować do swojego useTheme)
+  // Tu przykładowo, można dodać różne rozmycia i topy elementów.
+  const blurClass = darkMode
+    ? `${getDashboardBlurClass()} blur-[66px]`
+    : `${getDashboardBlurClass()} blur-[200px]`;
+
+  // Różne wartości topów i wysokości dla gradientów
+  const topPosition = darkMode ? 'top-32' : 'top-112';
+  const height = darkMode ? 'h-32' : 'h-52';
 
   return (
-    <ProtectedRoute> {/* Chronimy dostęp do tej strony */}
+    <ProtectedRoute>
       <SidebarProvider>
-        <div className="flex min-h-screen bg-background text-foreground">
+        <div className={`flex min-h-screen ${getDashboardBackgroundClass()} text-foreground`}>
           <AppSidebar />
           <SidebarInset>
-            <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 w-full">
-              <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-6 lg:gap-8">
-                {/* Main Content */}
-                <div className="flex-1 flex flex-col gap-6 lg:max-w-[calc(100%-24rem)] xl:max-w-[calc(100%-26rem)]">
-                  {/* Welcome and Action Buttons Container */}
-                  <div className="flex flex-col items-center w-full mb-8">
-                    {/* Logo and Welcome */}
-                    <div className="max-w-xl w-full flex flex-col items-center">
-                      <WelcomeHeader />
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="mt-6">
-                      <ActionButtons />
-                    </div>
+            <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8 w-full">
+              <div className="max-w-7xl mx-auto space-y-8">
+                {/* Header Section */}
+                <div className="relative">
+                  <div className={`absolute ${topPosition} left-0 right-0 ${height} ${blurClass}`} />
+                  <div className="relative">
+                    <WelcomeHeader />
                   </div>
-
-                  {/* Projects Section */}
-                  <ProjectList />
                 </div>
 
-                {/* Dashboard Sidebar */}
-                <DashboardSidebar />
+                {/* Main Content */}
+                <div className="space-y-8">
+                  {!darkMode && (
+                    <div className={`absolute top-112 left-0 right-0 h-52 ${blurClass}`} />
+                  )}
+                  <ActionButtons />
+                  <ProjectList />
+                </div>
               </div>
             </main>
           </SidebarInset>

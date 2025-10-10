@@ -1,0 +1,226 @@
+/* styles/themes.css */
+
+/* ==========================================================================
+   THEME SYSTEM CSS VARIABLES FOUNDATION
+   ========================================================================== */
+
+   :root {
+    /* Default Theme - Purple */
+    --theme-primary-rgb: 147, 51, 234;      /* purple-600 */
+    --theme-secondary-rgb: 99, 102, 241;    /* indigo-600 */
+    --theme-accent-rgb: 236, 72, 153;       /* pink-500 */
+    
+    /* CSS Variables for use */
+    --theme-primary: rgb(var(--theme-primary-rgb));
+    --theme-secondary: rgb(var(--theme-secondary-rgb));
+    --theme-accent: rgb(var(--theme-accent-rgb));
+    
+    /* Alpha variants */
+    --theme-primary-alpha-10: rgba(var(--theme-primary-rgb), 0.1);
+    --theme-primary-alpha-20: rgba(var(--theme-primary-rgb), 0.2);
+    --theme-primary-alpha-50: rgba(var(--theme-primary-rgb), 0.5);
+    --theme-secondary-alpha-10: rgba(var(--theme-secondary-rgb), 0.1);
+    --theme-secondary-alpha-20: rgba(var(--theme-secondary-rgb), 0.2);
+  }
+  
+  /* ==========================================================================
+     THEME CLASSES - Each theme updates the CSS variables
+     ========================================================================== */
+  
+  .theme-purple {
+    --theme-primary-rgb: 147, 51, 234;   /* purple-600 */
+    --theme-secondary-rgb: 99, 102, 241; /* indigo-600 */
+    --theme-accent-rgb: 236, 72, 153;    /* pink-500 */
+  }
+  
+  .theme-blue {
+    --theme-primary-rgb: 37, 99, 235;    /* blue-600 */
+    --theme-secondary-rgb: 6, 182, 212;  /* cyan-600 */
+    --theme-accent-rgb: 14, 165, 233;    /* sky-500 */
+  }
+  
+  .theme-green {
+    --theme-primary-rgb: 22, 163, 74;    /* green-600 */
+    --theme-secondary-rgb: 5, 150, 105;  /* emerald-600 */
+    --theme-accent-rgb: 132, 204, 22;    /* lime-500 */
+  }
+  
+  .theme-orange {
+    --theme-primary-rgb: 234, 88, 12;    /* orange-600 */
+    --theme-secondary-rgb: 245, 158, 11; /* amber-500 - FIXED! */
+    --theme-accent-rgb: 251, 191, 36;    /* amber-400 */
+  }
+  
+  .theme-red {
+    --theme-primary-rgb: 220, 38, 38;    /* red-600 */
+    --theme-secondary-rgb: 225, 29, 72;  /* rose-600 */
+    --theme-accent-rgb: 236, 72, 153;    /* pink-500 */
+  }
+  
+  .theme-neutral {
+    --theme-primary-rgb: 75, 85, 99;     /* gray-600 */
+    --theme-secondary-rgb: 71, 85, 105;  /* slate-600 */
+    --theme-accent-rgb: 107, 114, 128;   /* gray-500 */
+  }
+  
+  /* ==========================================================================
+     UTILITY CLASSES - Ready-to-use themed classes
+     ========================================================================== */
+  
+  /* Backgrounds */
+  .bg-theme-primary {
+    background-color: var(--theme-primary);
+  }
+  
+  .bg-theme-secondary {
+    background-color: var(--theme-secondary);
+  }
+  
+  .bg-theme-accent {
+    background-color: var(--theme-accent);
+  }
+  
+  /* Gradients */
+  .bg-theme-gradient {
+    background: linear-gradient(to right, var(--theme-primary), var(--theme-secondary)) !important;
+  }
+  
+  .bg-theme-gradient-diagonal {
+    background: linear-gradient(135deg, var(--theme-primary), var(--theme-secondary)) !important;
+  }
+  
+  .bg-theme-gradient-accent {
+    background: linear-gradient(to right, var(--theme-secondary), var(--theme-accent)) !important;
+  }
+  
+  /* More specific gradient utilities */
+  .bg-theme-primary-to-secondary {
+    background: linear-gradient(to right, var(--theme-primary), var(--theme-secondary)) !important;
+  }
+  
+  .bg-theme-secondary-to-accent {
+    background: linear-gradient(to right, var(--theme-secondary), var(--theme-accent)) !important;
+  }
+  
+  /* Text Colors */
+  .text-theme-primary {
+    color: var(--theme-primary);
+  }
+  
+  .text-theme-secondary {
+    color: var(--theme-secondary);
+  }
+  
+  .text-theme-accent {
+    color: var(--theme-accent);
+  }
+  
+  /* Text Gradients */
+  .text-theme-gradient {
+    background: linear-gradient(to right, var(--theme-primary), var(--theme-secondary));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  
+  /* Borders */
+  .border-theme-primary {
+    border-color: var(--theme-primary);
+  }
+  
+  .border-theme-primary-alpha {
+    border-color: var(--theme-primary-alpha-20);
+  }
+  
+  /* Shadows */
+  .shadow-theme-primary {
+    box-shadow: 0 10px 15px -3px var(--theme-primary-alpha-10), 0 4px 6px -2px var(--theme-primary-alpha-10);
+  }
+  
+  .shadow-theme-secondary {
+    box-shadow: 0 10px 15px -3px var(--theme-secondary-alpha-10), 0 4px 6px -2px var(--theme-secondary-alpha-10);
+  }
+  
+  /* Hover Effects */
+  .hover-theme-primary:hover {
+    background-color: var(--theme-primary);
+    color: white;
+  }
+  
+  .hover-theme-bg:hover {
+    background-color: var(--theme-primary-alpha-10);
+  }
+  
+  /* ==========================================================================
+     COMPONENT-SPECIFIC CLASSES
+     ========================================================================== */
+  
+  /* Themed Button */
+  .btn-theme-primary {
+    background: var(--theme-primary);
+    color: white;
+    transition: all 0.3s ease;
+  }
+  
+  .btn-theme-primary:hover {
+    background: var(--theme-secondary);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 25px var(--theme-primary-alpha-20);
+  }
+  
+  .btn-theme-gradient {
+    background: linear-gradient(to right, var(--theme-primary), var(--theme-secondary));
+    color: white;
+    transition: all 0.3s ease;
+  }
+  
+  .btn-theme-gradient:hover {
+    background: linear-gradient(to right, var(--theme-secondary), var(--theme-accent));
+    transform: translateY(-1px);
+    box-shadow: 0 10px 25px var(--theme-primary-alpha-20);
+  }
+  
+  /* Themed Card */
+  .card-theme-surface {
+    background: linear-gradient(135deg, 
+      rgba(var(--theme-primary-rgb), 0.03), 
+      rgba(var(--theme-secondary-rgb), 0.05)
+    );
+    border: 1px solid var(--theme-primary-alpha-10);
+    transition: all 0.3s ease;
+  }
+  
+  .card-theme-surface:hover {
+    border-color: var(--theme-primary-alpha-20);
+    box-shadow: 0 20px 25px -5px var(--theme-primary-alpha-10);
+  }
+  
+  /* ==========================================================================
+     RESPONSIVE & DARK MODE SUPPORT
+     ========================================================================== */
+  
+  @media (prefers-color-scheme: dark) {
+    :root {
+      /* Adjust alpha values for dark mode */
+      --theme-primary-alpha-10: rgba(var(--theme-primary-rgb), 0.15);
+      --theme-primary-alpha-20: rgba(var(--theme-primary-rgb), 0.25);
+      --theme-secondary-alpha-10: rgba(var(--theme-secondary-rgb), 0.15);
+      --theme-secondary-alpha-20: rgba(var(--theme-secondary-rgb), 0.25);
+    }
+  }
+  
+  /* ==========================================================================
+     SMOOTH THEME TRANSITIONS
+     ========================================================================== */
+  
+  /* Add transition to all theme-dependent properties */
+  * {
+    transition-property: background-color, border-color, color, box-shadow;
+    transition-duration: 0.3s;
+    transition-timing-function: ease-in-out;
+  }
+  
+  /* Disable transitions during theme switch to avoid flash */
+  .theme-switching * {
+    transition: none !important;
+  }
